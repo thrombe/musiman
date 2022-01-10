@@ -1,0 +1,43 @@
+
+. plan
+  . do not oop in rust, try ecs
+
+
+. ui
+    . https://github.com/veeso/tui-realm (depends on tui-rs)
+    . https://github.com/fdehau/tui-rs
+    . lower level
+        . https://github.com/redox-os/termion
+        . https://github.com/crossterm-rs/crossterm
+
+. album art
+  . https://github.com/Adit-Chauhan/Ueberzug-rs
+  . https://github.com/atanunq/viuer
+  . https://github.com/oza6ut0ne/printimg-rust
+  . ramdom 3d things?
+    . https://github.com/ecumene/rust-sloth
+
+. tags
+  . https://lib.rs/crates/lofty
+  . symphonia?
+
+. gstreamer resources 
+  . https://github.com/sdroege/gstreamer-rs/
+  . https://slomo.pages.freedesktop.org/rustdocs/gstreamer/gstreamer_player/struct.Player.html
+  . https://brettviren.github.io/pygst-tutorial-org/pygst-tutorial.html
+  . https://gstreamer.freedesktop.org/documentation/tutorials/playback/short-cutting-the-pipeline.html?gi-language=c
+  . examples
+    . https://github.com/lerouxrgd/streamlet/blob/master/src/player.rs
+
+. mpris -> https://github.com/tramhao/termusic
+
+. mpv
+  . resources
+    . https://docs.rs/mpv/0.2.3/mpv/struct.MpvHandler.html
+    . https://mpv.io/manual/master/#list-of-input-commands
+  . examples
+    . https://github.com/sevagh/surge/
+    . https://github.com/Cobrand/mpv-rs/blob/master/examples/simple.rs
+    
+. low level rodio usage
+  . https://github.com/librespot-org/librespot/blob/dev/playback/src/audio_backend/rodio.rs
