@@ -49,24 +49,25 @@ enum AppState {
     Quit,
 }
 
+#[derive(Default)]
 struct BrowserWidget {
-    input: String,
-    messages: Vec<String>,
+    options: Vec<String>,
+    selected_index: usize,
 }
 
 impl BrowserWidget {
     fn new() -> Self {
-        Self {
-            input: String::new(),
-            messages: vec![],
-        }
+        // Self {
+        //     options: vec![],
+        // }
+        Self::default()
     }
 
-    fn handle_events(&mut self, key: KeyEvent, input_mode: &mut InputMode) -> bool {
+    fn handle_events(&mut self, key: KeyEvent, input_mode: &mut InputMode, ch: &mut ContentHandler) -> bool {
         match input_mode {
             InputMode::Normal => match key.code {
                 KeyCode::Char('g') => {
-                    // true
+                    // self.options = ch.menu_for_selected();
                 },
                 _ => return false,
             },
@@ -74,15 +75,21 @@ impl BrowserWidget {
                 KeyCode::Esc => {
                     *input_mode = InputMode::Normal;
                 }
-                KeyCode::Enter => {
-                    self.messages.push(self.input.drain(..).collect());
+                KeyCode::Up => {
+                    if self.selected_index > 0 {self.selected_index -= 1};
                 }
-                KeyCode::Char(c) => {
-                    self.input.push(c);
+                KeyCode::Down => {
+                    if self.selected_index < self.options.len() {self.selected_index += 1};
                 }
-                KeyCode::Backspace => {
-                    self.input.pop();
-                }
+                // KeyCode::Enter => {
+                //     self.messages.push(self.input.drain(..).collect());
+                // }
+                // KeyCode::Char(c) => {
+                //     self.input.push(c);
+                // }
+                // KeyCode::Backspace => {
+                //     self.input.pop();
+                // }
                 _ => return false,
             },
         }
@@ -98,7 +105,7 @@ impl BrowserWidget {
                 // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
                 f.set_cursor(
                     // Put cursor past the end of the input text
-                    r.x + self.input.width() as u16 + 1 + 3,
+                    r.x,// + self.input.width() as u16 + 1 + 3,
                     // Move one line down, from the border to the input line
                     r.y + 1,
                 )
@@ -106,8 +113,7 @@ impl BrowserWidget {
         }
 
         let messages = List::new(
-            vec![&self.input].into_iter()
-                .chain(self.messages.iter().rev())
+                self.options.iter()
                 .enumerate()
                 .map(|(i, m)| {
                     let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
@@ -125,7 +131,7 @@ impl BrowserWidget {
         // .highlight_symbol("> ")
         ;
         let mut list_state = ListState::default();
-        list_state.select(Some(1));
+        list_state.select(Some(self.selected_index));
         f.render_stateful_widget(messages, r, &mut list_state);
     }
 }
@@ -226,7 +232,7 @@ impl App {
                 // AppState::Popup => {},
                 _ => {
                     let mut event_handled = false;
-                    if !event_handled {event_handled = self.browser_widget.handle_events(key, &mut self.input_mode);}
+                    if !event_handled {event_handled = self.browser_widget.handle_events(key, &mut self.input_mode, &mut self.content_handler);}
                     if !event_handled {event_handled = self.player_widget.handle_events(key, self.input_mode);}
                     event_handled
                 },

@@ -5,6 +5,7 @@ mod content_providers;
 mod content_handler;
 mod image_handler;
 mod ui;
+mod editors;
 
 use ui::{
     App,
@@ -21,9 +22,12 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use anyhow::Result;
+// use tokio;
 
 
-fn main() -> Result<(), io::Error> {
+// #[tokio::main]
+// async fn main() -> Result<()> {
+fn main() -> Result<()> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
