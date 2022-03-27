@@ -27,6 +27,7 @@ pub struct App {
     input_mode: InputMode,
     state: AppState,
 
+    status_bar: StatusBar,
     browser_widget: BrowserWidget,
     player_widget: PlayerWidget,
 
@@ -155,6 +156,40 @@ impl PlayerWidget {
     }
 }
 
+struct StatusBar {}
+impl StatusBar {
+    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, input_mode: InputMode) {
+        let (msg, style) = match input_mode {
+            InputMode::Normal => (vec![
+                Spans::from(vec![
+                    Span::raw("Press "),
+                    Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(" to exit, "),
+                    Span::styled("e", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(" to start editing."),
+                ]),
+                // Spans::from(vec![
+                //     Span::raw("lol"),
+                // ]),
+                ],
+                Style::default().add_modifier(Modifier::RAPID_BLINK),
+            ),
+            InputMode::Editing => (vec![
+                Spans::from(vec![
+                    Span::raw("Press "),
+                    Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(" to stop editing, "),
+                    Span::styled("Enter", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(" to record the message"),
+                ])],
+                Style::default(),
+            ),
+        };
+        let mut text = Text::from(msg);
+        text.patch_style(style);
+        let help_message = Paragraph::new(text).alignment(Alignment::Center).style(Style::default().bg(Color::White).fg(Color::Black));
+        f.render_widget(help_message, r);    }
+}
 
 
 
@@ -166,6 +201,7 @@ impl App {
             input_mode: InputMode::Normal,
             state: AppState::Browser,
 
+            status_bar: StatusBar {},
             browser_widget: BrowserWidget::new(),
             player_widget: PlayerWidget {},
 
@@ -242,38 +278,7 @@ impl App {
             (chunks.pop().unwrap(), lower_chunks.pop().unwrap(), lower_chunks.pop().unwrap())
         };
 
-        // render statusbar
-        let (msg, style) = match self.input_mode {
-            InputMode::Normal => (vec![
-                Spans::from(vec![
-                    Span::raw("Press "),
-                    Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(" to exit, "),
-                    Span::styled("e", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(" to start editing."),
-                ]),
-                // Spans::from(vec![
-                //     Span::raw("lol"),
-                // ]),
-                ],
-                Style::default().add_modifier(Modifier::RAPID_BLINK),
-            ),
-            InputMode::Editing => (vec![
-                Spans::from(vec![
-                    Span::raw("Press "),
-                    Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(" to stop editing, "),
-                    Span::styled("Enter", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(" to record the message"),
-                ])],
-                Style::default(),
-            ),
-        };
-        let mut text = Text::from(msg);
-        text.patch_style(style);
-        let help_message = Paragraph::new(text).alignment(Alignment::Center).style(Style::default().bg(Color::White).fg(Color::Black));
-        f.render_widget(help_message, status_rect);
-    
+        self.status_bar.render(f, status_rect, self.input_mode);
         self.player_widget.render(f, right_rect);
         self.browser_widget.render(f, left_rect, self.input_mode);
     }
