@@ -9,8 +9,14 @@ edition = "2021"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1.0"
+toml = "0.5"
 
-pyo3 = { version = "0.15.1", features = ["auto-initialize", "serde", "anyhow"] }
+pyo3 = { version = "0.16", features = ["auto-initialize", "serde", "anyhow"] }
 
-gstreamer = "0.16"
-gstreamer-player = "0.16"
+tui = "0.17"
+crossterm = "0.22"
+unicode-width = "0.1.9"
+
+
+musiplayer = {version = "0.1", path = "../musimanager/musiplayer"}
+# musiplayer = {version = "0.1", git = "https://github.com/thrombe/musimanager"}
