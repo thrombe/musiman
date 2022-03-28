@@ -6,6 +6,8 @@ mod content_handler;
 mod image_handler;
 mod ui;
 mod editors;
+mod db_handler;
+mod yt_manager;
 
 use ui::{
     App,

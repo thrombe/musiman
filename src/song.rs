@@ -37,6 +37,12 @@ impl Content for Song {
     fn get_content_type() -> ContentType {
         ContentType::Song
     }
+    
+    // TODO: temporary implimentation
+    fn get_name(&self) -> &str {
+        // &self.name
+        "songgggg"
+    }
 }
 
 impl Song {

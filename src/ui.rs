@@ -12,7 +12,7 @@ use tui::{
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent},
 };
-use unicode_width::UnicodeWidthStr;
+// use unicode_width::UnicodeWidthStr; // string.width() -> gives correct width (including cjk chars) (i assume)
 use anyhow::Result;
 
 use crate::{
@@ -23,8 +23,6 @@ use crate::{
 pub struct App {
     /// Current value of the input box
     input: String,
-    messages: Vec<String>,
-    input_mode: InputMode,
     state: AppState,
 
     status_bar: StatusBar,
@@ -36,23 +34,20 @@ pub struct App {
 
 
 #[derive(Clone, Copy)]
-enum InputMode {
-    Normal,
-    Editing,
-}
-
 enum AppState {
     Browser,
     Popup,
     Help,
     Menu,
     Quit,
+    Typing,
 }
 
 #[derive(Default)]
 struct BrowserWidget {
     options: Vec<String>,
     selected_index: usize,
+    top_index: usize,
 }
 
 impl BrowserWidget {
@@ -63,55 +58,31 @@ impl BrowserWidget {
         Self::default()
     }
 
-    fn handle_events(&mut self, key: KeyEvent, input_mode: &mut InputMode, ch: &mut ContentHandler) -> bool {
-        match input_mode {
-            InputMode::Normal => match key.code {
-                KeyCode::Char('g') => {
-                    // self.options = ch.menu_for_selected();
-                },
-                _ => return false,
-            },
-            InputMode::Editing => match key.code {
-                KeyCode::Esc => {
-                    *input_mode = InputMode::Normal;
-                }
-                KeyCode::Up => {
-                    if self.selected_index > 0 {self.selected_index -= 1};
-                }
-                KeyCode::Down => {
-                    if self.selected_index < self.options.len() {self.selected_index += 1};
-                }
-                // KeyCode::Enter => {
-                //     self.messages.push(self.input.drain(..).collect());
-                // }
-                // KeyCode::Char(c) => {
-                //     self.input.push(c);
-                // }
-                // KeyCode::Backspace => {
-                //     self.input.pop();
-                // }
-                _ => return false,
-            },
+    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> bool {
+        match key.code {
+            KeyCode::Char('g') => {
+                // self.options = ch.menu_for_selected();
+            }
+            KeyCode::Up => {
+                if self.selected_index > 0 {self.selected_index -= 1};
+            }
+            KeyCode::Down => {
+                if self.selected_index < self.options.len()-1 {self.selected_index += 1};
+            }
+            KeyCode::Right => {
+                ch.enter(self.selected_index+self.top_index);
+                self.update(ch);
+            }
+            _ => return false,
         }
         true
     }
 
-    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, input_mode: InputMode) {
-        match input_mode {
-            InputMode::Normal =>
-                // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
-                {}
-            InputMode::Editing => {
-                // Make the cursor visible and ask tui-rs to put it at the specified coordinates after rendering
-                f.set_cursor(
-                    // Put cursor past the end of the input text
-                    r.x,// + self.input.width() as u16 + 1 + 3,
-                    // Move one line down, from the border to the input line
-                    r.y + 1,
-                )
-            }
-        }
+    fn update(&mut self, ch: &mut ContentHandler) {
+        self.options = ch.get_content_names();
+    }
 
+    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {
         let messages = List::new(
                 self.options.iter()
                 .enumerate()
@@ -122,11 +93,6 @@ impl BrowserWidget {
                 .collect::<Vec<_>>()
         )
         .block(Block::default().borders(Borders::ALL).title("Browser Widget"))
-        .style(match input_mode {
-            InputMode::Normal => Style::default(),
-            InputMode::Editing => Style::default().fg(Color::Yellow),
-        })
-        // .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Rgb(200, 100, 0)))
         // .highlight_symbol("> ")
         ;
@@ -139,17 +105,12 @@ impl BrowserWidget {
 struct PlayerWidget {}
 
 impl PlayerWidget {
-    fn handle_events(&mut self, key: KeyEvent, input_mode: InputMode) -> bool {
-        match input_mode {
-            InputMode::Normal => match key.code {
-                KeyCode::Char('p') => {
-                    true
-                },
-                _ => false,
+    fn handle_events(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Char('p') => {
+                true
             },
-            InputMode::Editing => (
-                false
-            ),
+            _ => false,
         }
     }
 
@@ -164,36 +125,26 @@ impl PlayerWidget {
 
 struct StatusBar {}
 impl StatusBar {
-    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, input_mode: InputMode) {
-        let (msg, style) = match input_mode {
-            InputMode::Normal => (vec![
-                Spans::from(vec![
-                    Span::raw("Press "),
-                    Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(" to exit, "),
-                    Span::styled("e", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(" to start editing."),
-                ]),
-                // Spans::from(vec![
-                //     Span::raw("lol"),
-                // ]),
-                ],
-                Style::default().add_modifier(Modifier::RAPID_BLINK),
-            ),
-            InputMode::Editing => (vec![
-                Spans::from(vec![
-                    Span::raw("Press "),
-                    Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(" to stop editing, "),
-                    Span::styled("Enter", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(" to record the message"),
-                ])],
-                Style::default(),
-            ),
-        };
+    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {
+        let (msg, style) = (vec![
+            Spans::from(vec![
+                Span::raw("Press "),
+                Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(" to exit, "),
+                Span::styled("e", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(" to start editing."),
+            ]),
+            // Spans::from(vec![
+            //     Span::raw("lol"),
+            // ]),
+            ],
+            Style::default().add_modifier(Modifier::RAPID_BLINK),
+        );
         let mut text = Text::from(msg);
         text.patch_style(style);
-        let help_message = Paragraph::new(text).alignment(Alignment::Center).style(Style::default().bg(Color::White).fg(Color::Black));
+        let help_message = Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .style(Style::default().bg(Color::White).fg(Color::Black));
         f.render_widget(help_message, r);    }
 }
 
@@ -202,9 +153,7 @@ impl StatusBar {
 impl App {
     pub fn load() -> Self {
         Self {
-            messages: vec![],
             input: String::new(),
-            input_mode: InputMode::Normal,
             state: AppState::Browser,
 
             status_bar: StatusBar {},
@@ -216,6 +165,7 @@ impl App {
     }
 
     pub fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
+        self.browser_widget.update(&mut self.content_handler);
         loop {
             terminal.draw(|f| self.render(f))?;
             self.handle_events()?;
@@ -232,32 +182,26 @@ impl App {
                 // AppState::Popup => {},
                 _ => {
                     let mut event_handled = false;
-                    if !event_handled {event_handled = self.browser_widget.handle_events(key, &mut self.input_mode, &mut self.content_handler);}
-                    if !event_handled {event_handled = self.player_widget.handle_events(key, self.input_mode);}
+                    if !event_handled {
+                        event_handled = self.browser_widget.handle_events(key, &mut self.content_handler);
+                        // if event_handled {
+                        //     self.browser_widget.update(&mut self.content_handler);
+                        // }
+                    }
+                    if !event_handled {event_handled = self.player_widget.handle_events(key);}
                     event_handled
                 },
             };
             if handled {return Ok(())}
 
-            match self.input_mode {
-                InputMode::Normal => match self.state {
-                    AppState::Browser => match key.code {
-                        KeyCode::Char('e') => {
-                            self.input_mode = InputMode::Editing;
-                        }
-                        KeyCode::Char('q') => {
-                            self.state = AppState::Quit;
-                        }
-                        _ => {}
-                    },
-                    _ => (),
-                },
-                InputMode::Editing => match key.code {
-                    KeyCode::Esc => {
-                        self.input_mode = InputMode::Normal;
+            match self.state {
+                AppState::Browser => match key.code {
+                    KeyCode::Char('q') => {
+                        self.state = AppState::Quit;
                     }
-                    _ => (),
+                    _ => {}
                 },
+                _ => (),
             }
         }
 
@@ -284,8 +228,8 @@ impl App {
             (chunks.pop().unwrap(), lower_chunks.pop().unwrap(), lower_chunks.pop().unwrap())
         };
 
-        self.status_bar.render(f, status_rect, self.input_mode);
+        self.status_bar.render(f, status_rect);
         self.player_widget.render(f, right_rect);
-        self.browser_widget.render(f, left_rect, self.input_mode);
+        self.browser_widget.render(f, left_rect);
     }
 }

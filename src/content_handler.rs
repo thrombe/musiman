@@ -6,6 +6,7 @@ use crate::{
     content_providers::{SongProvider, SPProvider},
     image_handler::ImageHandler,
     editors::{Yanker, UndoManager},
+    db_handler::DBHandler,
 };
 use musiplayer::Player;
 
@@ -13,26 +14,31 @@ pub struct ContentHandler {
     songs: ContentManager<Song>,
     song_providers: ContentManager<SongProvider>,
     sp_providers: ContentManager<SPProvider>,
+    main_provider: MainProvider,
 
     content_stack: Vec<ContentIdentifier>,
     yanker: Yanker,
     undo_manager: UndoManager,
     image_handler: ImageHandler,
     player: Player,
+    active_queue: Option<ContentIdentifier>,
     active_song: Option<ContentIdentifier>,
 }
 
 impl ContentHandler {
     pub fn new() -> Self {
+        let mut dbh = DBHandler::try_load();
         Self {
             songs: ContentManager::new(),
-            song_providers: ContentManager::new(),
-            sp_providers: ContentManager::new(),
-            content_stack: vec![],
+            song_providers: dbh.song_providers(),
+            sp_providers: dbh.sp_providers(),
+            main_provider: dbh.main_provider(),
+            content_stack: vec![ContentIdentifier {index: None, generation: None, content_type: ContentType::MainProvider}],
             yanker: Yanker::new(),
             undo_manager: UndoManager::new(),
             image_handler: ImageHandler {},
             player: Player::new(),
+            active_queue: None,
             active_song: None,
         }
     }
@@ -40,6 +46,45 @@ impl ContentHandler {
     // TODO: temporary implimentation
     pub fn load() -> Self {
         Self::new()
+    }
+
+    pub fn enter(&mut self, index: usize) {
+        let ci = self.get_provider(*self.content_stack.last().unwrap())
+        .provide()
+        .get(index);
+        if let Some(&ci) = ci {
+            if ContentType::Song == ci.content_type {
+                // play song
+                todo!()
+            } else {
+                self.content_stack.push(ci);
+            }
+        }
+    }
+
+    pub fn back(&mut self) {
+        if self.content_stack.len() > 2 {
+            self.content_stack.pop();
+        }
+    }
+
+    pub fn get_content_names(&self) -> Vec<String> {
+        match self.content_stack.last().unwrap().content_type {
+            ContentType::MainProvider => {
+                self.main_provider.provide().into_iter().map(|&ci| {
+                    match ci.content_type { // unwrapping as these ci should not really be invalid if everyting goes right
+                        ContentType::SongProvider => {
+                            self.song_providers.get(ci).unwrap().get_name()
+                        }
+                        ContentType::SPProvider => {
+                            self.sp_providers.get(ci).unwrap().get_name()
+                        }
+                        _ => panic!()
+                    }.to_owned()
+                }).collect()
+            }
+            _ => todo!() // TODO
+        }
     }
     
     pub fn open_menu_for_selected(&mut self, index: usize) {
@@ -65,6 +110,7 @@ impl ContentHandler {
             // ContentType::Song => self.songs.get(content_identifier),
             ContentType::SongProvider => Box::new(self.song_providers.get(content_identifier).unwrap()),
             ContentType::SPProvider => Box::new(self.sp_providers.get(content_identifier).unwrap()),
+            ContentType::MainProvider => Box::new(&self.main_provider),
             _ => panic!(),
         }
     }
@@ -75,7 +121,7 @@ impl ContentHandler {
     }
 }
 
-struct ContentManager<T> {
+pub struct ContentManager<T> {
     items: Vec<Option<ContentEntry<T>>>,
     
     // allocator
@@ -86,7 +132,7 @@ struct ContentManager<T> {
 impl<T> ContentManager<T>
 where T: Content
 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             items: vec![],
             empty_indices: vec![],
@@ -173,6 +219,32 @@ pub enum ContentType {
     Menu, // -yank, fetch artist from yt, download pl, delete
 }
 
+pub struct MainProvider{
+    providers: Vec<ContentIdentifier>,
+    // importer: Importer
+}
+impl ContentProvider for MainProvider {
+    fn provide(&self) -> &Vec<ContentIdentifier> {
+        &self.providers
+    }
+
+    fn provide_mut(&mut self) -> &mut Vec<ContentIdentifier> {
+        &mut self.providers
+    }
+}
+impl MainProvider {
+    pub fn new() -> Self {
+        Self {
+            providers: vec![],
+        }
+    }
+
+    // TODO: temporaty implimentation
+    pub fn load() -> Self {
+        Self::new()
+    }
+}
+
 impl ContentType {
     fn has_menu(self) -> bool {
         if [Self::Song, Self::SongProvider, Self::SPProvider].into_iter().any(|e| e == self) {
@@ -205,10 +277,19 @@ impl ContentType {
             false
         }
     }
+    
+    fn is_main(self) -> bool {
+        if Self::MainProvider == self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub trait Content {
     fn get_content_type() -> ContentType;
+    fn get_name(&self) -> &str;
 }
 
 pub trait ContentProvider {

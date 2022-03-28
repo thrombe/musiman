@@ -6,10 +6,12 @@ use crate::{
 
 pub struct SongProvider {
     songs: Vec<ContentIdentifier>,
+    name: String,
 }
 
 pub struct SPProvider {
     sp_providers: Vec<ContentIdentifier>,
+    name: String,
 }
 
 enum SongProviderType {
@@ -33,11 +35,19 @@ impl Content for SongProvider {
     fn get_content_type() -> ContentType {
         ContentType::SongProvider
     }
+
+    fn get_name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl Content for SPProvider {
     fn get_content_type() -> ContentType {
         ContentType::SPProvider
+    }
+
+    fn get_name(&self) -> &str {
+        &self.name
     }
 }
 
