@@ -16,7 +16,7 @@ pub struct Yanker {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum YankType {
-    None,
+    None, // ?? why this
     Copy,
     Cut,
 }
@@ -46,6 +46,7 @@ impl Yanker {
         }
     }
 
+    // can generalise this with some Yankable trait
     pub fn apply(&mut self, from: &mut dyn ContentProvider, to: &mut dyn ContentProvider) {
         for &cid in &self.yanked_items {
             if YankType::Cut == self.yank_type {

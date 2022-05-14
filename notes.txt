@@ -1,6 +1,32 @@
 
+. maybe do some message passing achitecture
+
 . plan
-  . do not oop in rust, try ecs
+  . import relevent notes from thrombe/musimanager
+  . a floating widget
+    . pressing a shortcut brings up another terminal window on the current screen with with a few options
+      for switching songs and stuff
+      . somehow add way to apply certain WM property things like keep_above_others and stuff from opts
+    . this can be another mode that the program can run in (cli args)
+    . use a files to share state between main app and this window
+  . musitags
+    . apply tags to songs/song_providers
+    . tags like: fav, good, maybe_good, pop, metal, ...
+    . tags so that songs can be quick filtered for listening based on listeners mood
+    . song provider can then choose random songs based on tags
+  . fetch song metadata from some sites
+    . do a sound search and ask user to pick song name after showing the search results
+  . a song recommender using yt recommendation with filters
+    . filters like:
+      . dont show from known artists
+      . filter known songs
+  . multiple profiles with simple way to switch from cli args
+    . profiles with different opts and different db
+  . keep a executor thread that is polled for checking completion on each main loop iteration
+    and do the thing required when it finally returns
+    . this way i dont have to use mutexes and iternal mutability for doing things on parallel
+
+
 
 
 . ui

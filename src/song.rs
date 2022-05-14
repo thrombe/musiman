@@ -40,12 +40,32 @@ impl Content for Song {
     
     // TODO: temporary implimentation
     fn get_name(&self) -> &str {
-        // &self.name
-        "songgggg"
+        match &self.metadata {
+            SongMetadata::FileMetadata { path } => {
+                path.rsplit_terminator("/").next().unwrap()
+            }
+            _ => panic!()
+        }
     }
 }
 
 impl Song {
+    pub fn from_file(path: String) -> Self {
+        Self {
+            metadata: SongMetadata::FileMetadata { path },
+            stype: SongType::UnknownOnDisk,
+        }
+    }
+
+    pub fn path(&self) -> &str {
+        match &self.metadata {
+            SongMetadata::FileMetadata { path } => {
+                path
+            }
+            _ => panic!()
+        }
+    }
+
     // pub fn load() -> Self {
     //     // theres also track and alt_title in case of ytm
     //     titles = [ // priority acc to index (low index is better) maybe check if in english?

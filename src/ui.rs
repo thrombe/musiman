@@ -25,8 +25,11 @@ pub struct App {
     input: String,
     state: AppState,
 
+    // updates status bar depending on the situation
     status_bar: StatusBar,
+    // handles all ui things from the browser widget side
     browser_widget: BrowserWidget,
+    // handles all ui from the player widget side
     player_widget: PlayerWidget,
 
     content_handler: ContentHandler,
@@ -47,7 +50,7 @@ enum AppState {
 struct BrowserWidget {
     options: Vec<String>,
     selected_index: usize,
-    top_index: usize,
+    top_index: usize, // TODO: handle the case where the list is longer than what the display can have
 }
 
 impl BrowserWidget {
@@ -63,6 +66,10 @@ impl BrowserWidget {
             KeyCode::Char('g') => {
                 // self.options = ch.menu_for_selected();
             }
+            KeyCode::Char('G') => {
+                ch.open_menu_for_current();
+                self.update(ch);
+            }
             KeyCode::Up => {
                 if self.selected_index > 0 {self.selected_index -= 1};
             }
@@ -70,7 +77,15 @@ impl BrowserWidget {
                 if self.selected_index < self.options.len()-1 {self.selected_index += 1};
             }
             KeyCode::Right => {
-                ch.enter(self.selected_index+self.top_index);
+                ch.enter(self.selected_index + self.top_index);
+                self.update(ch);
+            }
+            KeyCode::Left => {
+                ch.back();
+                self.update(ch);
+            }
+            KeyCode::Enter => {
+                ch.choose_option(self.selected_index + self.top_index);
                 self.update(ch);
             }
             _ => return false,
@@ -80,6 +95,7 @@ impl BrowserWidget {
 
     fn update(&mut self, ch: &mut ContentHandler) {
         self.options = ch.get_content_names();
+        self.selected_index = ch.get_selected_index();
     }
 
     fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {
@@ -105,11 +121,28 @@ impl BrowserWidget {
 struct PlayerWidget {}
 
 impl PlayerWidget {
-    fn handle_events(&mut self, key: KeyEvent) -> bool {
+    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> bool {
         match key.code {
             KeyCode::Char('p') => {
+                ch.toggle_song_pause();
                 true
-            },
+            }
+            KeyCode::Char('k') => {
+                ch.seek_song(10.0);
+                true
+            }
+            KeyCode::Char('j') => {
+                ch.seek_song(-10.0);
+                true
+            }
+            KeyCode::Char('l') => {
+                ch.next_song();
+                true
+            }
+            KeyCode::Char('h') => {
+                ch.prev_song();
+                true
+            }
             _ => false,
         }
     }
@@ -188,7 +221,7 @@ impl App {
                         //     self.browser_widget.update(&mut self.content_handler);
                         // }
                     }
-                    if !event_handled {event_handled = self.player_widget.handle_events(key);}
+                    if !event_handled {event_handled = self.player_widget.handle_events(key, &mut self.content_handler);}
                     event_handled
                 },
             };

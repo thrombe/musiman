@@ -19,5 +19,5 @@ crossterm = "0.23"
 unicode-width = "0.1.9"
 
 
-musiplayer = {version = "0.1", path = "../musimanager/musiplayer"}
+musiplayer = {version = "0.1", path = "../musimanager/musiplayer", features = ["player-mpv", "force"] }
 # musiplayer = {version = "0.1", git = "https://github.com/thrombe/musimanager"}
