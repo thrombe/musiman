@@ -1,10 +1,15 @@
 
 use core::panic;
 
-use serde::{Serialize, Deserialize};
+use serde::{
+    Serialize,
+    Deserialize,
+};
 
 use crate::{
-    content_handler::{ContentType, ActionEntry},
+    content_handler::{
+        ActionEntry,
+    },
 };
 
 
@@ -41,8 +46,7 @@ pub enum SongType {
     Seperator,
 }
 
-#[derive(Clone, Copy, Debug)]
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SongContentType {
     Menu,
     Normal,
@@ -100,16 +104,14 @@ impl Song {
             }
         } 
     }
-}
-
-impl Song {
+    
     pub fn from_file(path: String) -> Self {
         Self {
             metadata: SongMetadata::FileMetadata { path },
             stype: SongType::UnknownOnDisk,
         }
     }
-
+    
     pub fn path(&self) -> &str {
         match &self.metadata {
             SongMetadata::FileMetadata { path } => {
@@ -118,7 +120,9 @@ impl Song {
             _ => panic!()
         }
     }
+}
 
+// impl Song {
     // pub fn load() -> Self {
     //     // theres also track and alt_title in case of ytm
     //     titles = [ // priority acc to index (low index is better) maybe check if in english?
@@ -148,4 +152,4 @@ impl Song {
 
     //     Self {}
     // }
-}
+// }

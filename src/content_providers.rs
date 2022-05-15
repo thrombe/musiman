@@ -1,9 +1,21 @@
 
-use std::fmt::{Debug, Display};
+use std::fmt::{
+    Debug,
+};
 
 use crate::{
-    song::Song,
-    content_handler::{ContentType, ContentID, ID, ContentManager, LoadEntry, GetNames, MenuOptions, ActionEntry, ContentProviderID},
+    song::{
+        Song,
+    },
+    content_handler::{
+        LoadEntry,
+        GetNames,
+        ActionEntry,
+    },
+    content_manager::{
+        ContentProviderID,
+        ID,
+    },
 };
 
 
@@ -16,8 +28,7 @@ pub struct ContentProvider {
     loaded: bool,
 }
 
-#[derive(Clone, Copy, Debug)]
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContentProviderContentType {
     Menu,
     Normal,
@@ -61,7 +72,13 @@ impl ContentProvider {
             ContentProviderMenuOptions::Main(o) => {
                 match o {
                     MainContentProviderMenuOptions::ADD_FILE_EXPLORER => {
-                        Some(ActionEntry::AddCPToCP { id: self_id, cp: Self::new_file_explorer("/home/issac/daata/phon-data/.musi/IsBac/".to_owned(), "File Explorer: ".to_owned()) })
+                        Some(ActionEntry::AddCPToCP {
+                            id: self_id,
+                            cp: Self::new_file_explorer(
+                                "/home/issac/daata/phon-data/.musi/IsBac/".to_owned(),
+                                "File Explorer: ".to_owned()
+                            )
+                        })
                     }
                     _ => todo!()
                 }
@@ -89,7 +106,6 @@ impl ContentProvider {
         }
     }
 
-    // TODO: maybe return a list of songs/sp/spp so that the parent function can add? or is this better?
     /// can load from various sources like yt/local storage while being able to add stuff to s/sp/spp
     pub fn load(&mut self, id: ContentProviderID) -> Option<ActionEntry> {
         if self.loaded {return None}
@@ -100,23 +116,22 @@ impl ContentProvider {
                 let mut s = vec![];
                 let mut sp = vec![];
 
-                // TODO: no need to have two calls to read_dir + this has a lot of duplicated code
-                std::fs::read_dir(&path).unwrap()
-                .filter(|e| e.as_ref().map(|r| r.path().is_dir()).unwrap_or(false))
-                .map(|res| res.map(|e| e.path()).unwrap().to_str().unwrap().to_owned())
+                std::fs::read_dir(&path)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
                 .for_each(|e| {
-                        sp.push(ContentProvider::new_file_explorer(e, "".to_owned()));
+                    if e.is_dir() {
+                        let dir = e.to_str().unwrap().to_owned();
+                        sp.push(ContentProvider::new_file_explorer(dir, "".to_owned()));
+                    } else if e.is_file() {
+                        let file = e.to_str().unwrap().to_owned();
+                        if file.ends_with(".m4a") {
+                            s.push(Song::from_file(file));
+                        }
                     }
-                );
+                });
 
-                std::fs::read_dir(&path).unwrap()
-                .filter(|e| e.as_ref().map(|r| r.path().is_file()).unwrap_or(false))
-                .map(|res| res.map(|e| e.path()).unwrap().to_str().unwrap().to_owned())
-                .filter(|s| s.ends_with(".m4a"))
-                .for_each(|e| {
-                        s.push(Song::from_file(e));
-                    }
-                );
                 Some(ActionEntry::LoadContentManager(LoadEntry {s, sp, loader: id}))
             }
             _ => panic!()
@@ -138,11 +153,33 @@ impl ContentProvider {
             _ => panic!()
         }
     }
+
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    /// panics if out of bounds
+    pub fn swap(&mut self, a: usize, b:  usize) {
+        self.content.swap(a, b)
+    }
+    // TODO: reimpliment these for all of the diff types of content providers
+    pub fn add(&mut self, content_identifier: ID) {
+        self.content.push(content_identifier);
+    }
+    /// panics if out of bounds
+    pub fn remove_using_index(&mut self, index: usize) -> ID {
+        self.content.remove(index)
+    }
+    /// panic if not in here
+    pub fn remove(&mut self, cid: ID) {
+        let i = self.content.iter().position(|&e| e == cid).unwrap();
+        self.content.remove(i);
+    }
 }
 
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ContentProviderMenuOptions {
     Main(MainContentProviderMenuOptions),
 }
@@ -186,44 +223,3 @@ enum ContentProviderType {
     Loading, // load the content manager in another thread and use this as placeholder and apply it when ready
 }
 
-impl ContentProvider {
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-}
-
-impl ContentProvider {
-    pub fn provide(&self) -> &Vec<ID> {
-        &self.content
-    }
-
-    pub fn provide_mut(&mut self) -> &mut Vec<ID> {
-        &mut self.content
-    }
-
-    pub fn selected_index(&self) -> usize {
-        self.selected_index
-    }
-
-    pub fn update_index(&mut self, i: usize) {
-        self.selected_index = i;
-    }
-
-    /// panics if out of bounds
-    pub fn swap(&mut self, a: usize, b:  usize) {
-        self.provide_mut().swap(a, b)
-    }
-
-    // TODO: reimpliment these for all of the diff types of content providers
-    pub fn add(&mut self, content_identifier: ID) {
-        self.provide_mut().push(content_identifier);
-    }
-    /// panics if out of bounds
-    pub fn remove_using_index(&mut self, index: usize) -> ID {
-        self.provide_mut().remove(index)
-    }
-    pub fn remove(&mut self, cid: ID) {
-        self.provide_mut().iter().position(|&e| e == cid);
-    }
-
-}

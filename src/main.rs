@@ -1,11 +1,12 @@
 #![allow(dead_code)]
 
-#![allow(unused_variables)]
-#![allow(unused_imports)]
+// #![allow(unused_variables)]
+// #![allow(unused_imports)]
 
 mod song;
 mod content_providers;
 mod content_handler;
+mod content_manager;
 mod image_handler;
 mod ui;
 mod editors;
@@ -13,19 +14,36 @@ mod db_handler;
 mod notifier;
 mod yt_manager;
 
-use ui::{
+use crate::ui::{
     App,
 };
 
-use std::{io};
+use std::{
+    io,
+    panic::{
+        set_hook,
+        take_hook,
+    },
+};
 use tui::{
-    backend::{CrosstermBackend, Backend},
+    backend::{
+        CrosstermBackend,
+        Backend,
+    },
     Terminal,
 };
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    event::{
+        DisableMouseCapture,
+        EnableMouseCapture,
+    },
+    terminal::{
+        disable_raw_mode,
+        enable_raw_mode,
+        EnterAlternateScreen,
+        LeaveAlternateScreen,
+    },
 };
 use anyhow::Result;
 // use tokio;
@@ -59,8 +77,8 @@ fn main() -> Result<()> {
     // return Ok(());
 
 
-    let hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
+    let hook = take_hook();
+    set_hook(Box::new(move |info| {
         // create new Terminal if panic
         let backend = CrosstermBackend::new(io::stdout());
         let mut terminal = Terminal::new(backend).unwrap();
