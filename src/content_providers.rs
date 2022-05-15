@@ -1,31 +1,35 @@
 
 use crate::{
     song::Song,
-    content_handler::{ContentType, Content, ContentProvider, ContentIdentifier, ContentManager, LoadEntry},
+    content_handler::{ContentType, Content, ContentID, ContentManager, LoadEntry},
 };
 
-pub struct SongProvider {
-    pub songs: Vec<ContentIdentifier>,
-    name: String,
-    sp_type: SongProviderType,
-    pub selected_index: usize,
-}
 
 #[derive(Clone)]
-pub struct SPProvider {
-    pub sp_providers: Vec<ContentIdentifier>,
+pub struct ContentProvider {
+    pub content: Vec<ContentID>,
     name: String,
-    spp_type: SPProviderType,
+    cp_type: ContentProviderType,
     pub selected_index: usize,
     loaded: bool,
 }
 
-impl SPProvider {
+impl ContentProvider {
+    pub fn new_main_provider() -> Self {
+        Self {
+            content: vec![],
+            name: "Main Provider".to_owned(),
+            cp_type: ContentProviderType::MainProvider,
+            selected_index: 0,
+            loaded: true
+        }
+    }
+
     pub fn new_file_explorer(path: String) -> Self {
         Self {
-            sp_providers: vec![],
+            content: vec![],
             name: path.rsplit_terminator("/").next().unwrap().to_owned(),
-            spp_type: SPProviderType::FileExplorer {path},
+            cp_type: ContentProviderType::FileExplorer {path},
             selected_index: 0,
             loaded: false,
         }
@@ -36,18 +40,18 @@ impl SPProvider {
     pub fn load(&mut self) -> Option<LoadEntry> {
         if self.loaded {return None}
         self.loaded = true;
-        match &mut self.spp_type {
-            SPProviderType::FileExplorer {path} => {
-                if self.sp_providers.len() != 0 {return None}
+        match &mut self.cp_type {
+            ContentProviderType::FileExplorer {path} => {
+                if self.content.len() != 0 {return None}
                 let mut s = vec![];
-                let mut spp = vec![];
+                let mut sp = vec![];
 
                 // TODO: no need to have two calls to read_dir + this has a lot of duplicated code
                 std::fs::read_dir(&path).unwrap()
                 .filter(|e| e.as_ref().map(|r| r.path().is_dir()).unwrap_or(false))
                 .map(|res| res.map(|e| e.path()).unwrap().to_str().unwrap().to_owned())
                 .for_each(|e| {
-                        spp.push(SPProvider::new_file_explorer(e));
+                        sp.push(ContentProvider::new_file_explorer(e));
                     }
                 );
 
@@ -59,24 +63,47 @@ impl SPProvider {
                         s.push(Song::from_file(e));
                     }
                 );
-                Some(LoadEntry {s, spp, sp: vec![]})
+                Some(LoadEntry {s, sp})
+            }
+            _ => panic!()
+        }
+    }
+
+    pub fn get_menu_options(&self) -> Vec<MenuOptions> {
+        match self.cp_type {
+            ContentProviderType::MainProvider => {
+                [
+                    MenuOptions::ADD_ARTIST_PROVIDER,
+                    MenuOptions::ADD_PLAYLIST_PROVIDER,
+                    MenuOptions::ADD_QUEUE_PROVIDER,
+                    MenuOptions::ADD_FILE_EXPLORER
+                ].into_iter()
+                .collect()
             }
             _ => panic!()
         }
     }
 }
 
-enum SongProviderType {
+
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuOptions {
+    ADD_ARTIST_PROVIDER,
+    ADD_PLAYLIST_PROVIDER,
+    ADD_QUEUE_PROVIDER,
+    ADD_FILE_EXPLORER,
+}
+
+#[derive(Clone)]
+enum ContentProviderType {
     Playlist,
     Queue,
     YTArtist,
     UnknownArtist,
     Album,
     Seperator,
-}
 
-#[derive(Clone)]
-enum SPProviderType {
     Playlists,
     Queues,
     Artists,
@@ -84,9 +111,11 @@ enum SPProviderType {
     FileExplorer {
         path: String,
     },
+
+    MainProvider,
 }
 
-impl Content for SongProvider {
+impl Content for ContentProvider {
     fn get_content_type() -> ContentType {
         ContentType::SongProvider
     }
@@ -96,49 +125,38 @@ impl Content for SongProvider {
     }
 }
 
-impl Content for SPProvider {
-    fn get_content_type() -> ContentType {
-        ContentType::SPProvider
+impl ContentProvider {
+    pub fn provide(&self) -> &Vec<ContentID> {
+        &self.content
     }
 
-    fn get_name(&self) -> &str {
-        &self.name
-    }
-}
-
-
-impl ContentProvider for SongProvider {
-    fn provide(&self) -> &Vec<ContentIdentifier> {
-        &self.songs
+    pub fn provide_mut(&mut self) -> &mut Vec<ContentID> {
+        &mut self.content
     }
 
-    fn provide_mut(&mut self) -> &mut Vec<ContentIdentifier> {
-        &mut self.songs
-    }
-
-    fn selected_index(&self) -> usize {
+    pub fn selected_index(&self) -> usize {
         self.selected_index
     }
 
-    fn update_index(&mut self, i: usize) {
+    pub fn update_index(&mut self, i: usize) {
         self.selected_index = i;
     }
-}
 
-impl ContentProvider for SPProvider {
-    fn provide(&self) -> &Vec<ContentIdentifier> {
-        &self.sp_providers
+    /// panics if out of bounds
+    pub fn swap(&mut self, a: usize, b:  usize) {
+        self.provide_mut().swap(a, b)
     }
 
-    fn provide_mut(&mut self) -> &mut Vec<ContentIdentifier> {
-        &mut self.sp_providers
+    // TODO: reimpliment these for all of the diff types of content providers
+    pub fn add(&mut self, content_identifier: ContentID) {
+        self.provide_mut().push(content_identifier);
+    }
+    /// panics if out of bounds
+    pub fn remove_using_index(&mut self, index: usize) -> ContentID {
+        self.provide_mut().remove(index)
+    }
+    pub fn remove(&mut self, cid: ContentID) {
+        self.provide_mut().iter().position(|&e| e == cid);
     }
 
-    fn selected_index(&self) -> usize {
-        self.selected_index
-    }
-
-    fn update_index(&mut self, i: usize) {
-        self.selected_index = i;
-    }
 }

@@ -1,16 +1,16 @@
 
 use crate::{
-    content_handler::{ContentIdentifier, ContentType, ContentProvider}
+    content_handler::{ContentID, ContentType}, content_providers::ContentProvider
 };
 
 
 
 #[derive(Clone)]
 pub struct Yanker {
-    yanked_items: Vec<ContentIdentifier>,
+    yanked_items: Vec<ContentID>,
     yank_type: YankType,
-    yanked_from: Option<ContentIdentifier>,
-    yanked_to: Option<ContentIdentifier>, // for undo
+    yanked_from: Option<ContentID>,
+    yanked_to: Option<ContentID>, // for undo
 }
 
 
@@ -31,7 +31,7 @@ impl Yanker {
         }
     }
 
-    pub fn yank(&mut self, cid: ContentIdentifier) {
+    pub fn yank(&mut self, cid: ContentID) {
         if self.yanked_items.len() != 0 && cid.content_type != self.yanked_content_type().unwrap() {
             self.yanked_items.clear();
         }
@@ -47,7 +47,7 @@ impl Yanker {
     }
 
     // can generalise this with some Yankable trait
-    pub fn apply(&mut self, from: &mut dyn ContentProvider, to: &mut dyn ContentProvider) {
+    pub fn apply(&mut self, from: &mut ContentProvider, to: &mut ContentProvider) {
         for &cid in &self.yanked_items {
             if YankType::Cut == self.yank_type {
                 from.remove(cid);
@@ -72,12 +72,12 @@ impl UndoManager {
 pub enum Edit {
     Yanked(Yanker),
     IndexChange{
-        provider: ContentIdentifier,
+        provider: ContentID,
         from: usize,
         to: usize,
     },
     TextEdit{
-        content: ContentIdentifier,
+        content: ContentID,
         from: String,
         to: String,
     },

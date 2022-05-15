@@ -1,7 +1,7 @@
 
 use crate::{
-    content_handler::{MainProvider, ContentManager},
-    content_providers::{SPProvider, SongProvider},
+    content_handler::{ContentManager},
+    content_providers::{ContentProvider},
 };
 
 
@@ -15,15 +15,7 @@ impl DBHandler {
         Self {}
     }
 
-    pub fn main_provider(&mut self) -> MainProvider {
-        MainProvider::new()
-    }
-
-    pub fn song_providers(&mut self) -> ContentManager<SongProvider> {
-        ContentManager::new()
-    }
-
-    pub fn sp_providers(&mut self) -> ContentManager<SPProvider> {
+    pub fn song_providers(&mut self) -> ContentManager<ContentProvider> {
         ContentManager::new()
     }
 }
