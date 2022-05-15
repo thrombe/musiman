@@ -1,11 +1,13 @@
 
+use std::fmt::{Debug, Display};
+
 use crate::{
     song::Song,
-    content_handler::{ContentType, ContentID, ID, ContentManager, LoadEntry},
+    content_handler::{ContentType, ContentID, ID, ContentManager, LoadEntry, GetNames, MenuOptions, ActionEntry, ContentProviderID},
 };
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ContentProvider {
     pub content: Vec<ID>,
     name: String,
@@ -14,7 +16,59 @@ pub struct ContentProvider {
     loaded: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Eq)]
+pub enum ContentProviderContentType {
+    Menu,
+    Normal,
+}
+impl Default for ContentProviderContentType {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 impl ContentProvider {
+    pub fn get_content_names(&self, t: ContentProviderContentType) -> GetNames {
+        match t {
+            ContentProviderContentType::Menu => {
+                GetNames::Names(
+                    self.get_menu_options()
+                    .into_iter()
+                    .map(|o| {
+                        o.get_name()
+                        .replace("_", " ")
+                        .to_lowercase()
+                    })
+                    .collect()
+                )
+            }
+            ContentProviderContentType::Normal => {
+                GetNames::IDS(&self.content)
+            }
+        }
+    }
+
+    pub fn has_menu(&self) -> bool {
+        match self.cp_type {
+            ContentProviderType::MainProvider => true,
+            _ => todo!(),
+        }
+    }
+
+    pub fn apply_option(&mut self, opt: ContentProviderMenuOptions, self_id: ContentProviderID) -> Option<ActionEntry> {
+        match opt {
+            ContentProviderMenuOptions::Main(o) => {
+                match o {
+                    MainContentProviderMenuOptions::ADD_FILE_EXPLORER => {
+                        Some(ActionEntry::AddCPToCP { id: self_id, cp: Self::new_file_explorer("/home/issac/daata/phon-data/.musi/IsBac/".to_owned(), "File Explorer: ".to_owned()) })
+                    }
+                    _ => todo!()
+                }
+            }
+        }
+    }
+
     pub fn new_main_provider() -> Self {
         Self {
             content: vec![],
@@ -25,10 +79,10 @@ impl ContentProvider {
         }
     }
 
-    pub fn new_file_explorer(path: String) -> Self {
+    pub fn new_file_explorer(path: String, pre_name: String) -> Self {
         Self {
             content: vec![],
-            name: path.rsplit_terminator("/").next().unwrap().to_owned(),
+            name: pre_name + &path.rsplit_terminator("/").next().unwrap().to_owned(),
             cp_type: ContentProviderType::FileExplorer {path},
             selected_index: 0,
             loaded: false,
@@ -37,7 +91,7 @@ impl ContentProvider {
 
     // TODO: maybe return a list of songs/sp/spp so that the parent function can add? or is this better?
     /// can load from various sources like yt/local storage while being able to add stuff to s/sp/spp
-    pub fn load(&mut self) -> Option<LoadEntry> {
+    pub fn load(&mut self, id: ContentProviderID) -> Option<ActionEntry> {
         if self.loaded {return None}
         self.loaded = true;
         match &mut self.cp_type {
@@ -51,7 +105,7 @@ impl ContentProvider {
                 .filter(|e| e.as_ref().map(|r| r.path().is_dir()).unwrap_or(false))
                 .map(|res| res.map(|e| e.path()).unwrap().to_str().unwrap().to_owned())
                 .for_each(|e| {
-                        sp.push(ContentProvider::new_file_explorer(e));
+                        sp.push(ContentProvider::new_file_explorer(e, "".to_owned()));
                     }
                 );
 
@@ -63,21 +117,22 @@ impl ContentProvider {
                         s.push(Song::from_file(e));
                     }
                 );
-                Some(LoadEntry {s, sp})
+                Some(ActionEntry::LoadContentManager(LoadEntry {s, sp, loader: id}))
             }
             _ => panic!()
         }
     }
 
-    pub fn get_menu_options(&self) -> Vec<MenuOptions> {
+    pub fn get_menu_options(&self) -> Vec<ContentProviderMenuOptions> {
         match self.cp_type {
             ContentProviderType::MainProvider => {
                 [
-                    MenuOptions::ADD_ARTIST_PROVIDER,
-                    MenuOptions::ADD_PLAYLIST_PROVIDER,
-                    MenuOptions::ADD_QUEUE_PROVIDER,
-                    MenuOptions::ADD_FILE_EXPLORER
+                    MainContentProviderMenuOptions::ADD_ARTIST_PROVIDER,
+                    MainContentProviderMenuOptions::ADD_PLAYLIST_PROVIDER,
+                    MainContentProviderMenuOptions::ADD_QUEUE_PROVIDER,
+                    MainContentProviderMenuOptions::ADD_FILE_EXPLORER
                 ].into_iter()
+                .map(|o| ContentProviderMenuOptions::Main(o))
                 .collect()
             }
             _ => panic!()
@@ -87,15 +142,30 @@ impl ContentProvider {
 
 
 #[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ContentProviderMenuOptions {
+    Main(MainContentProviderMenuOptions),
+}
+impl ContentProviderMenuOptions {
+    fn get_name(self) -> String {
+        match self {
+            Self::Main(o) => {
+                format!("{o:#?}")
+            }
+        }
+    }
+}
+
+#[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MenuOptions {
+pub enum MainContentProviderMenuOptions {
     ADD_ARTIST_PROVIDER,
     ADD_PLAYLIST_PROVIDER,
     ADD_QUEUE_PROVIDER,
     ADD_FILE_EXPLORER,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum ContentProviderType {
     Playlist,
     Queue,
@@ -113,14 +183,11 @@ enum ContentProviderType {
     },
 
     MainProvider,
+    Loading, // load the content manager in another thread and use this as placeholder and apply it when ready
 }
 
 impl ContentProvider {
-    fn get_content_type() -> ContentType {
-        ContentType::SongProvider
-    }
-
-    fn get_name(&self) -> &str {
+    pub fn get_name(&self) -> &str {
         &self.name
     }
 }

@@ -1,6 +1,8 @@
 
 
 
+use std::vec;
+
 use tui::{
     backend::{Backend},
     widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
@@ -85,7 +87,7 @@ impl BrowserWidget {
                 self.update(ch);
             }
             KeyCode::Enter => {
-                ch.choose_option(self.selected_index + self.top_index);
+                ch.apply_option(self.selected_index + self.top_index);
                 self.update(ch);
             }
             _ => return false,
@@ -118,9 +120,22 @@ impl BrowserWidget {
     }
 }
 
-struct PlayerWidget {}
+struct PlayerWidget {
+    render_state: RenderState,
+}
+#[derive(Clone)]
+enum RenderState {
+    Log(Vec<String>),
+    Normal,
+}
 
 impl PlayerWidget {
+    fn new() -> Self {
+        Self {
+            render_state: RenderState::Log(vec!["lollll".to_owned()])
+        }
+    }
+
     fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> bool {
         match key.code {
             KeyCode::Char('p') => {
@@ -148,11 +163,44 @@ impl PlayerWidget {
     }
 
     fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {
-        f.render_widget(
-            Block::default()
-                .borders(Borders::ALL).title("Player Widget"),
-            r
-        );
+        match self.render_state.clone() {
+            RenderState::Normal => {
+                f.render_widget(
+                    Block::default()
+                        .borders(Borders::ALL).title("Player Widget"),
+                    r
+                );
+            }
+            RenderState::Log(logs) => {
+                let messages = List::new(
+                    logs.iter()
+                    .enumerate()
+                    .map(|(i, m)| {
+                        let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
+                        ListItem::new(content).style(Style::default().fg(Color::Cyan))
+                    })
+                    .collect::<Vec<_>>()
+                )
+                .block(Block::default().borders(Borders::ALL).title("Browser Widget"))
+                .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Rgb(200, 100, 0)))
+                // .highlight_symbol("> ")
+                ;
+                let mut list_state = ListState::default();
+                f.render_stateful_widget(messages, r, &mut list_state);
+            }
+        }
+    }
+
+    fn update(&mut self, ch: &mut ContentHandler) {
+        match &mut self.render_state {
+            RenderState::Log(logs) => {
+                logs.clear();
+                logs.append(&mut ch.get_logs().clone());
+            }
+            RenderState::Normal => {
+
+            }
+        }
     }
 }
 
@@ -191,7 +239,7 @@ impl App {
 
             status_bar: StatusBar {},
             browser_widget: BrowserWidget::new(),
-            player_widget: PlayerWidget {},
+            player_widget: PlayerWidget::new(),
 
             content_handler: ContentHandler::load(),
         }
@@ -202,11 +250,16 @@ impl App {
         loop {
             terminal.draw(|f| self.render(f))?;
             self.handle_events()?;
+            self.update();
 
             if let AppState::Quit = self.state {
                 return Ok(());
             }
         }
+    }
+
+    fn update(&mut self) {
+        self.player_widget.update(&mut self.content_handler);
     }
     
     fn handle_events(&mut self) -> Result<()> {

@@ -1,18 +1,20 @@
 
+use core::panic;
+
 use serde::{Serialize, Deserialize};
 
 use crate::{
-    content_handler::{ContentType},
+    content_handler::{ContentType, ActionEntry},
 };
 
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Song {
     metadata: SongMetadata,
     stype: SongType,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 enum SongMetadata {
     YTMetadata {
         url: String,
@@ -25,7 +27,13 @@ enum SongMetadata {
     },
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy)]
+pub enum SongMenuOptions {
+
+}
+
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SongType {
     YTOnline,
     YTOnDisk,
@@ -33,19 +41,64 @@ pub enum SongType {
     Seperator,
 }
 
+#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Eq)]
+pub enum SongContentType {
+    Menu,
+    Normal,
+    Edit,
+}
+impl Default for SongContentType {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 impl Song {
-    fn get_content_type() -> ContentType {
-        ContentType::Song
+    pub fn has_menu(&self) -> bool {
+        true
+    }
+
+    pub fn get_menu_options(&self) -> Vec<SongMenuOptions> {
+        vec![]
     }
     
+    pub fn apply_option(&mut self, opt: SongMenuOptions) -> Option<ActionEntry> {
+        match opt {
+
+        }
+    }
+
     // TODO: temporary implimentation
-    fn get_name(&self) -> &str {
+    pub fn get_name(&self) -> &str {
         match &self.metadata {
             SongMetadata::FileMetadata { path } => {
                 path.rsplit_terminator("/").next().unwrap()
             }
             _ => panic!()
         }
+    }
+
+    pub fn get_content_names(&self, t: SongContentType) -> Vec<String> {
+        match t {
+            SongContentType::Menu => {
+                self.get_menu_options()
+                .into_iter()
+                .map(|o| {
+                    format!("{o:#?}")
+                    .replace("_", " ")
+                    .to_lowercase()
+                })
+                .collect()
+            }
+            SongContentType::Edit => {
+                // send_vec_of_self_details
+                todo!()
+            }
+            SongContentType::Normal => {
+                panic!("no content names in song Normal mode")
+            }
+        } 
     }
 }
 

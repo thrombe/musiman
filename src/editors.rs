@@ -1,13 +1,19 @@
 
 use crate::{
-    content_handler::{ContentID, ID, ContentType, ContentProviderID}, content_providers::ContentProvider
+    content_handler::{ContentID, ID, ContentType, ContentProviderID, SongID}, content_providers::ContentProvider
 };
 
-
+#[derive(Clone, PartialEq, Eq)]
+enum YankedContentType {
+    Song,
+    ContentProvider,
+    None,
+}
 
 #[derive(Clone)]
 pub struct Yanker {
     yanked_items: Vec<ID>,
+    content_type: YankedContentType,
     yank_type: YankType,
     yanked_from: Option<ContentProviderID>,
     yanked_to: Option<ContentProviderID>, // for undo
@@ -28,22 +34,24 @@ impl Yanker {
             yank_type: YankType::None,
             yanked_from: None,
             yanked_to: None,
+            content_type: YankedContentType::None,
         }
     }
 
-    pub fn yank(&mut self, cid: ID) {
-        if self.yanked_items.len() != 0 && cid.content_type != self.yanked_content_type().unwrap() {
+    pub fn yank_song(&mut self, id: SongID) {
+        if self.content_type != YankedContentType::Song {
             self.yanked_items.clear();
+            self.content_type = YankedContentType::Song;
         }
-        self.yanked_items.push(cid);
+        self.yanked_items.push(id.into());
     }
 
-    pub fn yanked_content_type(&self) -> Option<ContentType> {
-        if self.yanked_items.len() > 0 {
-            Some(self.yanked_items[0].content_type)
-        } else {
-            None
+    pub fn yank_content_provider(&mut self, id: ContentProviderID) {
+        if self.content_type != YankedContentType::ContentProvider {
+            self.yanked_items.clear();
+            self.content_type = YankedContentType::ContentProvider;
         }
+        self.yanked_items.push(id.into());
     }
 
     // can generalise this with some Yankable trait
@@ -57,11 +65,11 @@ impl Yanker {
     }
 }
 
-pub struct UndoManager {
+pub struct EditManager {
     edits: Vec<Edit>,
 }
 
-impl UndoManager {
+impl EditManager {
     pub fn new() -> Self {
         Self {
             edits: vec![],

@@ -14,8 +14,4 @@ impl DBHandler {
     pub fn try_load() -> Self {
         Self {}
     }
-
-    pub fn song_providers(&mut self) -> ContentManager<ContentProvider, ID> {
-        ContentManager::new()
-    }
 }
