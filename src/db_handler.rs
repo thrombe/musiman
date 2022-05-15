@@ -1,6 +1,6 @@
 
 use crate::{
-    content_handler::{ContentManager},
+    content_handler::{ContentManager, ID},
     content_providers::{ContentProvider},
 };
 
@@ -15,7 +15,7 @@ impl DBHandler {
         Self {}
     }
 
-    pub fn song_providers(&mut self) -> ContentManager<ContentProvider> {
+    pub fn song_providers(&mut self) -> ContentManager<ContentProvider, ID> {
         ContentManager::new()
     }
 }

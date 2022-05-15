@@ -2,7 +2,7 @@
 use serde::{Serialize, Deserialize};
 
 use crate::{
-    content_handler::{Content, ContentType},
+    content_handler::{ContentType},
 };
 
 
@@ -33,7 +33,7 @@ pub enum SongType {
     Seperator,
 }
 
-impl Content for Song {
+impl Song {
     fn get_content_type() -> ContentType {
         ContentType::Song
     }

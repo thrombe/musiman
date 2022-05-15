@@ -1,13 +1,13 @@
 
 use crate::{
     song::Song,
-    content_handler::{ContentType, Content, ContentID, ContentManager, LoadEntry},
+    content_handler::{ContentType, ContentID, ID, ContentManager, LoadEntry},
 };
 
 
 #[derive(Clone)]
 pub struct ContentProvider {
-    pub content: Vec<ContentID>,
+    pub content: Vec<ID>,
     name: String,
     cp_type: ContentProviderType,
     pub selected_index: usize,
@@ -115,7 +115,7 @@ enum ContentProviderType {
     MainProvider,
 }
 
-impl Content for ContentProvider {
+impl ContentProvider {
     fn get_content_type() -> ContentType {
         ContentType::SongProvider
     }
@@ -126,11 +126,11 @@ impl Content for ContentProvider {
 }
 
 impl ContentProvider {
-    pub fn provide(&self) -> &Vec<ContentID> {
+    pub fn provide(&self) -> &Vec<ID> {
         &self.content
     }
 
-    pub fn provide_mut(&mut self) -> &mut Vec<ContentID> {
+    pub fn provide_mut(&mut self) -> &mut Vec<ID> {
         &mut self.content
     }
 
@@ -148,14 +148,14 @@ impl ContentProvider {
     }
 
     // TODO: reimpliment these for all of the diff types of content providers
-    pub fn add(&mut self, content_identifier: ContentID) {
+    pub fn add(&mut self, content_identifier: ID) {
         self.provide_mut().push(content_identifier);
     }
     /// panics if out of bounds
-    pub fn remove_using_index(&mut self, index: usize) -> ContentID {
+    pub fn remove_using_index(&mut self, index: usize) -> ID {
         self.provide_mut().remove(index)
     }
-    pub fn remove(&mut self, cid: ContentID) {
+    pub fn remove(&mut self, cid: ID) {
         self.provide_mut().iter().position(|&e| e == cid);
     }
 
