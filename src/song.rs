@@ -1,5 +1,17 @@
 
-use core::panic;
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+};
+
+use lofty::{
+    self,
+    AudioFile, Accessor,
+};
+use anyhow::{
+    Result,
+};
 
 use serde::{
     Serialize,
@@ -16,27 +28,55 @@ use crate::{
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Song {
     metadata: SongMetadata,
-    stype: SongType,
+    // stype: SongType,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 enum SongMetadata {
     YT {
-        url: String,
+        key: String,
     },
     YTFile {
+        key: String,
         path: String,
     },
-    File {
+    TaggedFile {
+        path: String,
+        title: String,
+        artist: String,
+        album: String,
+        // duration: f32,
+    },
+    UntaggedFile {
         path: String,
     },
+    Seperator,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum SongMenuOptions {
+pub enum SongMenuOptions {}
 
+
+#[derive(Debug, Clone)]
+pub enum SongPath {
+    LocalPath(String),
+    YTKey(String),
+    YTURL(String),
 }
-
+impl ToString for SongPath {
+    fn to_string(&self) -> String {
+        match self {
+            Self::LocalPath(s) => format!("file://{s}"),
+            Self::YTKey(s) => format!("https://youtu.be/{s}"),
+            Self::YTURL(s) => s.into(),
+        }
+    }
+}
+impl Into<String> for SongPath {
+    fn into(self) -> String {
+        self.to_string()
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SongType {
@@ -76,7 +116,10 @@ impl Song {
     // TODO: temporary implimentation
     pub fn get_name(&self) -> &str {
         match &self.metadata {
-            SongMetadata::File { path } => {
+            SongMetadata::TaggedFile { title, .. } => {
+                title
+            }
+            SongMetadata::UntaggedFile { path } => {
                 path.rsplit_terminator("/").next().unwrap()
             }
             _ => panic!()
@@ -105,20 +148,71 @@ impl Song {
         } 
     }
     
-    pub fn from_file(path: String) -> Self {
-        Self {
-            metadata: SongMetadata::File { path },
-            stype: SongType::UnknownOnDisk,
+    pub fn from_file(path: String) -> Result<Self> {
+        let tf = lofty::read_from_path(&path, true)?;
+        let _ = log_song(&path);
+        let tags = tf.primary_tag();
+        if tags.is_some() {
+            let tags = tags.unwrap();
+            let artist = tags.artist();
+            let title = tags.title();
+            let album = tags.album();
+            if artist.is_some() && title.is_some() {
+                return Ok(Self {
+                    metadata: SongMetadata::TaggedFile {
+                        path,
+                        title: title.unwrap().into(),
+                        artist: title.unwrap().into(),
+                        album: album.unwrap_or("none").into(),
+                    }
+                })
+            }
         }
+        Ok(Self {
+            metadata: SongMetadata::UntaggedFile {path},
+        })
     }
     
-    pub fn path(&self) -> &str {
+    pub fn path(&self) -> SongPath {
         match &self.metadata {
-            SongMetadata::File { path } => {
-                path
+            SongMetadata::TaggedFile { path, .. } => {
+                SongPath::LocalPath(path.into())
+            }
+            SongMetadata::UntaggedFile { path } => {
+                SongPath::LocalPath(path.into())
+            }
+            SongMetadata::YTFile { path , ..} => {
+                SongPath::LocalPath(path.into())
+            }
+            SongMetadata::YT { key } => {
+                SongPath::YTKey(key.into())
             }
             _ => panic!()
         }
     }
 }
 
+/// a function i used for checking what is returned by lofty
+fn log_song(path: &str) -> Result<()> {
+    debug!("logging song {path}");
+    let probe = lofty::Probe::open(&path)?;
+    let file_type = probe.file_type();
+    // https://docs.rs/lofty/latest/lofty/struct.TaggedFile.html
+    let tagged_file = probe.read(true)?;
+    let properties = tagged_file.properties();
+    // apparently a file can have multiple tags in it
+    let tags = tagged_file
+    .tags().into_iter()
+    .map(lofty::Tag::items)
+    .map(|e| e.iter()).flatten()
+    .map(|e| (format!("{:#?}", e.key()), e.value().text().unwrap()))
+    .collect::<Vec<_>>()
+    ;
+    let pics = tagged_file
+    .tags().into_iter()
+    .map(lofty::Tag::pictures)
+    .collect::<Vec<_>>()
+    ;
+    dbg!(file_type, properties, tags, pics);
+    Ok(())
+}

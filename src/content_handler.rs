@@ -1,7 +1,6 @@
 
-use log::{
-    debug,
-};
+#[allow(unused_imports)]
+use crate::{dbg, debug};
 
 use crate::{
     song::{
@@ -424,11 +423,10 @@ impl ContentHandler {
     }
     pub fn play_song(&mut self, id: SongID) {
         let song = self.songs.get(id).unwrap();
-        let path = song.path().to_owned();
-        let path = format!("file://{path}"); // TODO: this is temp, the song should provide some kinda general path that can be uri or local path
-        debug!("playing song {path}");
+        let path = song.path();
+        debug!("playing song {song:#?}");
         self.player.stop().unwrap();
-        self.player.play(path).unwrap();
+        self.player.play(path.into()).unwrap();
         self.active_song = Some(id);
     }
     pub fn toggle_song_pause(&mut self) {

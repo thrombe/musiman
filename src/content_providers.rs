@@ -167,7 +167,10 @@ impl ContentProvider {
                     } else if e.is_file() {
                         let file = e.to_str().unwrap().to_owned();
                         if file.ends_with(".m4a") {
-                            s.push(Song::from_file(file));
+                            match Song::from_file(file).ok() {
+                                Some(song) => s.push(song),
+                                None => (),
+                            }
                         }
                     }
                 });

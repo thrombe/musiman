@@ -46,8 +46,32 @@ use crossterm::{
     },
 };
 use fern;
+use log;
 use anyhow::Result;
 // use tokio;
+
+pub use log::debug;
+
+/// dbg macro but eprintln replaced with log::debug
+/// https://github.com/rust-lang/rust/blob/3bcce82d14b85996c134420ac3c6790a410f7842/library/std/src/macros.rs#L287-L309
+#[macro_export]
+macro_rules! dbg {
+    () => {
+        log::debug!("[{}:{}]", $crate::file!(), $crate::line!());
+    };
+    ($val:expr $(,)?) => {
+        match $val {
+            tmp => {
+                log::debug!("[{}:{}] {} = {:#?}",
+                    file!(), line!(), stringify!($val), &tmp);
+                tmp
+            }
+        }
+    };
+    ($($val:expr),+ $(,)?) => {
+        ($($crate::dbg!($val)),+,)
+    };
+}
 
 
 // #[tokio::main]
@@ -153,17 +177,17 @@ fn init_logger() -> Result<()> {
         _3_or_more => base_config.level(log::LevelFilter::Trace),
     };
 
-    let _ = std::fs::remove_file("logger/log.log");
+    let log_file = "config/temp/log.log";
+    let _ = std::fs::remove_file(log_file);
     let file_config = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
-                "[{}][{}] {}",
-                record.target(),
+                "[{}] {}",
                 record.level(),
                 message
             ))
         })
-        .chain(fern::log_file("logger/log.log")?);
+        .chain(fern::log_file(log_file)?);
 
     
     base_config
