@@ -140,26 +140,22 @@ impl PlayerWidget {
         match key.code {
             KeyCode::Char('p') => {
                 ch.toggle_song_pause();
-                true
             }
             KeyCode::Char('k') => {
                 ch.seek_song(10.0);
-                true
             }
             KeyCode::Char('j') => {
                 ch.seek_song(-10.0);
-                true
             }
             KeyCode::Char('l') => {
                 ch.next_song();
-                true
             }
             KeyCode::Char('h') => {
                 ch.prev_song();
-                true
             }
-            _ => false,
+            _ => return false,
         }
+        true
     }
 
     fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {

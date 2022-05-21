@@ -103,6 +103,13 @@ impl ContentProviderID {
             }
         }
     }
+
+    pub fn is_temp(&self) -> bool {
+        match self {
+            Self::TemporaryContent {..} => true,
+            Self::PersistentContent {..} => false,
+        }
+    }
 }
 impl From<PersistentContentID> for ContentProviderID {
     fn from(id: PersistentContentID) -> Self {
@@ -173,22 +180,16 @@ where T: Clone, P: From<ContentID<T>> + Into<ContentID<T>>
     pub fn get(&self, content_identifier: P) -> Option<&T> {
         let id: ContentID<T> = content_identifier.into();
         match self.items.get(id.index) {
-            Some(e) => match e {
-                Some(e) => Some(&e.val),
-                None => None,
-            },
-            None => None,
+            Some(Some(e)) =>  Some(&e.val),
+            _ => None,
         }
     }
 
     pub fn get_mut(&mut self, content_identifier: P) -> Option<&mut T> {
         let id: ContentID<T> = content_identifier.into();
         match self.items.get_mut(id.index) {
-            Some(e) => match e {
-                Some(e) => Some(&mut e.val),
-                None => None,
-            },
-            None => None,
+            Some(Some(e)) => Some(&mut e.val),
+            _ => None,
         }
     }
 

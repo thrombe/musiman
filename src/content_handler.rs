@@ -60,62 +60,51 @@ impl Logger {
     }
 }
 
-pub enum ActionEntry {
-    LoadContentManager(LoadEntry),
+pub enum Action {
+    LoadContentManager {
+        songs: Vec<Song>,
+        content_providers: Vec<ContentProvider>,
+        loader_id: ContentProviderID,
+    },
     ReplaceContentProvider {old_id: ContentProviderID, cp: ContentProvider},
     AddCPToCP {id: ContentProviderID, cp: ContentProvider},
 }
-impl ActionEntry {
+impl Action {
     fn apply(self, ch: &mut ContentHandler) {
         match self {
-            Self::LoadContentManager(e) => {
-                e.load(ch);
+            Self::LoadContentManager {songs, content_providers, loader_id} => {
+                let mut loader = ch.get_provider(loader_id).clone();
+                for s in songs {
+                    let ci = ch.songs.alloc(s);
+                    loader.content.push(ci.into());
+                }
+                for cp in content_providers {
+                    let id = if loader_id.is_temp() {
+                        ch.temp_content_providers.alloc(cp).into()
+                    } else {
+                        ch.content_providers.alloc(cp).into()
+                    };
+                    loader.content.push(id);
+                }
+                let old_loader = ch.get_provider_mut(loader_id);
+                *old_loader = loader;        
             }
             Self::ReplaceContentProvider {..} => {
                 todo!()
             }
             Self::AddCPToCP {id, cp} => {
-                let loaded_id = ch.content_providers.alloc(cp); // TODO: check where to add this. in temp or perma
+                let loaded_id = if id.is_temp() {
+                    ch.temp_content_providers.alloc(cp).into()
+                } else {
+                    ch.content_providers.alloc(cp).into()
+                };
                 let loader = ch.get_provider_mut(id);
-                loader.add(loaded_id.into());
+                loader.add(loaded_id);
             }
         }
     }
 }
-pub struct LoadEntry {
-    pub s: Vec<Song>,
-    pub sp: Vec<ContentProvider>,
-    pub loader: ContentProviderID,
-}
-impl LoadEntry {
-    fn load(self, ch: &mut ContentHandler) {
-        let mut c = match self.loader {
-            ContentProviderID::PersistentContent {id, ..} => {
-                ch.content_providers.get(id)
-            }
-            ContentProviderID::TemporaryContent {id, ..} => {
-                ch.temp_content_providers.get(id)
-            }
-        }.unwrap().clone();
-        for s in self.s {
-            let ci = ch.songs.alloc(s);
-            c.content.push(ci.into());
-        }
-        for s in self.sp {
-            let ci = ch.content_providers.alloc(s); // TODO: check where to add this. in temp or perma
-            c.content.push(ci.into());
-        }
-        let c1 = match self.loader {
-            ContentProviderID::PersistentContent {id, ..} => {
-                ch.content_providers.get_mut(id)
-            }
-            ContentProviderID::TemporaryContent {id, ..} => {
-                ch.temp_content_providers.get_mut(id)
-            }
-        }.unwrap();
-        *c1 = c;
-    }
-}
+
 pub enum GetNames<'a> {
     Names(Vec<String>),
     IDS(&'a Vec<ID>),
@@ -128,7 +117,7 @@ impl GetNames<'_> {
                 ids.iter().map(|&id| {
                     match id {
                         ID::Song(id) => {
-                            ch.get_song(id).unwrap().get_name()
+                            ch.get_song(id).get_name()
                         }
                         ID::ContentProvider(id) => {
                             ch.get_provider(id).get_name()
@@ -232,7 +221,7 @@ impl ContentHandler {
         // maybe use refrence counting to yeet the content without a identifier
 
         if self.content_stack.len() > 1 {
-            let ci = self.content_stack.pop().unwrap();
+            self.content_stack.pop().unwrap();
         }
     }
 
@@ -242,7 +231,7 @@ impl ContentHandler {
             GlobalContent::ID(id) => {
                 match id {
                     ID::Song(id) => {
-                        let s = self.get_song(id).unwrap();
+                        let s = self.get_song(id);
                         s.get_content_names(id.t)
                     }
                     ID::ContentProvider(id) => {
@@ -290,7 +279,7 @@ impl ContentHandler {
             GlobalContent::ID(id) => {
                 match id {
                     ID::Song(id) => {
-                        let s = self.get_song_mut(id).unwrap();
+                        let s = self.get_song_mut(id);
                         let opts = s.get_menu_options();
                         let opt = opts[index]; // TODO: track with edit manager + logs
                         let action = s.apply_option(opt);
@@ -322,7 +311,7 @@ impl ContentHandler {
             GlobalContent::ID(id) => GlobalContent::ID(
                 match id {
                     ID::Song(id) => ID::Song({
-                        let s = self.get_song(id).unwrap();
+                        let s = self.get_song(id);
                         if !s.has_menu() {return false}
                         let mut id = id;
                         id.t = SongContentType::Menu;
@@ -399,30 +388,30 @@ impl ContentHandler {
         }
     }
 
-    fn get_song(&self, content_identifier: SongID) -> Option<&Song> {
-        self.songs.get(content_identifier)
+    fn get_song(&self, id: SongID) -> &Song {
+        self.songs.get(id).unwrap()
     }
-    fn get_song_mut(&mut self, content_identifier: SongID) -> Option<&mut Song> {
-        self.songs.get_mut(content_identifier)
+    fn get_song_mut(&mut self, content_identifier: SongID) -> &mut Song {
+        self.songs.get_mut(content_identifier).unwrap()
     }
 
     pub fn get_logs(&self) -> &Vec<String> {
         &self.logger.entries
     }
 
-    pub fn play_song(&mut self, ci: SongID) {
-        let song = self.songs.get(ci).unwrap();
+    pub fn play_song(&mut self, id: SongID) {
+        let song = self.songs.get(id).unwrap();
         let path = song.path().to_owned();
         let path = format!("file://{path}"); // TODO: this is temp, the song should provide some kinda general path that can be uri or local path
         self.player.stop().unwrap();
         self.player.play(path).unwrap();
-        self.active_song = Some(ci);
+        self.active_song = Some(id);
     }
     pub fn toggle_song_pause(&mut self) {
         self.player.toggle_pause().unwrap();
     }
     fn get_mut_queue(&mut self) -> Option<&mut ContentProvider> {
-        let queue_ci = {
+        let queue_id = {
             if self.active_queue.is_some() {
                 if let ContentProviderID::PersistentContent {id, ..} = self.active_queue.unwrap() {
                     id
@@ -433,7 +422,7 @@ impl ContentHandler {
                 return None
             }
         };
-        let q = self.content_providers.get_mut(queue_ci).unwrap();
+        let q = self.content_providers.get_mut(queue_id).unwrap();
         Some(q)
     }
     pub fn next_song(&mut self) {

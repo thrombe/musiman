@@ -8,7 +8,7 @@ use serde::{
 
 use crate::{
     content_handler::{
-        ActionEntry,
+        Action,
     },
 };
 
@@ -21,13 +21,13 @@ pub struct Song {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 enum SongMetadata {
-    YTMetadata {
+    YT {
         url: String,
     },
-    YTFileMetadata {
+    YTFile {
         path: String,
     },
-    FileMetadata {
+    File {
         path: String,
     },
 }
@@ -67,7 +67,7 @@ impl Song {
         vec![]
     }
     
-    pub fn apply_option(&mut self, opt: SongMenuOptions) -> Option<ActionEntry> {
+    pub fn apply_option(&mut self, opt: SongMenuOptions) -> Option<Action> {
         match opt {
 
         }
@@ -76,7 +76,7 @@ impl Song {
     // TODO: temporary implimentation
     pub fn get_name(&self) -> &str {
         match &self.metadata {
-            SongMetadata::FileMetadata { path } => {
+            SongMetadata::File { path } => {
                 path.rsplit_terminator("/").next().unwrap()
             }
             _ => panic!()
@@ -107,14 +107,14 @@ impl Song {
     
     pub fn from_file(path: String) -> Self {
         Self {
-            metadata: SongMetadata::FileMetadata { path },
+            metadata: SongMetadata::File { path },
             stype: SongType::UnknownOnDisk,
         }
     }
     
     pub fn path(&self) -> &str {
         match &self.metadata {
-            SongMetadata::FileMetadata { path } => {
+            SongMetadata::File { path } => {
                 path
             }
             _ => panic!()

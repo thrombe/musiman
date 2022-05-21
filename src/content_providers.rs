@@ -8,9 +8,8 @@ use crate::{
         Song,
     },
     content_handler::{
-        LoadEntry,
         GetNames,
-        ActionEntry,
+        Action,
     },
     content_manager::{
         ContentProviderID,
@@ -67,12 +66,12 @@ impl ContentProvider {
         }
     }
 
-    pub fn apply_option(&mut self, opt: ContentProviderMenuOptions, self_id: ContentProviderID) -> Option<ActionEntry> {
+    pub fn apply_option(&mut self, opt: ContentProviderMenuOptions, self_id: ContentProviderID) -> Option<Action> {
         match opt {
             ContentProviderMenuOptions::Main(o) => {
                 match o {
                     MainContentProviderMenuOptions::ADD_FILE_EXPLORER => {
-                        Some(ActionEntry::AddCPToCP {
+                        Some(Action::AddCPToCP {
                             id: self_id,
                             cp: Self::new_file_explorer(
                                 "/home/issac/daata/phon-data/.musi/IsBac/".to_owned(),
@@ -99,7 +98,7 @@ impl ContentProvider {
     pub fn new_file_explorer(path: String, pre_name: String) -> Self {
         Self {
             content: vec![],
-            name: pre_name + &path.rsplit_terminator("/").next().unwrap().to_owned(),
+            name: pre_name + path.rsplit_terminator("/").next().unwrap(),
             cp_type: ContentProviderType::FileExplorer {path},
             selected_index: 0,
             loaded: false,
@@ -107,12 +106,12 @@ impl ContentProvider {
     }
 
     /// can load from various sources like yt/local storage while being able to add stuff to s/sp/spp
-    pub fn load(&mut self, id: ContentProviderID) -> Option<ActionEntry> {
+    pub fn load(&mut self, id: ContentProviderID) -> Option<Action> {
         if self.loaded {return None}
         self.loaded = true;
         match &mut self.cp_type {
             ContentProviderType::FileExplorer {path} => {
-                if self.content.len() != 0 {return None}
+                if !self.content.is_empty() {return None}
                 let mut s = vec![];
                 let mut sp = vec![];
 
@@ -132,7 +131,7 @@ impl ContentProvider {
                     }
                 });
 
-                Some(ActionEntry::LoadContentManager(LoadEntry {s, sp, loader: id}))
+                Some(Action::LoadContentManager {songs: s, content_providers: sp, loader_id: id})
             }
             _ => panic!()
         }
