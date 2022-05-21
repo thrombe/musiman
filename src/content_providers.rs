@@ -13,6 +13,7 @@ use crate::{
     },
     content_manager::{
         ContentProviderID,
+        SongID,
         ID,
     },
 };
@@ -20,9 +21,10 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct ContentProvider {
-    pub content: Vec<ID>,
+    pub providers: Vec<ContentProviderID>,
+    pub songs: Vec<SongID>,
     name: String,
-    cp_type: ContentProviderType,
+    pub cp_type: ContentProviderType,
     pub selected_index: usize,
     loaded: bool,
 }
@@ -54,7 +56,28 @@ impl ContentProvider {
                 )
             }
             ContentProviderContentType::Normal => {
-                GetNames::IDS(&self.content)
+                GetNames::IDS(
+                    match self.cp_type {
+                        ContentProviderType::Queues => {
+                            self.providers
+                            .iter().cloned()
+                            .map(Into::into)
+                            .rev()
+                            .collect()
+                        }
+                        _ => {
+                            self.providers
+                            .iter().cloned()
+                            .map(Into::into)
+                            .chain(
+                                self.songs
+                                .iter().cloned()
+                                .map(Into::into)
+                            )
+                            .collect()
+                        }
+                    }
+                )
             }
         }
     }
@@ -79,6 +102,12 @@ impl ContentProvider {
                             )
                         })
                     }
+                    MainContentProviderMenuOptions::ADD_QUEUE_PROVIDER => {
+                        Some(Action::AddCPToCP {
+                            id: self_id,
+                            cp: Self::new_queue_provider(),
+                        })
+                    }
                     _ => todo!()
                 }
             }
@@ -87,7 +116,8 @@ impl ContentProvider {
 
     pub fn new_main_provider() -> Self {
         Self {
-            content: vec![],
+            providers: vec![],
+            songs: vec![],
             name: "Main Provider".to_owned(),
             cp_type: ContentProviderType::MainProvider,
             selected_index: 0,
@@ -97,11 +127,23 @@ impl ContentProvider {
 
     pub fn new_file_explorer(path: String, pre_name: String) -> Self {
         Self {
-            content: vec![],
+            providers: vec![],
+            songs: vec![],
             name: pre_name + path.rsplit_terminator("/").next().unwrap(),
             cp_type: ContentProviderType::FileExplorer {path},
             selected_index: 0,
             loaded: false,
+        }
+    }
+
+    pub fn new_queue_provider() -> Self {
+        Self {
+            providers: vec![],
+            songs: vec![],
+            name: "Queues".into(),
+            selected_index: 0,
+            loaded: true,
+            cp_type: ContentProviderType::Queues,
         }
     }
 
@@ -111,7 +153,6 @@ impl ContentProvider {
         self.loaded = true;
         match &mut self.cp_type {
             ContentProviderType::FileExplorer {path} => {
-                if !self.content.is_empty() {return None}
                 let mut s = vec![];
                 let mut sp = vec![];
 
@@ -157,23 +198,45 @@ impl ContentProvider {
         &self.name
     }
 
-    /// panics if out of bounds
-    pub fn swap(&mut self, a: usize, b:  usize) {
-        self.content.swap(a, b)
-    }
+    // /// panics if out of bounds
+    // pub fn swap(&mut self, a: usize, b:  usize) {
+    //     self.content.swap(a, b)
+    // }
     // TODO: reimpliment these for all of the diff types of content providers
-    pub fn add(&mut self, content_identifier: ID) {
-        self.content.push(content_identifier);
+    pub fn add(&mut self, id: ID) {
+        match id {
+            ID::Song(id) => {
+                self.songs.push(id)
+            }
+            ID::ContentProvider(id) => {
+                self.providers.push(id)
+            }
+        }
     }
     /// panics if out of bounds
-    pub fn remove_using_index(&mut self, index: usize) -> ID {
-        self.content.remove(index)
+    pub fn get(&self, index: usize) -> ID {
+        let providers = self.providers.len();
+        let songs = self.songs.len();
+        if index < providers {
+                self.providers[index].into()
+        } else if index < songs+providers {
+                self.songs[index-providers].into()
+        } else {
+            panic!()
+        }
     }
-    /// panic if not in here
-    pub fn remove(&mut self, cid: ID) {
-        let i = self.content.iter().position(|&e| e == cid).unwrap();
-        self.content.remove(i);
+    pub fn get_size(&self) -> usize {
+        self.providers.len() + self.songs.len()
     }
+    // /// panics if out of bounds
+    // pub fn remove_using_index(&mut self, index: usize) -> ID {
+    //     self.content.remove(index)
+    // }
+    // /// panic if not in here
+    // pub fn remove(&mut self, id: ID) {
+    //     let i = self.content.iter().position(|&e| e == id).unwrap();
+    //     self.content.remove(i);
+    // }
 }
 
 
@@ -201,8 +264,8 @@ pub enum MainContentProviderMenuOptions {
     ADD_FILE_EXPLORER,
 }
 
-#[derive(Clone, Debug)]
-enum ContentProviderType {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ContentProviderType {
     Playlist,
     Queue,
     YTArtist,

@@ -13,6 +13,7 @@ use crate::{
         ContentProvider,
         ContentProviderContentType,
         ContentProviderMenuOptions,
+        ContentProviderType,
     },
     image_handler::ImageHandler,
     editors::{
@@ -82,7 +83,7 @@ impl Action {
                 let mut loader = ch.get_provider(loader_id).clone();
                 for s in songs {
                     let ci = ch.songs.alloc(s);
-                    loader.content.push(ci.into());
+                    loader.songs.push(ci.into());
                 }
                 for cp in content_providers {
                     let id = if loader_id.is_temp() {
@@ -90,7 +91,7 @@ impl Action {
                     } else {
                         ch.content_providers.alloc(cp).into()
                     };
-                    loader.content.push(id);
+                    loader.providers.push(id);
                 }
                 let old_loader = ch.get_provider_mut(loader_id);
                 *old_loader = loader;        
@@ -111,11 +112,11 @@ impl Action {
     }
 }
 
-pub enum GetNames<'a> {
+pub enum GetNames {
     Names(Vec<String>),
-    IDS(&'a Vec<ID>),
+    IDS(Vec<ID>),
 }
-impl GetNames<'_> {
+impl GetNames {
     fn get_names(self, ch: &ContentHandler) -> Vec<String> {
         match self {
             Self::Names(names) => names,
@@ -193,11 +194,11 @@ impl ContentHandler {
                             ContentProviderContentType::Normal => {
                                 let cp = self.get_provider_mut(id);
                                 cp.selected_index = index;
-                                let content_id = cp.content[index];
+                                let content_id = cp.get(index);
                                 match content_id {
                                     ID::Song(song_id) => {
                                         self.play_song(song_id);
-                                        self.active_queue = Some(id);
+                                        self.set_queue(id);
                                     }
                                     ID::ContentProvider(id) => {
                                         self.content_stack.push(id.into());
@@ -358,7 +359,7 @@ impl ContentHandler {
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
-                        let id = cp.content[index];
+                        let id = cp.get(index);
                         self.content_stack.push(id.into());
                         if !self.open_menu_for_current() {
                             self.content_stack.pop();
@@ -405,6 +406,22 @@ impl ContentHandler {
         &self.logger.entries
     }
 
+    pub fn set_queue(&mut self, id: ContentProviderID) {
+        self.active_queue = Some(id);
+        let mp_id = match self.content_stack[0] {
+            GlobalContent::ID(ID::ContentProvider(id)) => id,
+            _ => panic!(), // 0th content_provider will always be main_provider
+        };
+
+        // TODO: bad code to find queue provider. think of a better soloution
+        let mp = self.get_provider(mp_id);
+        for cp_id in mp.providers.clone() {
+            let cp = self.get_provider_mut(cp_id);
+            if cp.cp_type == ContentProviderType::Queues {
+                cp.add(id.into());
+            }
+        }
+    }
     pub fn play_song(&mut self, id: SongID) {
         let song = self.songs.get(id).unwrap();
         let path = song.path().to_owned();
@@ -426,12 +443,12 @@ impl ContentHandler {
             Some(q) => q,
             None => return,
         };
-        if q.selected_index < q.content.len()-1 {
+        if q.selected_index < q.get_size()-1 {
             q.selected_index += 1;
         } else {
             return
         }        
-        let song_id = q.content[q.selected_index];
+        let song_id = q.get(q.selected_index);
         if let ID::Song(id) = song_id {
             self.play_song(id);
         }
@@ -446,7 +463,7 @@ impl ContentHandler {
         } else {
             return
         }        
-        let song_id = q.content[q.selected_index];
+        let song_id = q.get(q.selected_index);
         if let ID::Song(id) = song_id {
             self.play_song(id);
         }
