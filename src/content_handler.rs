@@ -1,4 +1,8 @@
 
+use log::{
+    debug,
+};
+
 use crate::{
     song::{
         Song,
@@ -40,7 +44,7 @@ pub struct ContentHandler {
     yanker: Yanker,
     edit_manager: EditManager,
     image_handler: ImageHandler,
-    player: Player,
+    pub player: Player,
     notifier: Notifier,
     logger: Logger,
     
@@ -51,9 +55,11 @@ pub struct ContentHandler {
 pub struct Logger {
     entries: Vec<String>,
 }
+
+
 impl Logger {
     fn new() -> Self {
-        Self { entries: vec![] }
+        Self { entries: vec![]}
     }
     pub fn log(&mut self, s: &str) {
         self.entries.push(s.into())
@@ -403,6 +409,7 @@ impl ContentHandler {
         let song = self.songs.get(id).unwrap();
         let path = song.path().to_owned();
         let path = format!("file://{path}"); // TODO: this is temp, the song should provide some kinda general path that can be uri or local path
+        debug!("playing song {path}");
         self.player.stop().unwrap();
         self.player.play(path).unwrap();
         self.active_song = Some(id);
@@ -411,21 +418,10 @@ impl ContentHandler {
         self.player.toggle_pause().unwrap();
     }
     fn get_mut_queue(&mut self) -> Option<&mut ContentProvider> {
-        let queue_id = {
-            if self.active_queue.is_some() {
-                if let ContentProviderID::PersistentContent {id, ..} = self.active_queue.unwrap() {
-                    id
-                } else {
-                    return None
-                }
-            } else {
-                return None
-            }
-        };
-        let q = self.content_providers.get_mut(queue_id).unwrap();
-        Some(q)
+        self.active_queue.map(|id| self.get_provider_mut(id))
     }
     pub fn next_song(&mut self) {
+        debug!("trying to play next");
         let q = match self.get_mut_queue() {
             Some(q) => q,
             None => return,

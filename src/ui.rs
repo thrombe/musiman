@@ -132,7 +132,7 @@ enum RenderState {
 impl PlayerWidget {
     fn new() -> Self {
         Self {
-            render_state: RenderState::Log(vec!["lollll".to_owned()])
+            render_state: RenderState::Log(vec![])
         }
     }
 
@@ -188,10 +188,13 @@ impl PlayerWidget {
     }
 
     fn update(&mut self, ch: &mut ContentHandler) {
+        if ch.player.is_finished() {
+            ch.next_song();
+        }
         match &mut self.render_state {
             RenderState::Log(logs) => {
                 logs.clear();
-                logs.append(&mut ch.get_logs().clone());
+                logs.append(&mut ch.get_logs().clone().into_iter().rev().collect());
             }
             RenderState::Normal => {
 

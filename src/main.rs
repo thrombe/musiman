@@ -45,6 +45,7 @@ use crossterm::{
         LeaveAlternateScreen,
     },
 };
+use fern;
 use anyhow::Result;
 // use tokio;
 
@@ -75,6 +76,8 @@ fn main() -> Result<()> {
     // });
     
     // return Ok(());
+
+    init_logger().expect("failed to init logger");
 
 
     let hook = take_hook();
@@ -127,6 +130,45 @@ where B: Backend + std::io::Write,
         DisableMouseCapture
     )?;
     terminal.show_cursor()?;
+    Ok(())
+}
+
+fn init_logger() -> Result<()> {
+    let mut base_config = fern::Dispatch::new();
+
+    base_config = match 2 {
+        0 => {
+            // Let's say we depend on something which whose "info" level messages are too
+            // verbose to include in end-user output. If we don't need them,
+            // let's not include them.
+            base_config
+                .level(log::LevelFilter::Info)
+                .level_for("overly-verbose-target", log::LevelFilter::Warn)
+        }
+        1 => base_config
+            .level(log::LevelFilter::Debug)
+            .level_for("overly-verbose-target", log::LevelFilter::Info),
+        2 => base_config.level(log::LevelFilter::Debug),
+        _3_or_more => base_config.level(log::LevelFilter::Trace),
+    };
+
+    let _ = std::fs::remove_file("logger/log.log");
+    let file_config = fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}][{}] {}",
+                record.target(),
+                record.level(),
+                message
+            ))
+        })
+        .chain(fern::log_file("logger/log.log")?);
+
+    
+    base_config
+        .chain(file_config)
+        .apply()?;
+
     Ok(())
 }
 
