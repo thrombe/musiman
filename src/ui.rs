@@ -262,6 +262,9 @@ impl App {
     }
     
     fn handle_events(&mut self) -> Result<()> {
+        if !event::poll(std::time::Duration::from_millis(500))? { // read does not block as poll returned true
+            return Ok(())
+        }
         if let Event::Key(key) = event::read()? {
             let handled = match self.state {
                 // AppState::Popup => {},
@@ -278,7 +281,7 @@ impl App {
                 },
             };
             if handled {return Ok(())}
-
+        
             match self.state {
                 AppState::Browser => match key.code {
                     KeyCode::Char('q') => {
@@ -289,7 +292,6 @@ impl App {
                 _ => (),
             }
         }
-
         Ok(())
     }
     
