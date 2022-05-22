@@ -104,6 +104,17 @@ impl ContentProviderID {
         }
     }
 
+    pub fn set_content_type(&mut self, new_t: ContentProviderContentType) {
+        match self {
+            Self::PersistentContent {t, ..} => {
+                *t = new_t;
+            }
+            Self::TemporaryContent {t, ..} => {
+                *t = new_t;
+            }
+        }
+    }    
+
     pub fn is_temp(&self) -> bool {
         match self {
             Self::TemporaryContent {..} => true,

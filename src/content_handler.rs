@@ -72,8 +72,22 @@ pub enum Action {
         content_providers: Vec<ContentProvider>,
         loader_id: ContentProviderID,
     },
-    ReplaceContentProvider {old_id: ContentProviderID, cp: ContentProvider},
-    AddCPToCP {id: ContentProviderID, cp: ContentProvider},
+    ReplaceContentProvider {
+        old_id: ContentProviderID,
+        cp: ContentProvider,
+    },
+    AddCPToCP {
+        id: ContentProviderID,
+        cp: ContentProvider,
+        new_cp_content_type: ContentProviderContentType,
+    },
+    PushToContentStack {
+        id: ContentProviderID,
+    },
+    EnableTyping {
+        id: ContentProviderID,
+    },
+    PopContentStack,
 }
 impl Action {
     fn apply(self, ch: &mut ContentHandler) {
@@ -98,14 +112,24 @@ impl Action {
             Self::ReplaceContentProvider {..} => {
                 todo!()
             }
-            Self::AddCPToCP {id, cp} => {
-                let loaded_id = if id.is_temp() {
+            Self::AddCPToCP {id, cp, new_cp_content_type} => {
+                let mut loaded_id: ContentProviderID = if id.is_temp() {
                     ch.temp_content_providers.alloc(cp).into()
                 } else {
                     ch.content_providers.alloc(cp).into()
                 };
+                loaded_id.set_content_type(new_cp_content_type);
                 let loader = ch.get_provider_mut(id);
-                loader.add(loaded_id);
+                loader.add(loaded_id.into());
+            }
+            Self::PushToContentStack { id } => {
+                ch.content_stack.push(id.into());
+            }
+            Self::EnableTyping { id: _ } => {
+                todo!()
+            }
+            Self::PopContentStack => {
+                ch.back();
             }
         }
     }
@@ -212,6 +236,9 @@ impl ContentHandler {
                                 self.apply_option(index);
                                 self.back();
                             }
+                            ContentProviderContentType::Edit(..) => { 
+                                self.edit_content_at(index);
+                            }
                         }
                     }
                 }
@@ -287,7 +314,8 @@ impl ContentHandler {
                     ID::Song(id) => {
                         let s = self.get_song_mut(id);
                         let opts = s.get_menu_options();
-                        let opt = opts[index]; // TODO: track with edit manager + logs
+                        let opt = opts[index]; // TODO: track with edit manager
+                        debug!("choosing option {opt:#?}");
                         let action = s.apply_option(opt);
                         if let Some(action) = action {
                             action.apply(self);
@@ -297,6 +325,7 @@ impl ContentHandler {
                         let cp = self.get_provider_mut(id);
                         let opts = cp.get_menu_options();
                         let opt = opts[index];
+                        debug!("choosing option {opt:#?}");
                         let action = cp.apply_option(opt, id);
                         if let Some(action) = action {
                             action.apply(self);
@@ -304,11 +333,28 @@ impl ContentHandler {
                     }
                 }
             }
-            GlobalContent::Log | GlobalContent::Notifier => {
-                panic!("should never happen");
-            }
+            _ => todo!(),
         }
         self.back();
+    }
+
+    pub fn edit_content_at(&mut self, index: usize) {
+        let &id = self.content_stack.last().unwrap();
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::ContentProvider(id) => {
+                        let cp = self.get_provider_mut(id);
+                        let action = cp.choose_editable(index, id, id.get_content_type().edit());
+                        if let Some(action) = action {
+                            action.apply(self);
+                        }   
+                    }
+                    _ => todo!(),
+                }
+            }
+            _ => todo!(),
+        }
     }
 
     pub fn open_menu_for_current(&mut self) -> bool {
