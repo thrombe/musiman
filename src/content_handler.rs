@@ -84,10 +84,17 @@ pub enum Action {
     PushToContentStack {
         id: ContentProviderID,
     },
-    EnableTyping {
-        id: ContentProviderID,
-    },
+    EnableTyping,
     PopContentStack,
+    Actions(Vec<Self>),
+    SetSelectedIndex {
+        index: usize,
+    },
+}
+impl Into<Action> for Vec<Action> {
+    fn into(self) -> Action {
+        Action::Actions(self)
+    }
 }
 impl Action {
     fn apply(self, ch: &mut ContentHandler) {
@@ -125,11 +132,19 @@ impl Action {
             Self::PushToContentStack { id } => {
                 ch.content_stack.push(id.into());
             }
-            Self::EnableTyping { id: _ } => {
+            Self::EnableTyping => {
                 todo!()
             }
             Self::PopContentStack => {
                 ch.back();
+            }
+            Self::SetSelectedIndex { index: _ } => {
+                todo!()
+            }
+            Self::Actions(actions) => {
+                for action in actions {
+                    action.apply(ch);
+                }
             }
         }
     }

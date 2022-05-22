@@ -39,7 +39,7 @@ pub struct ContentProvider {
 pub enum ContentProviderContentType {
     Menu,
     Normal,
-    Edit(Option<ContentProviderEditables>),
+    Edit(ContentProviderEditables),
 }
 impl Default for ContentProviderContentType {
     fn default() -> Self {
@@ -48,7 +48,7 @@ impl Default for ContentProviderContentType {
 }
 impl ContentProviderContentType {
     /// panic if not edit
-    pub fn edit(self) -> Option<ContentProviderEditables> {
+    pub fn edit(self) -> ContentProviderEditables {
         match self {
             ContentProviderContentType::Edit(e) => {
                 e
@@ -62,28 +62,34 @@ impl ContentProvider {
     pub fn get_content_names(&self, t: ContentProviderContentType) -> GetNames {
         match t {
             ContentProviderContentType::Menu => {
-                GetNames::Names( // TODO: maybe GetNames should have different types like GetNames::MenuOptions and stuff. else there is code repetition
-                    self.get_menu_options()
-                    .into_iter()
-                    .map(|o| {
-                        o.to_string()
-                        .replace("_", " ")
-                        .to_lowercase()
-                    })
-                    .collect()
-                )
+                match self.cp_type {
+                    _ => {
+                        GetNames::Names( // TODO: maybe GetNames should have different types like GetNames::MenuOptions and stuff. else there is code repetition
+                            self.get_menu_options()
+                            .into_iter()
+                            .map(|o| {
+                                o.to_string()
+                                .replace("_", " ")
+                                .to_lowercase()
+                            })
+                            .collect()
+                        )
+                    }
+                }
             }
             ContentProviderContentType::Normal => {
-                GetNames::IDS(
-                    match self.cp_type {
-                        ContentProviderType::Queues => {
+                match self.cp_type {
+                    ContentProviderType::Queues => {
+                        GetNames::IDS(
                             self.providers
                             .iter().cloned()
                             .map(Into::into)
                             .rev()
                             .collect()
-                        }
-                        _ => {
+                        )
+                    }
+                    _ => {
+                        GetNames::IDS(
                             self.providers
                             .iter().cloned()
                             .map(Into::into)
@@ -93,31 +99,70 @@ impl ContentProvider {
                                 .map(Into::into)
                             )
                             .collect()
-                        }
+                        )
                     }
-                )
+                }
             }
             ContentProviderContentType::Edit(i) => {
                 match &self.cp_type {
                     ContentProviderType::YTExplorer { search_type, search_term } => {
-                        if i.is_none() {
-                            GetNames::Names(
-                                vec![
-                                    ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TYPE).to_string() + &format!(": {search_type:#?}"),
-                                    ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TERM).to_string() + ": " + search_term,
-                                ]
-                            )
-                        } else {
-                            GetNames::Names(
-                                self.get_editables(i)
-                                .into_iter()
-                                .map(|o| {
-                                    o.to_string()
-                                    .replace("_", " ")
-                                    .to_lowercase()
-                                })
-                                .collect()
-                            )    
+                        match i {
+                            ContentProviderEditables::None => {
+                                GetNames::Names(
+                                    vec![
+                                        ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TYPE)
+                                        .to_string()
+                                        .replace("_", " ")
+                                        .to_lowercase()
+                                        + &format!(": {search_type:#?}"),
+                                        ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TERM)
+                                        .to_string()
+                                        .replace("_", " ")
+                                        .to_lowercase()
+                                        + ": " + search_term,
+                                    ]
+                                )
+                            }
+                            ContentProviderEditables::YTExplorer(e) => {
+                                match e {
+                                    YTExplorerEditables::SEARCH_TERM => {
+                                        GetNames::Names(
+                                            vec![
+                                                ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TYPE)
+                                                .to_string()
+                                                .replace("_", " ")
+                                                .to_lowercase()
+                                                + &format!(": {search_type:#?}"),
+                                                search_term.into(),
+                                            ]
+                                        )
+                                    }
+                                    YTExplorerEditables::SEARCH_TYPE => {
+                                        GetNames::Names(
+                                            self.get_editables(i)
+                                            .into_iter()
+                                            .map(|o| {
+                                                o.to_string()
+                                                .replace("_", " ")
+                                                .to_lowercase()
+                                            })
+                                            .collect()
+                                        )
+                                    }
+                                }
+                            }
+                            _ => { // BAD: i can be not related to YTExplorer and no compile errors
+                                GetNames::Names(
+                                    self.get_editables(i)
+                                    .into_iter()
+                                    .map(|o| {
+                                        o.to_string()
+                                        .replace("_", " ")
+                                        .to_lowercase()
+                                    })
+                                    .collect()
+                                )    
+                            }
                         }
                     }
                     _ => {
@@ -176,7 +221,7 @@ impl ContentProvider {
                         Action::AddCPToCP {
                             id: self_id,
                             cp: Self::new_yt_explorer(),
-                            new_cp_content_type: ContentProviderContentType::Edit(None),
+                            new_cp_content_type: ContentProviderContentType::Edit(ContentProviderEditables::None),
                         }
                     }
                     _ => todo!()
@@ -186,61 +231,40 @@ impl ContentProvider {
         Some(action)
     }
 
-    pub fn choose_editable(&mut self, index: usize, self_id: ContentProviderID, e: Option<ContentProviderEditables>) -> Option<Action> {
+    pub fn choose_editable(&mut self, index: usize, self_id: ContentProviderID, e: ContentProviderEditables) -> Option<Action> {
         dbg!(e);
-        let action = if e.is_none() {
-            let editables = self.get_editables(None);
-            match editables[index] {
-                ContentProviderEditables::YTExplorer(e) => {
-                    match e {
-                        YTExplorerEditables::SEARCH_TYPE => {
-                            let mut id = self_id;
-                            id.set_content_type(ContentProviderContentType::Edit(Some(e.into())));
-                            Action::PushToContentStack {
-                                id,
-                            }
-                        }
-                        YTExplorerEditables::SEARCH_TERM => {
-                            let mut id = self_id;
-                            id.set_content_type(ContentProviderContentType::Edit(Some(e.into())));
-                            Action::EnableTyping {
-                                id,
-                            }
-                        }
+        let editables = self.get_editables(e);
+        let action = match editables[index] {
+            ContentProviderEditables::None => {
+                panic!("nothing to choose")
+            }
+            ContentProviderEditables::YTExplorer(e) => {
+                let mut id = self_id;
+                id.set_content_type(ContentProviderContentType::Edit(e.into()));
+                match e {
+                    YTExplorerEditables::SEARCH_TYPE => {
+                        Action::PushToContentStack { id }
                     }
-                }
-                ContentProviderEditables::YTSearchType(e) => {
-                    match e {
-                        YTSearchType::Album => {
-                            Action::PopContentStack
-                        }
-                        _ => todo!(),
+                    YTExplorerEditables::SEARCH_TERM => {
+                        vec![
+                            Action::PushToContentStack { id },
+                            Action::SetSelectedIndex { index },
+                            Action::EnableTyping,
+                        ].into()
                     }
                 }
             }
-        } else {
-            let editables = self.get_editables(e);
-            match e.unwrap() {
-                ContentProviderEditables::YTExplorer(e) => {
-                    match e {
-                        YTExplorerEditables::SEARCH_TYPE => {
-                            if let ContentProviderType::YTExplorer { search_type, .. } = &mut self.cp_type {
-                                if let ContentProviderEditables::YTSearchType(e) = editables[index] {
-                                    *search_type = e;
-                                    Action::PopContentStack
-                                } else {
-                                    panic!("bad path");
-                                }
-                            } else {
-                                panic!("bad path");
-                            }
-                        }
-                        YTExplorerEditables::SEARCH_TERM => panic!("bad e"),
+            ContentProviderEditables::YTSearchType(e) => {
+                match &mut self.cp_type {
+                    ContentProviderType::YTExplorer { search_type, .. } => {
+                        *search_type = e;
+                        Action::PopContentStack
                     }
+                    _ => panic!("bad path"),
                 }
-                ContentProviderEditables::YTSearchType(_) => panic!("how did this get here?"),
             }
         };
+        
         Some(action)
     }
 
@@ -342,42 +366,38 @@ impl ContentProvider {
         }
     }
 
-    pub fn get_editables(&self, e: Option<ContentProviderEditables>) -> Vec<ContentProviderEditables> {
+    pub fn get_editables(&self, e: ContentProviderEditables) -> Vec<ContentProviderEditables> {
         dbg!(e);
         match e {
-            Some(e) => {
-                match e {
-                    ContentProviderEditables::YTExplorer(e) => {
-                        match e {
-                            YTExplorerEditables::SEARCH_TYPE => {
-                                return [
-                                    YTSearchType::Album,
-                                    YTSearchType::Song,
-                                    YTSearchType::Playlist,
-                                    YTSearchType::Video,
-                                ].into_iter()
-                                .map(ContentProviderEditables::YTSearchType) // TODO: replace this bad stuff with Into
-                                .collect()
-                            }
-                            YTExplorerEditables::SEARCH_TERM => (),
-                        }
+            ContentProviderEditables::None => {
+                match self.cp_type {
+                    ContentProviderType::YTExplorer{..} => {
+                        [
+                            YTExplorerEditables::SEARCH_TYPE,
+                            YTExplorerEditables::SEARCH_TERM,
+                        ].into_iter()
+                        .map(Into::into)
+                        .collect()
                     }
-                    _ => panic!("invalid Editable type for YTExplorer")
+                    _ => todo!()
+                }                        
+            }
+            ContentProviderEditables::YTExplorer(e) => { // BAD: if self.cp_type is not related to yt_explorer, no errors. this should not compile
+                match e {
+                    YTExplorerEditables::SEARCH_TYPE => {
+                        return [
+                            YTSearchType::Album,
+                            YTSearchType::Song,
+                            YTSearchType::Playlist,
+                            YTSearchType::Video,
+                        ].into_iter()
+                        .map(Into::into)
+                        .collect()
+                    }
+                    YTExplorerEditables::SEARCH_TERM => panic!("should never happen"),
                 }
             }
-            None => (),
-        }
-
-        match self.cp_type {
-            ContentProviderType::YTExplorer{..} => {
-                [
-                    YTExplorerEditables::SEARCH_TYPE,
-                    YTExplorerEditables::SEARCH_TERM,
-                ].into_iter()
-                .map(ContentProviderEditables::YTExplorer)
-                .collect()
-            }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -389,7 +409,6 @@ impl ContentProvider {
     // pub fn swap(&mut self, a: usize, b:  usize) {
     //     self.content.swap(a, b)
     // }
-    // TODO: reimpliment these for all of the diff types of content providers
     pub fn add(&mut self, id: ID) {
         match id {
             ID::Song(id) => {
@@ -455,6 +474,7 @@ pub enum MainContentProviderMenuOptions {
 pub enum ContentProviderEditables {
     YTExplorer(YTExplorerEditables),
     YTSearchType(YTSearchType),
+    None,
 }
 impl ToString for ContentProviderEditables {
     fn to_string(&self) -> String {
@@ -464,6 +484,9 @@ impl ToString for ContentProviderEditables {
             }
             Self::YTSearchType(o) => {
                 format!("{o:#?}")
+            }
+            Self::None => {
+                "none".into()
             }
         }        
     }
@@ -487,6 +510,11 @@ pub enum YTSearchType {
     Song,
     Video,
     Playlist,
+}
+impl Into<ContentProviderEditables> for YTSearchType {
+    fn into(self) -> ContentProviderEditables {
+        ContentProviderEditables::YTSearchType(self)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
