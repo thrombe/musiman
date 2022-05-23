@@ -196,8 +196,8 @@ impl ContentProvider {
         }
     }
 
-    pub fn apply_option(&mut self, opt: ContentProviderMenuOptions, self_id: ContentProviderID) -> Option<Action> {
-        let action = match opt {
+    pub fn apply_option(&mut self, opt: ContentProviderMenuOptions, self_id: ContentProviderID) -> Action {
+        match opt {
             ContentProviderMenuOptions::Main(o) => {
                 match o {
                     MainContentProviderMenuOptions::ADD_FILE_EXPLORER => {
@@ -227,14 +227,13 @@ impl ContentProvider {
                     _ => todo!()
                 }
             }
-        };
-        Some(action)
+        }
     }
 
-    pub fn choose_editable(&mut self, index: usize, self_id: ContentProviderID, e: ContentProviderEditables) -> Option<Action> {
+    pub fn choose_editable(&mut self, index: usize, self_id: ContentProviderID, e: ContentProviderEditables) -> Action {
         dbg!(e);
         let editables = self.get_editables(e);
-        let action = match editables[index] {
+        match editables[index] {
             ContentProviderEditables::None => {
                 panic!("nothing to choose")
             }
@@ -263,9 +262,7 @@ impl ContentProvider {
                     _ => panic!("bad path"),
                 }
             }
-        };
-        
-        Some(action)
+        }
     }
 
     pub fn new_main_provider() -> Self {
@@ -316,8 +313,8 @@ impl ContentProvider {
     }
 
     /// can load from various sources like yt/local storage while being able to add stuff to s/sp/spp
-    pub fn load(&mut self, id: ContentProviderID) -> Option<Action> {
-        if self.loaded {return None}
+    pub fn load(&mut self, id: ContentProviderID) -> Action {
+        if self.loaded {return Action::None}
         self.loaded = true;
         match &mut self.cp_type {
             ContentProviderType::FileExplorer {path} => {
@@ -343,7 +340,7 @@ impl ContentProvider {
                     }
                 });
 
-                Some(Action::LoadContentManager {songs: s, content_providers: sp, loader_id: id})
+                Action::LoadContentManager {songs: s, content_providers: sp, loader_id: id}
             }
             _ => panic!()
         }

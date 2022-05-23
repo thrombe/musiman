@@ -107,7 +107,7 @@ impl Song {
         vec![]
     }
     
-    pub fn apply_option(&mut self, opt: SongMenuOptions) -> Option<Action> {
+    pub fn apply_option(&mut self, opt: SongMenuOptions) -> Action {
         match opt {
 
         }

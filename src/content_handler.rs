@@ -90,6 +90,7 @@ pub enum Action {
     SetSelectedIndex {
         index: usize,
     },
+    None,
 }
 impl Into<Action> for Vec<Action> {
     fn into(self) -> Action {
@@ -146,6 +147,7 @@ impl Action {
                     action.apply(ch);
                 }
             }
+            Self::None => (),
         }
     }
 }
@@ -241,9 +243,7 @@ impl ContentHandler {
                                     ID::ContentProvider(id) => {
                                         self.content_stack.push(id.into());
                                         let action = self.get_provider_mut(id).load(id);
-                                        if let Some(action) = action {
-                                            action.apply(self)
-                                        }
+                                        action.apply(self)
                                     }
                                 }
                             }
@@ -251,8 +251,10 @@ impl ContentHandler {
                                 self.apply_option(index);
                                 self.back();
                             }
-                            ContentProviderContentType::Edit(..) => { 
-                                self.edit_content_at(index);
+                            ContentProviderContentType::Edit(e) => { 
+                                let cp = self.get_provider_mut(id);
+                                let action = cp.choose_editable(index, id, e);
+                                action.apply(self);
                             }
                         }
                     }
@@ -332,9 +334,7 @@ impl ContentHandler {
                         let opt = opts[index]; // TODO: track with edit manager
                         debug!("choosing option {opt:#?}");
                         let action = s.apply_option(opt);
-                        if let Some(action) = action {
-                            action.apply(self);
-                        }
+                        action.apply(self);
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider_mut(id);
@@ -342,34 +342,13 @@ impl ContentHandler {
                         let opt = opts[index];
                         debug!("choosing option {opt:#?}");
                         let action = cp.apply_option(opt, id);
-                        if let Some(action) = action {
-                            action.apply(self);
-                        }
+                        action.apply(self);
                     }
                 }
             }
             _ => todo!(),
         }
         self.back();
-    }
-
-    pub fn edit_content_at(&mut self, index: usize) {
-        let &id = self.content_stack.last().unwrap();
-        match id {
-            GlobalContent::ID(id) => {
-                match id {
-                    ID::ContentProvider(id) => {
-                        let cp = self.get_provider_mut(id);
-                        let action = cp.choose_editable(index, id, id.get_content_type().edit());
-                        if let Some(action) = action {
-                            action.apply(self);
-                        }   
-                    }
-                    _ => todo!(),
-                }
-            }
-            _ => todo!(),
-        }
     }
 
     pub fn open_menu_for_current(&mut self) -> bool {

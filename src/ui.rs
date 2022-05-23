@@ -1,18 +1,42 @@
 
 
-
-use std::vec;
-
 use tui::{
-    backend::{Backend},
-    widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
-    layout::{Layout, Constraint, Direction, Alignment, Rect},
-    Terminal, Frame,
-    style::{Color, Style, Modifier},
-    text::{Span, Spans, Text},
+    backend::Backend,
+    widgets::{
+        Block,
+        Borders,
+        List,
+        ListItem,
+        Paragraph,
+        ListState,
+    },
+    layout::{
+        Layout,
+        Constraint,
+        Direction,
+        Alignment,
+        Rect,
+    },
+    Terminal,
+    Frame,
+    style::{
+        Color,
+        Style,
+        Modifier,
+    },
+    text::{
+        Span,
+        Spans,
+        Text,
+    },
 };
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
+    event::{
+        self,
+        Event,
+        KeyCode,
+        KeyEvent,
+    },
 };
 // use unicode_width::UnicodeWidthStr; // string.width() -> gives correct width (including cjk chars) (i assume)
 use anyhow::Result;
@@ -57,9 +81,6 @@ struct BrowserWidget {
 
 impl BrowserWidget {
     fn new() -> Self {
-        // Self {
-        //     options: vec![],
-        // }
         Self::default()
     }
 
@@ -132,7 +153,7 @@ enum RenderState {
 impl PlayerWidget {
     fn new() -> Self {
         Self {
-            render_state: RenderState::Log(vec![])
+            render_state: RenderState::Normal
         }
     }
 
