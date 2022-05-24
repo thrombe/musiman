@@ -107,9 +107,6 @@ impl AppAction {
             Self::None => (),
             Self::EnableTyping {} => {
                 app.state = AppState::Typing;
-                // dbg!(app.browser_widget.selected_index);
-                // app.browser_widget.update(&mut app.content_handler);
-                // dbg!(app.browser_widget.selected_index);
             }
         }
     }
@@ -117,8 +114,14 @@ impl AppAction {
 
 /// wrapping ListState to make sure not to call select(None) and to eliminate the use of unwrap() on selected_index()
 /// currently, theres no way to access/suggest the offset
+#[derive(Debug, Clone)]
 pub struct SelectedIndex {
     index: ListState,
+}
+impl Default for SelectedIndex {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl Into<ListState> for SelectedIndex {
     fn into(self) -> ListState {
@@ -126,17 +129,17 @@ impl Into<ListState> for SelectedIndex {
     }
 }
 impl SelectedIndex {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut state = ListState::default();
         state.select(Some(0));
         Self { index: state }
     }
 
-    fn selected_index(&self) -> usize {
+    pub fn selected_index(&self) -> usize {
         self.index.selected().unwrap()
     }
 
-    fn select(&mut self, index: usize) {
+    pub fn select(&mut self, index: usize) {
         self.index.select(Some(index));
     }
 }
@@ -144,7 +147,6 @@ impl SelectedIndex {
 #[derive(Default)]
 struct BrowserWidget {
     options: Vec<String>,
-    selected_index: usize,
 }
 
 impl BrowserWidget {
@@ -162,13 +164,13 @@ impl BrowserWidget {
                 self.update(ch);
             }
             KeyCode::Up => {
-                if self.selected_index > 0 {self.selected_index -= 1};
+                ch.decrement_selection();
             }
             KeyCode::Down => {
-                if self.selected_index < self.options.len()-1 {self.selected_index += 1};
+                ch.increment_selection();
             }
             KeyCode::Right => {
-                ch.enter(self.selected_index);
+                ch.enter_selected();
                 self.update(ch);
             }
             KeyCode::Left => {
@@ -182,10 +184,9 @@ impl BrowserWidget {
 
     fn update(&mut self, ch: &mut ContentHandler) {
         self.options = ch.get_content_names();
-        self.selected_index = ch.get_selected_index();
     }
 
-    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {
+    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, selected_index: SelectedIndex) {
         let messages = List::new(
                 self.options.iter()
                 .enumerate()
@@ -199,9 +200,7 @@ impl BrowserWidget {
         .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Rgb(200, 100, 0)))
         // .highlight_symbol("> ")
         ;
-        let mut list_state = ListState::default();
-        list_state.select(Some(self.selected_index));
-        f.render_stateful_widget(messages, r, &mut list_state);
+        f.render_stateful_widget(messages, r, &mut selected_index.into());
     }
 }
 
@@ -472,6 +471,6 @@ impl App {
 
         self.status_bar.render(f, status_rect);
         self.player_widget.render(f, right_rect);
-        self.browser_widget.render(f, left_rect);
+        self.browser_widget.render(f, left_rect, self.content_handler.get_selected_index());
     }
 }

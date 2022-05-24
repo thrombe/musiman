@@ -30,7 +30,10 @@ use crate::{
         TemporaryContentID,
         ID,
     },
-    ui::AppAction,
+    ui::{
+        AppAction,
+        SelectedIndex,
+    },
 };
 use musiplayer::Player;
 
@@ -213,7 +216,7 @@ impl ContentHandler {
         Self::new()
     }
 
-    pub fn enter(&mut self, index: usize) {
+    pub fn enter_selected(&mut self) {
         let &id = self.content_stack.last().unwrap();
         match id {
             GlobalContent::ID(id) => {
@@ -221,7 +224,7 @@ impl ContentHandler {
                     ID::Song(id) => {
                         match id.t {
                             SongContentType::Menu => {
-                                self.apply_option(index);
+                                self.apply_selected_option();
                                 self.back();
                             }
                             SongContentType::Edit => {
@@ -237,8 +240,7 @@ impl ContentHandler {
                         match t {
                             ContentProviderContentType::Normal => {
                                 let cp = self.get_provider_mut(id);
-                                cp.selected_index = index;
-                                let content_id = cp.get(index);
+                                let content_id = cp.get_selected();
                                 match content_id {
                                     ID::Song(song_id) => {
                                         self.play_song(song_id);
@@ -252,13 +254,12 @@ impl ContentHandler {
                                 }
                             }
                             ContentProviderContentType::Menu => {
-                                self.apply_option(index);
+                                self.apply_selected_option();
                                 self.back();
                             }
                             ContentProviderContentType::Edit(e) => { 
                                 let cp = self.get_provider_mut(id);
-                                cp.selected_index = index;
-                                let action = cp.choose_editable(index, id, e);
+                                let action = cp.choose_selected_editable(id, e);
                                 action.apply(self);
                             }
                         }
@@ -308,45 +309,43 @@ impl ContentHandler {
         }
     }
 
-    pub fn get_selected_index(&self) -> usize {
+    pub fn get_selected_index(&self) -> SelectedIndex {
         let &id = self.content_stack.last().unwrap();
         match id {
             GlobalContent::ID(id) => {
                 match id {
                     ID::Song(..) => {
-                        0 // no need to save index for options
+                        Default::default() // no need to save index for options
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
-                        cp.selected_index
+                        let t = id.get_content_type();
+                        cp.get_selected_index(t)
                     }
                 }
             }
             GlobalContent::Log | GlobalContent::Notifier => {
-                0 // no need to save index
+                Default::default() // no need to save index
             }
         }
     }
 
-    pub fn apply_option(&mut self, index: usize) {
+    pub fn apply_selected_option(&mut self) {
         let &id = self.content_stack.last().unwrap();
         match id {
             GlobalContent::ID(id) => {
                 match id {
                     ID::Song(id) => {
                         let s = self.get_song_mut(id);
-                        let opts = s.get_menu_options();
-                        let opt = opts[index]; // TODO: track with edit manager
-                        debug!("choosing option {opt:#?}");
-                        let action = s.apply_option(opt);
-                        action.apply(self);
+                        let _opts = s.get_menu_options();
+                        // let opt = opts[index]; // TODO: track with edit manager
+                        // let action = s.apply_option(opt);
+                        // action.apply(self);
+                        todo!()
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider_mut(id);
-                        let opts = cp.get_menu_options();
-                        let opt = opts[index];
-                        debug!("choosing option {opt:#?}");
-                        let action = cp.apply_option(opt, id);
+                        let action = cp.apply_selected_option(id);
                         action.apply(self);
                     }
                 }
@@ -392,7 +391,7 @@ impl ContentHandler {
         true
     }
     
-    pub fn open_menu_for_selected(&mut self, index: usize) {
+    pub fn open_menu_for_selected(&mut self) {
         let &id = self.content_stack.last().unwrap();
         match id {
             GlobalContent::ID(id) => {
@@ -403,7 +402,7 @@ impl ContentHandler {
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
-                        let id = cp.get(index);
+                        let id = cp.get_selected();
                         self.content_stack.push(id.into());
                         if !self.open_menu_for_current() {
                             self.content_stack.pop();
@@ -482,31 +481,30 @@ impl ContentHandler {
     }
     pub fn next_song(&mut self) {
         debug!("trying to play next");
-        let q = match self.get_mut_queue() {
-            Some(q) => q,
+        let id = match self.active_queue {
+            Some(id) => id,
             None => return,
         };
-        if q.selected_index < q.get_size()-1 {
-            q.selected_index += 1;
-        } else {
+        if !self.increment_selection_on(id.into()) {
             return
         }        
-        let song_id = q.get(q.selected_index);
+        let q = self.get_mut_queue().unwrap(); //can't fail as id exists
+        let song_id = q.get_selected();
         if let ID::Song(id) = song_id {
             self.play_song(id);
         }
     }
     pub fn prev_song(&mut self) {
-        let q = match self.get_mut_queue() {
-            Some(q) => q,
+        debug!("trying to play previous");
+        let id = match self.active_queue {
+            Some(id) => id,
             None => return,
         };
-        if q.selected_index > 0 {
-            q.selected_index -= 1;
-        } else {
+        if !self.increment_selection_on(id.into()) {
             return
         }        
-        let song_id = q.get(q.selected_index);
+        let q = self.get_mut_queue().unwrap(); //can't fail as id exists      
+        let song_id = q.get_selected();
         if let ID::Song(id) = song_id {
             self.play_song(id);
         }
@@ -517,6 +515,48 @@ impl ContentHandler {
 
     pub fn get_app_action(&mut self) -> AppAction {
         std::mem::replace(&mut self.app_action, Default::default())
+    }
+
+    pub fn increment_selection(&mut self) {
+        self.increment_selection_on(*self.content_stack.last().unwrap());
+    }
+    pub fn decrement_selection(&mut self) {
+        self.decrement_selection_on(*self.content_stack.last().unwrap());
+    }
+
+    fn increment_selection_on(&mut self, id: GlobalContent) -> bool {
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::ContentProvider(id) => {
+                        let cp = self.get_provider_mut(id);
+                        let t = id.get_content_type();
+                        cp.selection_increment(t)
+                    }
+                    ID::Song(..) => {
+                        todo!()
+                    }
+                }        
+            }
+            _ => todo!()
+        }
+    }
+    fn decrement_selection_on(&mut self, id: GlobalContent) -> bool {
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::ContentProvider(id) => {
+                        let cp = self.get_provider_mut(id);
+                        let t = id.get_content_type();
+                        cp.selection_decrement(t)
+                    }
+                    ID::Song(..) => {
+                        todo!()
+                    }
+                }        
+            }
+            _ => todo!()
+        }
     }
 }
 

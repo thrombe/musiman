@@ -5,11 +5,15 @@ use crate::{
     debug,
 };
 
-use std::fmt::{
-    Debug,
+use std::{
+    collections::HashMap,
+    fmt::{
+        Debug,
+    },
 };
 
 use crate::{
+    ui::SelectedIndex,
     song::{
         Song,
     },
@@ -31,15 +35,20 @@ pub struct ContentProvider {
     pub songs: Vec<SongID>,
     name: String,
     pub cp_type: ContentProviderType,
-    pub selected_index: usize,
+    selected: HashMap<ContentProviderContentType, SelectedIndex>,
     loaded: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ContentProviderContentType {
     Menu,
     Normal,
     Edit(ContentProviderEditables),
+}
+impl From<ContentProviderEditables> for ContentProviderContentType {
+    fn from(e: ContentProviderEditables) -> Self {
+        Self::Edit(e)
+    }
 }
 impl Default for ContentProviderContentType {
     fn default() -> Self {
@@ -185,7 +194,11 @@ impl ContentProvider {
         }
     }
 
-    pub fn apply_option(&mut self, opt: ContentProviderMenuOptions, self_id: ContentProviderID) -> ContentHandlerAction {
+    pub fn apply_selected_option(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
+        let t = self_id.get_content_type();
+        let index = self.get_raw_selected_index(t);
+        let opts = self.get_menu_options();
+        let opt = opts[index];
         match opt {
             ContentProviderMenuOptions::Main(o) => {
                 match o {
@@ -219,8 +232,9 @@ impl ContentProvider {
         }
     }
 
-    pub fn choose_editable(&mut self, index: usize, self_id: ContentProviderID, e: ContentProviderEditables) -> ContentHandlerAction {
+    pub fn choose_selected_editable(&mut self, self_id: ContentProviderID, e: ContentProviderEditables) -> ContentHandlerAction {
         dbg!(e);
+        let index = self.get_raw_selected_index(e.into());
         let editables = self.get_editables(e);
         match editables[index] {
             ContentProviderEditables::None => {
@@ -234,6 +248,7 @@ impl ContentProvider {
                         ContentHandlerAction::PushToContentStack { id }
                     }
                     YTExplorerEditables::SEARCH_TERM => {
+                        self.set_selected_index(id.get_content_type(), index);
                         vec![
                             ContentHandlerAction::PushToContentStack { id }, // TODO: check if i called back() after coming out of typing mode
                             // ContentHandlerAction::SetSelectedIndex { index },
@@ -260,7 +275,7 @@ impl ContentProvider {
             songs: vec![],
             name: "Main Provider".to_owned(),
             cp_type: ContentProviderType::MainProvider,
-            selected_index: 0,
+            selected: Default::default(),
             loaded: true
         }
     }
@@ -271,7 +286,7 @@ impl ContentProvider {
             songs: vec![],
             name: pre_name + path.rsplit_terminator("/").next().unwrap(),
             cp_type: ContentProviderType::FileExplorer {path},
-            selected_index: 0,
+            selected: Default::default(),
             loaded: false,
         }
     }
@@ -281,7 +296,7 @@ impl ContentProvider {
             providers: vec![],
             songs: vec![],
             name: "Queues".into(),
-            selected_index: 0,
+            selected: Default::default(),
             loaded: true,
             cp_type: ContentProviderType::Queues,
         }
@@ -296,7 +311,7 @@ impl ContentProvider {
                 search_term: "".into(),
                 search_type: YTSearchType::Album,
             },
-            selected_index: 0,
+            selected: Default::default(),
             loaded: true,
         }
     }
@@ -387,6 +402,45 @@ impl ContentProvider {
         }
     }
 
+    pub fn get_selected_index(&self, t: ContentProviderContentType) -> SelectedIndex {
+        if self.selected.contains_key(&t) {
+            self.selected.get(&t).unwrap().clone()
+        } else {
+            SelectedIndex::new()
+        }
+    }
+
+    pub fn selection_increment(&mut self, t: ContentProviderContentType) -> bool {
+        let i = self.get_raw_selected_index(t);
+        if i < self.get_size(t)-1 {
+            self.set_selected_index(t, i+1);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn selection_decrement(&mut self, t: ContentProviderContentType) -> bool {
+        let i = self.get_raw_selected_index(t);
+        if i > 0 {
+            self.set_selected_index(t, i-1);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// ensure that index is within limits
+    fn set_selected_index(&mut self, t: ContentProviderContentType, index: usize) {
+        let mut i = self.get_selected_index(t);
+        i.select(index);
+        self.selected.insert(t, i);    
+    }
+
+    fn get_raw_selected_index(&self, t: ContentProviderContentType) -> usize {
+        self.get_selected_index(t).selected_index()
+    }
+
     pub fn get_name(&self) -> &str {
         &self.name
     }
@@ -406,7 +460,8 @@ impl ContentProvider {
         }
     }
     /// panics if out of bounds
-    pub fn get(&self, index: usize) -> ID {
+    pub fn get_selected(&self) -> ID {
+        let index = self.get_raw_selected_index(ContentProviderContentType::Normal);
         let providers = self.providers.len();
         let songs = self.songs.len();
         if index < providers {
@@ -417,8 +472,18 @@ impl ContentProvider {
             panic!()
         }
     }
-    pub fn get_size(&self) -> usize {
-        self.providers.len() + self.songs.len()
+    pub fn get_size(&self, t: ContentProviderContentType) -> usize {
+        match t {
+            ContentProviderContentType::Normal => {
+                self.providers.len() + self.songs.len()
+            }
+            ContentProviderContentType::Menu => {
+                self.get_menu_options().len()
+            }
+            ContentProviderContentType::Edit(e) => {
+                self.get_editables(e).len()
+            }
+        }
     }
     // /// panics if out of bounds
     // pub fn remove_using_index(&mut self, index: usize) -> ID {
@@ -456,7 +521,7 @@ pub enum MainContentProviderMenuOptions {
     ADD_YT_EXPLORER,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum ContentProviderEditables {
     YTExplorer(YTExplorerEditables),
     YTSearchType(YTSearchType),
@@ -479,7 +544,7 @@ impl ToString for ContentProviderEditables {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum YTExplorerEditables {
     SEARCH_TYPE,
     SEARCH_TERM,
@@ -490,7 +555,7 @@ impl Into<ContentProviderEditables> for YTExplorerEditables {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum YTSearchType {
     Album,
     Song,
