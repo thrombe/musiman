@@ -30,6 +30,7 @@ use crate::{
         TemporaryContentID,
         ID,
     },
+    ui::AppAction,
 };
 use musiplayer::Player;
 
@@ -50,6 +51,8 @@ pub struct ContentHandler {
     
     active_queue: Option<ContentProviderID>, // can also be a bunch of queues? like -> play all artists
     active_song: Option<SongID>,
+
+    app_action: AppAction,
 }
 
 pub struct Logger {
@@ -66,7 +69,7 @@ impl Logger {
     }
 }
 
-pub enum Action {
+pub enum ContentHandlerAction {
     LoadContentManager {
         songs: Vec<Song>,
         content_providers: Vec<ContentProvider>,
@@ -87,17 +90,17 @@ pub enum Action {
     EnableTyping,
     PopContentStack,
     Actions(Vec<Self>),
-    SetSelectedIndex {
-        index: usize,
-    },
+    // SetSelectedIndex {
+    //     index: usize,
+    // },
     None,
 }
-impl Into<Action> for Vec<Action> {
-    fn into(self) -> Action {
-        Action::Actions(self)
+impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
+    fn into(self) -> ContentHandlerAction {
+        ContentHandlerAction::Actions(self)
     }
 }
-impl Action {
+impl ContentHandlerAction {
     fn apply(self, ch: &mut ContentHandler) {
         match self {
             Self::LoadContentManager {songs, content_providers, loader_id} => {
@@ -134,14 +137,14 @@ impl Action {
                 ch.content_stack.push(id.into());
             }
             Self::EnableTyping => {
-                todo!()
+                ch.app_action.queue(
+                    AppAction::EnableTyping {}
+                );
             }
             Self::PopContentStack => {
                 ch.back();
             }
-            Self::SetSelectedIndex { index: _ } => {
-                todo!()
-            }
+            // Self::SetSelectedIndex { index: _ } => {}
             Self::Actions(actions) => {
                 for action in actions {
                     action.apply(ch);
@@ -201,6 +204,7 @@ impl ContentHandler {
             logger: Logger::new(),
             active_queue: None,
             active_song: None,
+            app_action: Default::default(),
         }
     }
 
@@ -253,6 +257,7 @@ impl ContentHandler {
                             }
                             ContentProviderContentType::Edit(e) => { 
                                 let cp = self.get_provider_mut(id);
+                                cp.selected_index = index;
                                 let action = cp.choose_editable(index, id, e);
                                 action.apply(self);
                             }
@@ -508,6 +513,10 @@ impl ContentHandler {
     }
     pub fn seek_song(&mut self, t: f64) {
         self.player.seek(t).unwrap();
+    }
+
+    pub fn get_app_action(&mut self) -> AppAction {
+        std::mem::replace(&mut self.app_action, Default::default())
     }
 }
 

@@ -17,7 +17,7 @@ lofty = "0.6.3"
 
 # tokio = {version = "1.17", features = ["rt-multi-thread", "time", "full"]}
 
-tui = "0.17"
+tui = "0.18"
 crossterm = "0.23"
 unicode-width = "0.1.9"
 

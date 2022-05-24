@@ -20,7 +20,7 @@ use serde::{
 
 use crate::{
     content_handler::{
-        Action,
+        ContentHandlerAction,
     },
 };
 
@@ -107,7 +107,7 @@ impl Song {
         vec![]
     }
     
-    pub fn apply_option(&mut self, opt: SongMenuOptions) -> Action {
+    pub fn apply_option(&mut self, opt: SongMenuOptions) -> ContentHandlerAction {
         match opt {
 
         }

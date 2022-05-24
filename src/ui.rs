@@ -1,4 +1,9 @@
 
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+};
 
 use tui::{
     backend::Backend,
@@ -46,37 +51,100 @@ use crate::{
 };
 
 
-pub struct App {
-    /// Current value of the input box
-    input: String,
-    state: AppState,
+pub enum AppAction {
+    EnableTyping {
+        // index: SelectedIndex,
+    },
+    Actions {
+        actions: Vec<AppAction>,
+    },
+    None,
+}
+impl Default for AppAction {
+    fn default() -> Self {
+        Self::None
+    }
+}
+impl Into<AppAction> for Vec<AppAction> {
+    fn into(self) -> AppAction {
+        AppAction::Actions {
+            actions: self,
+        }
+    }
+}
+impl AppAction {
+    pub fn queue(&mut self, action: Self) {
+        match self {
+            Self::Actions {actions} => {
+                match action {
+                    AppAction::Actions { actions: more_actions } => {
+                        actions.extend(more_actions)
+                    }
+                    AppAction::None => (),
+                    a => {
+                        actions.push(a);
+                    }
+                }
+            }
+            Self::None => {
+                *self = action;
+            }
+            _ => {
+                let a = std::mem::replace(self, vec![].into());
+                self.queue(a);
+                self.queue(action);
+            }
+        }
+    }
 
-    // updates status bar depending on the situation
-    status_bar: StatusBar,
-    // handles all ui things from the browser widget side
-    browser_widget: BrowserWidget,
-    // handles all ui from the player widget side
-    player_widget: PlayerWidget,
-
-    content_handler: ContentHandler,
+    fn apply(self, app: &mut App) {
+        match self {
+            Self::Actions {actions} => {
+                for action in actions {
+                    action.apply(app);
+                }
+            }
+            Self::None => (),
+            Self::EnableTyping {} => {
+                app.state = AppState::Typing;
+                // dbg!(app.browser_widget.selected_index);
+                // app.browser_widget.update(&mut app.content_handler);
+                // dbg!(app.browser_widget.selected_index);
+            }
+        }
+    }
 }
 
+/// wrapping ListState to make sure not to call select(None) and to eliminate the use of unwrap() on selected_index()
+/// currently, theres no way to access/suggest the offset
+pub struct SelectedIndex {
+    index: ListState,
+}
+impl Into<ListState> for SelectedIndex {
+    fn into(self) -> ListState {
+        self.index
+    }
+}
+impl SelectedIndex {
+    fn new() -> Self {
+        let mut state = ListState::default();
+        state.select(Some(0));
+        Self { index: state }
+    }
 
-#[derive(Clone, Copy)]
-enum AppState {
-    Browser,
-    Popup,
-    Help,
-    Menu,
-    Quit,
-    Typing,
+    fn selected_index(&self) -> usize {
+        self.index.selected().unwrap()
+    }
+
+    fn select(&mut self, index: usize) {
+        self.index.select(Some(index));
+    }
 }
 
 #[derive(Default)]
 struct BrowserWidget {
     options: Vec<String>,
     selected_index: usize,
-    top_index: usize, // TODO: handle the case where the list is longer than what the display can have
 }
 
 impl BrowserWidget {
@@ -100,15 +168,11 @@ impl BrowserWidget {
                 if self.selected_index < self.options.len()-1 {self.selected_index += 1};
             }
             KeyCode::Right => {
-                ch.enter(self.selected_index + self.top_index);
+                ch.enter(self.selected_index);
                 self.update(ch);
             }
             KeyCode::Left => {
                 ch.back();
-                self.update(ch);
-            }
-            KeyCode::Enter => {
-                ch.apply_option(self.selected_index + self.top_index);
                 self.update(ch);
             }
             _ => return false,
@@ -250,11 +314,35 @@ impl StatusBar {
 }
 
 
+#[derive(Clone, Copy)]
+enum AppState {
+    Browser,
+    Help,
+    Quit,
+    Typing,
+}
+
+pub struct App {
+    /// Current value of the input box
+    input: Vec<char>,
+    input_cursor_pos: usize,
+    state: AppState,
+
+    // updates status bar depending on the situation
+    status_bar: StatusBar,
+    // handles all ui things from the browser widget side
+    browser_widget: BrowserWidget,
+    // handles all ui from the player widget side
+    player_widget: PlayerWidget,
+
+    content_handler: ContentHandler,
+}
 
 impl App {
     pub fn load() -> Self {
         Self {
-            input: String::new(),
+            input: Default::default(),
+            input_cursor_pos: 0,
             state: AppState::Browser,
 
             status_bar: StatusBar {},
@@ -280,6 +368,8 @@ impl App {
 
     fn update(&mut self) {
         self.player_widget.update(&mut self.content_handler);
+        let action = self.content_handler.get_app_action();
+        action.apply(self)
     }
     
     fn handle_events(&mut self) -> Result<()> {
@@ -287,8 +377,53 @@ impl App {
             return Ok(())
         }
         if let Event::Key(key) = event::read()? {
-            let handled = match self.state {
-                // AppState::Popup => {},
+            let event_handled = match self.state {
+                AppState::Typing => {
+                    let mut event_handled = true;
+                    match key.code {
+                        KeyCode::Esc => {
+                            self.state = AppState::Browser; // TODO: should this be a stack too?
+                            self.content_handler.back();
+                            self.browser_widget.update(&mut self.content_handler);
+                        }
+                        KeyCode::Char(c) => {
+                            self.input.insert(self.input_cursor_pos, c);
+                            self.input_cursor_pos += 1;
+                        }
+                        KeyCode::Backspace => {
+                            self.input.remove(self.input_cursor_pos -1);
+                        }
+                        KeyCode::Left => {
+                            todo!();
+                        }
+                        KeyCode::Right => {
+                            todo!();
+                        }
+                        KeyCode::Up => {
+                            todo!();
+                        }
+                        KeyCode::Down => {
+                            todo!();
+                        }
+                        KeyCode::PageUp => {
+                            todo!();
+                        }
+                        KeyCode::PageDown => {
+                            todo!();
+                        }
+                        KeyCode::Home => {
+                            todo!();
+                        }
+                        KeyCode::End => {
+                            todo!();
+                        }
+                        KeyCode::Enter => {
+                            todo!();
+                        }
+                        _ => event_handled = false,
+                    }
+                    event_handled
+                },
                 _ => {
                     let mut event_handled = false;
                     if !event_handled {
@@ -301,16 +436,15 @@ impl App {
                     event_handled
                 },
             };
-            if handled {return Ok(())}
+            if event_handled {return Ok(())}
         
             match self.state {
-                AppState::Browser => match key.code {
+                _ => match key.code {
                     KeyCode::Char('q') => {
                         self.state = AppState::Quit;
                     }
-                    _ => {}
-                },
-                _ => (),
+                    _ => ()
+                }
             }
         }
         Ok(())

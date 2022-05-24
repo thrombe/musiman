@@ -15,7 +15,7 @@ use crate::{
     },
     content_handler::{
         GetNames,
-        Action,
+        ContentHandlerAction,
     },
     content_manager::{
         ContentProviderID,
@@ -44,17 +44,6 @@ pub enum ContentProviderContentType {
 impl Default for ContentProviderContentType {
     fn default() -> Self {
         Self::Normal
-    }
-}
-impl ContentProviderContentType {
-    /// panic if not edit
-    pub fn edit(self) -> ContentProviderEditables {
-        match self {
-            ContentProviderContentType::Edit(e) => {
-                e
-            }
-            _ => panic!("type was not edit")
-        }
     }
 }
 
@@ -196,12 +185,12 @@ impl ContentProvider {
         }
     }
 
-    pub fn apply_option(&mut self, opt: ContentProviderMenuOptions, self_id: ContentProviderID) -> Action {
+    pub fn apply_option(&mut self, opt: ContentProviderMenuOptions, self_id: ContentProviderID) -> ContentHandlerAction {
         match opt {
             ContentProviderMenuOptions::Main(o) => {
                 match o {
                     MainContentProviderMenuOptions::ADD_FILE_EXPLORER => {
-                        Action::AddCPToCP {
+                        ContentHandlerAction::AddCPToCP {
                             id: self_id,
                             cp: Self::new_file_explorer(
                                 "/home/issac/daata/phon-data/.musi/IsBac/".to_owned(),
@@ -211,14 +200,14 @@ impl ContentProvider {
                         }
                     }
                     MainContentProviderMenuOptions::ADD_QUEUE_PROVIDER => {
-                        Action::AddCPToCP {
+                        ContentHandlerAction::AddCPToCP {
                             id: self_id,
                             cp: Self::new_queue_provider(),
                             new_cp_content_type: ContentProviderContentType::Normal,
                         }
                     }
                     MainContentProviderMenuOptions::ADD_YT_EXPLORER => {
-                        Action::AddCPToCP {
+                        ContentHandlerAction::AddCPToCP {
                             id: self_id,
                             cp: Self::new_yt_explorer(),
                             new_cp_content_type: ContentProviderContentType::Edit(ContentProviderEditables::None),
@@ -230,7 +219,7 @@ impl ContentProvider {
         }
     }
 
-    pub fn choose_editable(&mut self, index: usize, self_id: ContentProviderID, e: ContentProviderEditables) -> Action {
+    pub fn choose_editable(&mut self, index: usize, self_id: ContentProviderID, e: ContentProviderEditables) -> ContentHandlerAction {
         dbg!(e);
         let editables = self.get_editables(e);
         match editables[index] {
@@ -242,13 +231,13 @@ impl ContentProvider {
                 id.set_content_type(ContentProviderContentType::Edit(e.into()));
                 match e {
                     YTExplorerEditables::SEARCH_TYPE => {
-                        Action::PushToContentStack { id }
+                        ContentHandlerAction::PushToContentStack { id }
                     }
                     YTExplorerEditables::SEARCH_TERM => {
                         vec![
-                            Action::PushToContentStack { id },
-                            Action::SetSelectedIndex { index },
-                            Action::EnableTyping,
+                            ContentHandlerAction::PushToContentStack { id }, // TODO: check if i called back() after coming out of typing mode
+                            // ContentHandlerAction::SetSelectedIndex { index },
+                            ContentHandlerAction::EnableTyping,
                         ].into()
                     }
                 }
@@ -257,7 +246,7 @@ impl ContentProvider {
                 match &mut self.cp_type {
                     ContentProviderType::YTExplorer { search_type, .. } => {
                         *search_type = e;
-                        Action::PopContentStack
+                        ContentHandlerAction::PopContentStack
                     }
                     _ => panic!("bad path"),
                 }
@@ -313,8 +302,8 @@ impl ContentProvider {
     }
 
     /// can load from various sources like yt/local storage while being able to add stuff to s/sp/spp
-    pub fn load(&mut self, id: ContentProviderID) -> Action {
-        if self.loaded {return Action::None}
+    pub fn load(&mut self, id: ContentProviderID) -> ContentHandlerAction {
+        if self.loaded {return ContentHandlerAction::None}
         self.loaded = true;
         match &mut self.cp_type {
             ContentProviderType::FileExplorer {path} => {
@@ -340,7 +329,7 @@ impl ContentProvider {
                     }
                 });
 
-                Action::LoadContentManager {songs: s, content_providers: sp, loader_id: id}
+                ContentHandlerAction::LoadContentManager {songs: s, content_providers: sp, loader_id: id}
             }
             _ => panic!()
         }
