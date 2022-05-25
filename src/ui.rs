@@ -41,6 +41,7 @@ use crossterm::{
         Event,
         KeyCode,
         KeyEvent,
+        KeyModifiers,
     },
 };
 // use unicode_width::UnicodeWidthStr; // string.width() -> gives correct width (including cjk chars) (i assume)
@@ -51,9 +52,10 @@ use crate::{
 };
 
 
+#[derive(Debug)]
 pub enum AppAction {
     EnableTyping {
-        // index: SelectedIndex,
+        content: String,
     },
     Actions {
         actions: Vec<AppAction>,
@@ -97,6 +99,11 @@ impl AppAction {
         }
     }
 
+    fn dbg_log(&self) {
+        if let Self::None = self {return;}
+        dbg!(&self);
+    }
+
     fn apply(self, app: &mut App) {
         match self {
             Self::Actions {actions} => {
@@ -105,8 +112,10 @@ impl AppAction {
                 }
             }
             Self::None => (),
-            Self::EnableTyping {} => {
+            Self::EnableTyping {mut content} => {
                 app.state = AppState::Typing;
+                // app.input = content.chars().collect();
+                app.input = content.drain(..).collect();
             }
         }
     }
@@ -182,7 +191,7 @@ impl BrowserWidget {
         true
     }
 
-    fn update(&mut self, ch: &mut ContentHandler) {
+    fn update(&mut self, ch: &ContentHandler) {
         self.options = ch.get_content_names();
     }
 
@@ -261,7 +270,7 @@ impl PlayerWidget {
                     })
                     .collect::<Vec<_>>()
                 )
-                .block(Block::default().borders(Borders::ALL).title("Browser Widget"))
+                .block(Block::default().borders(Borders::ALL).title("Logs"))
                 .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Rgb(200, 100, 0)))
                 // .highlight_symbol("> ")
                 ;
@@ -353,7 +362,7 @@ impl App {
     }
 
     pub fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
-        self.browser_widget.update(&mut self.content_handler);
+        self.browser_widget.update(&self.content_handler);
         loop {
             terminal.draw(|f| self.render(f))?;
             self.handle_events()?;
@@ -368,7 +377,14 @@ impl App {
     fn update(&mut self) {
         self.player_widget.update(&mut self.content_handler);
         let action = self.content_handler.get_app_action();
-        action.apply(self)
+        action.apply(self);
+        match self.state {
+            AppState::Typing => {
+                let index = self.content_handler.get_selected_index().selected_index();
+                self.browser_widget.options[index] = self.input[..].iter().collect();
+            }
+            _ => (),
+        }
     }
     
     fn handle_events(&mut self) -> Result<()> {
@@ -383,41 +399,47 @@ impl App {
                         KeyCode::Esc => {
                             self.state = AppState::Browser; // TODO: should this be a stack too?
                             self.content_handler.back();
-                            self.browser_widget.update(&mut self.content_handler);
+                            self.browser_widget.update(&self.content_handler);
                         }
                         KeyCode::Char(c) => {
                             self.input.insert(self.input_cursor_pos, c);
                             self.input_cursor_pos += 1;
                         }
                         KeyCode::Backspace => {
-                            self.input.remove(self.input_cursor_pos -1);
+                            self.input_cursor_pos -= 1;
+                            self.input.remove(self.input_cursor_pos);
                         }
                         KeyCode::Left => {
-                            todo!();
+                            match key.modifiers { // these are bitfields, not enum variants
+                                KeyModifiers::NONE => {
+                                    if self.input_cursor_pos > 0 {
+                                        self.input_cursor_pos -= 1;
+                                    }
+                                }
+                                // KeyModifiers::CONTROL | KeyModifiers::SHIFT => {}
+                                _ => event_handled = false,
+                            }
                         }
                         KeyCode::Right => {
-                            todo!();
-                        }
-                        KeyCode::Up => {
-                            todo!();
-                        }
-                        KeyCode::Down => {
-                            todo!();
-                        }
-                        KeyCode::PageUp => {
-                            todo!();
-                        }
-                        KeyCode::PageDown => {
-                            todo!();
+                            match key.modifiers {
+                                KeyModifiers::NONE => {
+                                    if self.input_cursor_pos < self.input.len() {
+                                        self.input_cursor_pos += 1;
+                                    }
+                                }
+                                _ => event_handled = false,
+                            }
                         }
                         KeyCode::Home => {
-                            todo!();
+                            self.input_cursor_pos = 0;
                         }
                         KeyCode::End => {
-                            todo!();
+                            self.input_cursor_pos = self.input.len();
                         }
                         KeyCode::Enter => {
-                            todo!();
+                            self.content_handler.apply_typed(self.input[..].iter().collect());
+                            self.state = AppState::Browser;
+                            self.browser_widget.update(&self.content_handler);
                         }
                         _ => event_handled = false,
                     }
@@ -472,5 +494,15 @@ impl App {
         self.status_bar.render(f, status_rect);
         self.player_widget.render(f, right_rect);
         self.browser_widget.render(f, left_rect, self.content_handler.get_selected_index());
+
+        match self.state {
+            AppState::Typing => {
+                f.set_cursor(
+                    4 + left_rect.x + self.input_cursor_pos as u16, // BAD: offset due to sr no. can't be known here
+                    1 + left_rect.y + self.content_handler.get_selected_index().selected_index() as u16, // - offset?
+                );
+            }
+            _ => (),
+        }
     }
 }

@@ -1,6 +1,9 @@
 
 #[allow(unused_imports)]
-use crate::{dbg, debug};
+use crate::{
+    dbg,
+    debug,
+};
 
 use crate::{
     song::{
@@ -72,6 +75,7 @@ impl Logger {
     }
 }
 
+#[derive(Debug)]
 pub enum ContentHandlerAction {
     LoadContentManager {
         songs: Vec<Song>,
@@ -90,12 +94,11 @@ pub enum ContentHandlerAction {
     PushToContentStack {
         id: ContentProviderID,
     },
-    EnableTyping,
+    EnableTyping {
+        content: String,
+    },
     PopContentStack,
     Actions(Vec<Self>),
-    // SetSelectedIndex {
-    //     index: usize,
-    // },
     None,
 }
 impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
@@ -105,6 +108,7 @@ impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
 }
 impl ContentHandlerAction {
     fn apply(self, ch: &mut ContentHandler) {
+        self.dbg_log();
         match self {
             Self::LoadContentManager {songs, content_providers, loader_id} => {
                 let mut loader = ch.get_provider(loader_id).clone();
@@ -139,9 +143,9 @@ impl ContentHandlerAction {
             Self::PushToContentStack { id } => {
                 ch.content_stack.push(id.into());
             }
-            Self::EnableTyping => {
+            Self::EnableTyping { content } => {
                 ch.app_action.queue(
-                    AppAction::EnableTyping {}
+                    AppAction::EnableTyping {content}
                 );
             }
             Self::PopContentStack => {
@@ -155,6 +159,12 @@ impl ContentHandlerAction {
             }
             Self::None => (),
         }
+    }
+
+
+    fn dbg_log(&self) {
+        if let Self::None = self {return;}
+        dbg!(&self);
     }
 }
 
@@ -281,7 +291,7 @@ impl ContentHandler {
         }
     }
 
-    pub fn get_content_names(&mut self) -> Vec<String> {
+    pub fn get_content_names(&self) -> Vec<String> {
         let &id = self.content_stack.last().unwrap();
         match id {
             GlobalContent::ID(id) => {
@@ -556,6 +566,25 @@ impl ContentHandler {
                 }        
             }
             _ => todo!()
+        }
+    }
+
+    pub fn apply_typed(&mut self, content: String) {
+        let &id = self.content_stack.last().unwrap();
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::ContentProvider(id) => {
+                        let cp = self.get_provider_mut(id);
+                        let action = cp.apply_typed(id, content);
+                        action.apply(self);
+                    }
+                    ID::Song(..) => {
+                        todo!()
+                    }
+                }
+            }
+            _ => panic!(), // should not happen
         }
     }
 }

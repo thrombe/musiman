@@ -249,11 +249,15 @@ impl ContentProvider {
                     }
                     YTExplorerEditables::SEARCH_TERM => {
                         self.set_selected_index(id.get_content_type(), index);
-                        vec![
-                            ContentHandlerAction::PushToContentStack { id }, // TODO: check if i called back() after coming out of typing mode
-                            // ContentHandlerAction::SetSelectedIndex { index },
-                            ContentHandlerAction::EnableTyping,
-                        ].into()
+                        match &mut self.cp_type {
+                            ContentProviderType::YTExplorer { search_term , ..} => {
+                                vec![
+                                    ContentHandlerAction::PushToContentStack { id }, // TODO: check if i called back() after coming out of typing mode
+                                    ContentHandlerAction::EnableTyping { content: search_term.clone()},
+                                ].into()        
+                            }
+                            _ => panic!(),
+                        }
                     }
                 }
             }
@@ -267,6 +271,41 @@ impl ContentProvider {
                 }
             }
         }
+    }
+
+    // BAD: wow. this looks aweful
+    pub fn apply_typed(&mut self, self_id: ContentProviderID, content: String) -> ContentHandlerAction {
+        let t = self_id.get_content_type();
+        match t {
+            ContentProviderContentType::Edit(e) => {
+                match e {
+                    ContentProviderEditables::YTExplorer(e) => {
+                        match e {
+                            YTExplorerEditables::SEARCH_TERM => {
+                                match &mut self.cp_type {
+                                    ContentProviderType::YTExplorer { search_term, .. } => {
+                                        *search_term = content;
+                                        let mut id = self_id;
+                                        // self.loaded = false;
+                                        id.set_content_type(ContentProviderContentType::Normal);
+                                        return vec![
+                                            ContentHandlerAction::PopContentStack,
+                                            // ContentHandlerAction::PopContentStack,
+                                            // ContentHandlerAction::PushToContentStack { id },
+                                        ].into();
+                                    }
+                                    _ => (),
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+        panic!(); // should not happen
     }
 
     pub fn new_main_provider() -> Self {
