@@ -73,11 +73,7 @@ macro_rules! dbg {
     };
 }
 
-
-// #[tokio::main]
-// async fn main() -> Result<()> {
-fn main() -> Result<()> {
-
+fn test() {
     // let ytm = yt_manager::YTManager::new()?;
 
     // use std::thread;
@@ -100,9 +96,13 @@ fn main() -> Result<()> {
     // });
     
     // return Ok(());
+}
+
+// #[tokio::main]
+// async fn main() -> Result<()> {
+fn main() -> Result<()> {
 
     init_logger().expect("failed to init logger");
-
 
     let hook = take_hook();
     set_hook(Box::new(move |info| {
@@ -115,7 +115,6 @@ fn main() -> Result<()> {
         hook(info)
     }));
 
-
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -123,18 +122,6 @@ fn main() -> Result<()> {
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
-
-    // terminal.draw(|f| {
-    //     let size = f.size();
-    //     let block = Block::default()
-    //         .title("Block")
-    //         .borders(Borders::ALL)
-    //         .border_style(Style::default().fg(Color::White))
-    //         .style(Style::default().bg(Color::Black))
-    //         ;
-    //     f.render_widget(block, size);
-    // })?;
 
     // create app and run it
     let app = App::load();

@@ -54,13 +54,16 @@ use crate::{
 
 #[derive(Debug)]
 pub enum AppAction {
-    EnableTyping {
-        content: String,
-    },
+    None,
     Actions {
         actions: Vec<AppAction>,
     },
-    None,
+    EnableTyping {
+        content: String,
+    },
+    UpdateDisplayContent {
+        content: Vec<String>,
+    }
 }
 impl Default for AppAction {
     fn default() -> Self {
@@ -106,16 +109,19 @@ impl AppAction {
 
     fn apply(self, app: &mut App) {
         match self {
+            Self::None => (),
             Self::Actions {actions} => {
                 for action in actions {
                     action.apply(app);
                 }
             }
-            Self::None => (),
             Self::EnableTyping {mut content} => {
                 app.state = AppState::Typing;
                 // app.input = content.chars().collect();
                 app.input = content.drain(..).collect();
+            }
+            Self::UpdateDisplayContent {content} => {
+                app.browser_widget.options = content;
             }
         }
     }
@@ -170,7 +176,6 @@ impl BrowserWidget {
             }
             KeyCode::Char('G') => {
                 ch.open_menu_for_current();
-                self.update(ch);
             }
             KeyCode::Up => {
                 ch.decrement_selection();
@@ -180,19 +185,13 @@ impl BrowserWidget {
             }
             KeyCode::Right => {
                 ch.enter_selected();
-                self.update(ch);
             }
             KeyCode::Left => {
                 ch.back();
-                self.update(ch);
             }
             _ => return false,
         }
         true
-    }
-
-    fn update(&mut self, ch: &ContentHandler) {
-        self.options = ch.get_content_names();
     }
 
     fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, selected_index: SelectedIndex) {
@@ -362,11 +361,11 @@ impl App {
     }
 
     pub fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
-        self.browser_widget.update(&self.content_handler);
+        terminal.draw(|f| self.render(f))?;
         loop {
-            terminal.draw(|f| self.render(f))?;
             self.handle_events()?;
             self.update();
+            terminal.draw(|f| self.render(f))?;
 
             if let AppState::Quit = self.state {
                 return Ok(());
@@ -399,7 +398,6 @@ impl App {
                         KeyCode::Esc => {
                             self.state = AppState::Browser; // TODO: should this be a stack too?
                             self.content_handler.back();
-                            self.browser_widget.update(&self.content_handler);
                         }
                         KeyCode::Char(c) => {
                             self.input.insert(self.input_cursor_pos, c);
@@ -439,7 +437,6 @@ impl App {
                         KeyCode::Enter => {
                             self.content_handler.apply_typed(self.input[..].iter().collect());
                             self.state = AppState::Browser;
-                            self.browser_widget.update(&self.content_handler);
                         }
                         _ => event_handled = false,
                     }

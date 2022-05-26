@@ -168,12 +168,12 @@ impl ContentHandlerAction {
     }
 }
 
-pub enum GetNames {
+pub enum DisplayContent {
     Names(Vec<String>),
     IDS(Vec<ID>),
 }
-impl GetNames {
-    fn get_names(self, ch: &ContentHandler) -> Vec<String> {
+impl DisplayContent {
+    fn get(self, ch: &ContentHandler) -> Vec<String> {
         match self {
             Self::Names(names) => names,
             Self::IDS(ids) => {
@@ -234,8 +234,13 @@ impl ContentHandler {
                     ID::Song(id) => {
                         match id.t {
                             SongContentType::Menu => {
-                                self.apply_selected_option();
+                                let s = self.get_song_mut(id);
+                                let _opts = s.get_menu_options();
+                                // let opt = opts[index]; // TODO: track with edit manager
+                                // let action = s.apply_option(opt);
+                                // action.apply(self);
                                 self.back();
+                                todo!()
                             }
                             SongContentType::Edit => {
                                 todo!()
@@ -264,7 +269,9 @@ impl ContentHandler {
                                 }
                             }
                             ContentProviderContentType::Menu => {
-                                self.apply_selected_option();
+                                let cp = self.get_provider_mut(id);
+                                let action = cp.apply_selected_option(id);
+                                action.apply(self);
                                 self.back();
                             }
                             ContentProviderContentType::Edit(e) => { 
@@ -280,6 +287,7 @@ impl ContentHandler {
                 return
             }
         }
+        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
     }
 
     pub fn back(&mut self) {
@@ -288,6 +296,7 @@ impl ContentHandler {
 
         if self.content_stack.len() > 1 {
             self.content_stack.pop().unwrap();
+            self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
         }
     }
 
@@ -304,7 +313,7 @@ impl ContentHandler {
                         let t = id.get_content_type();
                         let cp = self.get_provider(id);
                         let cn = cp.get_content_names(t);
-                        cn.get_names(self)
+                        cn.get(self)
                     }
                 }
             }
@@ -340,31 +349,6 @@ impl ContentHandler {
         }
     }
 
-    pub fn apply_selected_option(&mut self) {
-        let &id = self.content_stack.last().unwrap();
-        match id {
-            GlobalContent::ID(id) => {
-                match id {
-                    ID::Song(id) => {
-                        let s = self.get_song_mut(id);
-                        let _opts = s.get_menu_options();
-                        // let opt = opts[index]; // TODO: track with edit manager
-                        // let action = s.apply_option(opt);
-                        // action.apply(self);
-                        todo!()
-                    }
-                    ID::ContentProvider(id) => {
-                        let cp = self.get_provider_mut(id);
-                        let action = cp.apply_selected_option(id);
-                        action.apply(self);
-                    }
-                }
-            }
-            _ => todo!(),
-        }
-        self.back();
-    }
-
     pub fn open_menu_for_current(&mut self) -> bool {
         let &id = self.content_stack.last().unwrap();
         let id = match id {
@@ -377,17 +361,10 @@ impl ContentHandler {
                         id.t = SongContentType::Menu;
                         id
                     }),
-                    ID::ContentProvider(id) => ID::ContentProvider({
+                    ID::ContentProvider(mut id) => ID::ContentProvider({
                         let cp = self.get_provider(id);
                         if !cp.has_menu() {return false}
-                        let id = match id {
-                            ContentProviderID::PersistentContent { id, .. } => {
-                                ContentProviderID::PersistentContent { id, t: ContentProviderContentType::Menu }
-                            }
-                            ContentProviderID::TemporaryContent {id, .. } => {
-                                ContentProviderID::TemporaryContent { id, t: ContentProviderContentType::Menu }
-                            }
-                        };
+                        id.set_content_type(ContentProviderContentType::Menu);
                         id
                     }),
                 }
@@ -398,11 +375,13 @@ impl ContentHandler {
         };
         
         self.content_stack.push(id);
+        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
         true
     }
     
     pub fn open_menu_for_selected(&mut self) {
         let &id = self.content_stack.last().unwrap();
+        dbg!(&self.content_stack);
         match id {
             GlobalContent::ID(id) => {
                 match id {
@@ -413,9 +392,13 @@ impl ContentHandler {
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
                         let id = cp.get_selected();
-                        self.content_stack.push(id.into());
-                        if !self.open_menu_for_current() {
-                            self.content_stack.pop();
+                        self.content_stack.push(id.into()); // temporarily pushing it up the stack so the other function knows what to open the menu on
+                        if self.open_menu_for_current() {
+                            let id = self.content_stack.pop().unwrap();
+                            let _ = self.content_stack.pop().unwrap();
+                            self.content_stack.push(id);
+                        } else {
+                            let _ = self.content_stack.pop().unwrap();
                         }
                     }
                 }

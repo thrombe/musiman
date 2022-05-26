@@ -18,7 +18,7 @@ use crate::{
         Song,
     },
     content_handler::{
-        GetNames,
+        DisplayContent,
         ContentHandlerAction,
     },
     content_manager::{
@@ -57,12 +57,12 @@ impl Default for ContentProviderContentType {
 }
 
 impl ContentProvider {
-    pub fn get_content_names(&self, t: ContentProviderContentType) -> GetNames {
+    pub fn get_content_names(&self, t: ContentProviderContentType) -> DisplayContent {
         match t {
             ContentProviderContentType::Menu => {
                 match self.cp_type {
                     _ => {
-                        GetNames::Names( // TODO: maybe GetNames should have different types like GetNames::MenuOptions and stuff. else there is code repetition
+                        DisplayContent::Names( // TODO: maybe GetNames should have different types like GetNames::MenuOptions and stuff. else there is code repetition
                             self.get_menu_options()
                             .into_iter()
                             .map(|o| {
@@ -78,7 +78,7 @@ impl ContentProvider {
             ContentProviderContentType::Normal => {
                 match self.cp_type {
                     ContentProviderType::Queues => {
-                        GetNames::IDS(
+                        DisplayContent::IDS(
                             self.providers
                             .iter().cloned()
                             .map(Into::into)
@@ -87,7 +87,7 @@ impl ContentProvider {
                         )
                     }
                     _ => {
-                        GetNames::IDS(
+                        DisplayContent::IDS(
                             self.providers
                             .iter().cloned()
                             .map(Into::into)
@@ -106,7 +106,7 @@ impl ContentProvider {
                     ContentProviderType::YTExplorer { search_type, search_term } => {
                         match i {
                             ContentProviderEditables::None => {
-                                GetNames::Names(
+                                DisplayContent::Names(
                                     vec![
                                         ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TYPE)
                                         .to_string()
@@ -124,7 +124,7 @@ impl ContentProvider {
                             ContentProviderEditables::YTExplorer(e) => {
                                 match e {
                                     YTExplorerEditables::SEARCH_TERM => {
-                                        GetNames::Names(
+                                        DisplayContent::Names(
                                             vec![
                                                 ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TYPE)
                                                 .to_string()
@@ -136,7 +136,7 @@ impl ContentProvider {
                                         )
                                     }
                                     YTExplorerEditables::SEARCH_TYPE => {
-                                        GetNames::Names(
+                                        DisplayContent::Names(
                                             self.get_editables(i)
                                             .into_iter()
                                             .map(|o| {
@@ -150,7 +150,7 @@ impl ContentProvider {
                                 }
                             }
                             _ => { // BAD: i can be not related to YTExplorer and no compile errors
-                                GetNames::Names(
+                                DisplayContent::Names(
                                     self.get_editables(i)
                                     .into_iter()
                                     .map(|o| {
@@ -164,7 +164,7 @@ impl ContentProvider {
                         }
                     }
                     _ => {
-                        GetNames::Names(
+                        DisplayContent::Names(
                             self.get_editables(i)
                             .into_iter()
                             .map(|o| {
