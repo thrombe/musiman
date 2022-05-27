@@ -20,6 +20,7 @@ use crate::{
     content_handler::{
         DisplayContent,
         ContentHandlerAction,
+        ParallelAction,
     },
     content_manager::{
         ContentProviderID,
@@ -283,7 +284,7 @@ impl ContentProvider {
                         match e {
                             YTExplorerEditables::SEARCH_TERM => {
                                 match &mut self.cp_type {
-                                    ContentProviderType::YTExplorer { search_term, .. } => {
+                                    ContentProviderType::YTExplorer { search_term, search_type } => {
                                         *search_term = content;
                                         let mut id = self_id;
                                         // self.loaded = false;
@@ -292,6 +293,20 @@ impl ContentProvider {
                                             ContentHandlerAction::PopContentStack,
                                             // ContentHandlerAction::PopContentStack,
                                             // ContentHandlerAction::PushToContentStack { id },
+                                            match search_type {
+                                                YTSearchType::Album => {
+                                                    ParallelAction::YTAlbumSearch {term: search_term.clone()}.into() // TODO: do this properly
+                                                }
+                                                YTSearchType::Playlist => {
+                                                    todo!()
+                                                }
+                                                YTSearchType::Song => {
+                                                    todo!()
+                                                }
+                                                YTSearchType::Video => {
+                                                    todo!()
+                                                }
+                                            }
                                         ].into();
                                     }
                                     _ => (),
@@ -407,7 +422,6 @@ impl ContentProvider {
     }
 
     pub fn get_editables(&self, e: ContentProviderEditables) -> Vec<ContentProviderEditables> {
-        dbg!(e);
         match e {
             ContentProviderEditables::None => {
                 match self.cp_type {

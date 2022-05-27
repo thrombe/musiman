@@ -119,6 +119,7 @@ impl AppAction {
                 app.state = AppState::Typing;
                 // app.input = content.chars().collect();
                 app.input = content.drain(..).collect();
+                app.input_cursor_pos = app.input.len();
             }
             Self::UpdateDisplayContent {content} => {
                 app.browser_widget.options = content;

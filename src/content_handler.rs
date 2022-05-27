@@ -37,6 +37,10 @@ use crate::{
         AppAction,
         SelectedIndex,
     },
+    yt_manager::{
+        YTManager,
+        YTAction,
+    },
 };
 use musiplayer::Player;
 
@@ -53,11 +57,13 @@ struct ParallelHandle {
     handles: Vec<thread::JoinHandle<()>>,
     receiver: Receiver<ContentHandlerAction>,
     sender: Sender<ContentHandlerAction>,
+    yt_man: YTManager,
 }
 impl Default for ParallelHandle {
     fn default() -> Self {
         let (sender, receiver) = mpsc::channel();
         Self {
+            yt_man: YTManager::new().unwrap(),
             handles: Default::default(),
             receiver,
             sender,
@@ -66,6 +72,12 @@ impl Default for ParallelHandle {
 }
 impl ParallelHandle {
     fn run(&mut self, action: ParallelAction) {
+        let action = match action.into() {
+            ParallelActionSplit::Python(a) => {
+                return self.yt_man.run(a).unwrap();
+            }
+            ParallelActionSplit::Rust(a) => a,
+        };
         let sender = self.sender.clone();
         match self.handles.iter_mut().filter(|h| h.is_finished()).next() {
             Some(h) => {
@@ -89,15 +101,40 @@ impl ParallelHandle {
     }
 }
 
-// pyo3 cant do python in multiple rust threads at a time. so gotta make sure only one is active at a time
-enum ParallelAction {
+#[derive(Debug)]
+enum ParallelActionSplit {
+    Rust(RustParallelAction),
+    Python(YTAction),
+}
+#[derive(Debug)]
+enum RustParallelAction {
 
 }
-impl ParallelAction {
+impl RustParallelAction {
     fn run(self, send: Sender<ContentHandlerAction>) {
         match self {
 
         }
+    }
+}
+#[derive(Debug)]
+pub enum ParallelAction {
+    YTAlbumSearch {
+        term: String,
+    }
+}
+impl Into<ParallelActionSplit> for ParallelAction {
+    fn into(self) -> ParallelActionSplit {
+        match self {
+            Self::YTAlbumSearch {term} => {
+                ParallelActionSplit::Python(YTAction::AlbumSearch {term})
+            }
+        }
+    }
+}
+impl Into<ContentHandlerAction> for ParallelAction {
+    fn into(self) -> ContentHandlerAction {
+        ContentHandlerAction::ParallelAction { action: self }
     }
 }
 
@@ -161,6 +198,9 @@ pub enum ContentHandlerAction {
     },
     PopContentStack,
     Actions(Vec<Self>),
+    ParallelAction {
+        action: ParallelAction,
+    },
     None,
 }
 impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
@@ -172,6 +212,7 @@ impl ContentHandlerAction {
     fn apply(self, ch: &mut ContentHandler) {
         self.dbg_log();
         match self {
+            Self::None => (),
             Self::LoadContentManager {songs, content_providers, loader_id} => {
                 let mut loader = ch.get_provider(loader_id).clone();
                 for s in songs {
@@ -219,7 +260,9 @@ impl ContentHandlerAction {
                     action.apply(ch);
                 }
             }
-            Self::None => (),
+            Self::ParallelAction { action } => {
+                ch.parallel_handle.run(action);
+            }
         }
     }
 

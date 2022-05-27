@@ -78,6 +78,9 @@ macro_rules! dbg {
 fn main() -> Result<()> {
     init_logger().expect("failed to init logger");
 
+    // yt_manager::test().unwrap();
+    // return Ok(());
+
     let hook = take_hook();
     set_hook(Box::new(move |info| {
         // create new Terminal if panic
