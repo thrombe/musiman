@@ -144,6 +144,11 @@ impl Into<ListState> for SelectedIndex {
         self.index
     }
 }
+impl<'a> Into<&'a mut ListState> for &'a mut SelectedIndex {
+    fn into(self) -> &'a mut ListState {
+        &mut self.index
+    }
+}
 impl SelectedIndex {
     pub fn new() -> Self {
         let mut state = ListState::default();
@@ -172,11 +177,17 @@ impl BrowserWidget {
 
     fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> bool {
         match key.code {
+            KeyCode::Char('d') => {
+                ch.debug_current();
+            }
             KeyCode::Char('g') => {
                 // self.options = ch.menu_for_selected();
             }
             KeyCode::Char('G') => {
                 ch.open_menu_for_current();
+            }
+            KeyCode::Char('E') => {
+                ch.open_edit_for_current();
             }
             KeyCode::Up => {
                 ch.decrement_selection();
@@ -195,7 +206,7 @@ impl BrowserWidget {
         true
     }
 
-    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, selected_index: SelectedIndex) {
+    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, selected_index: &mut SelectedIndex) {
         let messages = List::new(
                 self.options.iter()
                 .enumerate()
@@ -209,7 +220,7 @@ impl BrowserWidget {
         .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Rgb(200, 100, 0)))
         // .highlight_symbol("> ")
         ;
-        f.render_stateful_widget(messages, r, &mut selected_index.into());
+        f.render_stateful_widget(messages, r, selected_index.into());
     }
 }
 
@@ -281,6 +292,7 @@ impl PlayerWidget {
     }
 
     fn update(&mut self, ch: &mut ContentHandler) {
+        ch.poll_action();
         if ch.player.is_finished() {
             ch.next_song();
         }
@@ -469,7 +481,7 @@ impl App {
         Ok(())
     }
     
-    fn render<B: Backend>(&self, f: &mut Frame<B>) {
+    fn render<B: Backend>(&mut self, f: &mut Frame<B>) {
         let (status_rect, right_rect, left_rect) = {
             let mut chunks = Layout::default()
                 .direction(Direction::Vertical)

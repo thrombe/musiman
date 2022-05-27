@@ -8,7 +8,12 @@ use crate::{
 use crate::{
     content_handler::{
         ContentHandlerAction,
-    }
+    },
+    content_manager::ContentProviderID,
+    content_providers::{
+        ContentProvider,
+        ContentProviderType,
+    },
 };
 
 use pyo3::{
@@ -19,7 +24,7 @@ use pyo3::{
     },
     Py,
 };
-use serde;
+use serde::{self, Serialize, Deserialize};
 use serde_json;
 use anyhow::{Result, Context};
 use std::{
@@ -98,6 +103,11 @@ pub enum YTAction {
     },
     AlbumSearch {
         term: String,
+        add_to: ContentProviderID,
+    },
+    GetAlbum {
+        browse_id: String,
+        add_to: ContentProviderID,
     },
 }
 impl YTAction {
@@ -112,24 +122,57 @@ impl YTAction {
         match self {
             Self::GetSong {url} => {
                 let code = format!("
+                    def dbg_res():
+                        with open('config/temp/get_song.log', 'r') as f:
+                            res['data'] = f.read()
+                            res['found'] = True 
                     def f():
                         global res
                         ytdl_data = ytdl.extract_info(url='{url}', download=False)
                         res['data'] = json.dumps(ytdl_data, indent=4)
                         res['found'] = True
+                    f = dbg_res
                     handle = thread(target=f, args=())
                     handle.start()
                 ");
                 let code = fix_python_indentation(code);
                 py.run(&code, Some(globals), None)?;
             }
-            Self::AlbumSearch {term} => {
+            Self::AlbumSearch {term, ..} => {
                 let code = format!("
+                    def dbg_res():
+                        with open('config/temp/album_search.log', 'r') as f:
+                            res['data'] = f.read()
+                            res['found'] = True 
                     def f():
                         global res
                         data = ytmusic.search('{term}', filter='albums', limit=75, ignore_spelling=True)
                         res['data'] = json.dumps(data, indent=4)
                         res['found'] = True
+                    f = dbg_res
+                    handle = thread(target=f, args=())
+                    handle.start()
+                ");
+                let code = fix_python_indentation(code);
+                py.run(&code, Some(globals), None)?;
+            }
+            Self::GetAlbum {browse_id, ..} => {
+                let code = format!("
+                    def dbg_res():
+                        with open('config/temp/get_album.log', 'r') as f:
+                            res['data'] = f.read()
+                            res['found'] = True 
+                    def f():
+                        global res
+
+                        album_data = ytmusic.get_album('{browse_id}')
+                        playlist_id = album_data.get('playlistId', None)
+                        if playlist_id is None: playlist_id = album_data['audioPlaylistId']
+                        data = ytdl.extract_info(playlist_id, download=False) # // BAD: make another action just for playlist_id, and handle errors
+                        
+                        res['data'] = json.dumps(data, indent=4)
+                        res['found'] = True
+                    f = dbg_res
                     handle = thread(target=f, args=())
                     handle.start()
                 ");
@@ -141,7 +184,7 @@ impl YTAction {
     }
 
     fn resolve(&mut self, py: Python, pyd: &Py<PyAny>, _pyh: &mut PyHandel) -> Result<ContentHandlerAction> {
-        dbg!("resolving YTAction");
+        dbg!("resolving YTAction", &self);
         let globals = [("res", pyd)].into_py_dict(py);
         let pyd = py.eval("res['data']", Some(globals), None)?.extract::<Py<PyAny>>()?;
         let action = match self {
@@ -150,13 +193,60 @@ impl YTAction {
                 debug!("{res}");
                 todo!();
             }
-            Self::AlbumSearch {..} => {
+            Self::AlbumSearch {add_to, ..} => {
+                let res = pyd.extract::<String>(py)?;
+                // debug!("{res}");
+                let content_providers = serde_json::from_str::<Vec<Album>>(&res);
+                // dbg!(&content_providers);
+                let content_providers = content_providers?.into_iter().map(Into::into).collect();
+                // dbg!(&content_providers);
+                vec![
+                    ContentHandlerAction::LoadContentManager {
+                        songs: Default::default(),
+                        content_providers,
+                        loader_id: *add_to,
+                    },
+                    ContentHandlerAction::RefreshDisplayContent,
+                ].into()
+            }
+            Self::GetAlbum {add_to, ..} => {
                 let res = pyd.extract::<String>(py)?;
                 debug!("{res}");
-                ContentHandlerAction::None // TODO:
+                ContentHandlerAction::None
             }
         };
         Ok(action)
+    }
+}
+
+// https://serde.rs/attributes.html
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct Album {
+    title: Option<String>,
+    browse_id: Option<String>,
+    artists: Option<Vec<Option<AlbumArtist>>>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct AlbumArtist {
+    name: Option<String>,
+    id: Option<String>,
+}
+impl Into<ContentProvider> for Album {
+    fn into(self) -> ContentProvider {
+        let loaded = self.browse_id.is_none();
+        let t = if self.browse_id.is_some() {
+            ContentProviderType::Album {browse_id: self.browse_id.unwrap()}
+        } else {
+            ContentProviderType::Borked
+        };
+
+        ContentProvider::new(
+            self.title.unwrap().into(),
+            t,
+            loaded,
+        )
     }
 }
 
@@ -184,6 +274,16 @@ impl YTManager {
             receiver: a_receiver,
             thread,
         })
+    }
+
+    pub fn poll(&mut self) -> ContentHandlerAction {
+        match self.receiver.try_recv().ok() {
+            Some(a) => {
+                dbg!("action received");
+                a
+            },
+            None => ContentHandlerAction::None
+        }
     }
 
     pub fn run(&mut self, action: YTAction) -> Result<()> {
@@ -229,7 +329,9 @@ impl YTManager {
                                 Some(i) => {
                                     let mut a = actions.swap_remove(i);
                                     let action = a.action.resolve(py, &a.pyd, pyh)?;
+                                    dbg!("sending action");
                                     sender.send(action)?;
+                                    dbg!("action sent");
                                     }
                                 None => break,
                             }
@@ -266,7 +368,8 @@ fn fix_python_indentation(code: String) -> String {
 }
 
 // pub fn test() -> Result<()> {
-//     wierd_threading_test()
+//     wierd_threading_test()?;
+//     Ok(())
 // }
 // fn wierd_threading_test() -> Result<()> {
 //     pyo3::prepare_freethreaded_python();

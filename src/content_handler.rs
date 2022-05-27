@@ -16,6 +16,7 @@ use crate::{
         ContentProviderContentType,
         ContentProviderMenuOptions,
         ContentProviderType,
+        ContentProviderEditables,
     },
     image_handler::ImageHandler,
     editors::{
@@ -93,10 +94,13 @@ impl ParallelHandle {
         }
     }
 
-    fn poll(&mut self) -> ContentHandlerAction {
+    pub fn poll(&mut self) -> ContentHandlerAction {
         match self.receiver.try_recv().ok() {
-            Some(a) => a,
-            None => ContentHandlerAction::None
+            Some(a) => {
+                dbg!("action received");
+                a
+            },
+            None => self.yt_man.poll(),
         }
     }
 }
@@ -121,13 +125,27 @@ impl RustParallelAction {
 pub enum ParallelAction {
     YTAlbumSearch {
         term: String,
-    }
+        add_to: ContentProviderID,
+    },
+    YTGetAlbum {
+        browse_id: String,
+        add_to: ContentProviderID,
+    },
 }
 impl Into<ParallelActionSplit> for ParallelAction {
     fn into(self) -> ParallelActionSplit {
         match self {
-            Self::YTAlbumSearch {term} => {
-                ParallelActionSplit::Python(YTAction::AlbumSearch {term})
+            Self::YTAlbumSearch {term, add_to} => {
+                ParallelActionSplit::Python(YTAction::AlbumSearch {
+                    term,
+                    add_to,
+                })
+            }
+            Self::YTGetAlbum {browse_id, add_to} => {
+                ParallelActionSplit::Python(YTAction::GetAlbum {
+                    browse_id,
+                    add_to,
+                })
             }
         }
     }
@@ -190,6 +208,11 @@ pub enum ContentHandlerAction {
         cp: ContentProvider,
         new_cp_content_type: ContentProviderContentType,
     },
+    AddCPToCPAndContentStack {
+        id: ContentProviderID,
+        cp: ContentProvider,
+        new_cp_content_type: ContentProviderContentType,
+    },
     PushToContentStack {
         id: ContentProviderID,
     },
@@ -201,6 +224,7 @@ pub enum ContentHandlerAction {
     ParallelAction {
         action: ParallelAction,
     },
+    RefreshDisplayContent,
     None,
 }
 impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
@@ -243,7 +267,25 @@ impl ContentHandlerAction {
                 let loader = ch.get_provider_mut(id);
                 loader.add(loaded_id.into());
             }
+            Self::AddCPToCPAndContentStack {id, cp, new_cp_content_type} => {
+                let mut loaded_id: ContentProviderID = if id.is_temp() {
+                    ch.temp_content_providers.alloc(cp).into()
+                } else {
+                    ch.content_providers.alloc(cp).into()
+                };
+                loaded_id.set_content_type(new_cp_content_type);
+                let loader = ch.get_provider_mut(id);
+                loader.add(loaded_id.into());
+                ch.content_stack.push(loaded_id.into());
+
+                let loaded = ch.get_provider_mut(loaded_id);
+                let action = loaded.load(loaded_id);
+                action.apply(ch);
+
+                ch.app_action.queue(AppAction::UpdateDisplayContent { content: ch.get_content_names() })
+            }
             Self::PushToContentStack { id } => {
+                dbg!(id);
                 ch.content_stack.push(id.into());
             }
             Self::EnableTyping { content } => {
@@ -254,7 +296,6 @@ impl ContentHandlerAction {
             Self::PopContentStack => {
                 ch.back();
             }
-            // Self::SetSelectedIndex { index: _ } => {}
             Self::Actions(actions) => {
                 for action in actions {
                     action.apply(ch);
@@ -262,6 +303,9 @@ impl ContentHandlerAction {
             }
             Self::ParallelAction { action } => {
                 ch.parallel_handle.run(action);
+            }
+            Self::RefreshDisplayContent => {
+                ch.app_action.queue(AppAction::UpdateDisplayContent { content: ch.get_content_names() });
             }
         }
     }
@@ -332,6 +376,30 @@ impl ContentHandler {
         Self::new()
     }
 
+    pub fn debug_current(&self) {
+        dbg!(&self.content_stack);
+        let &id = self.content_stack.last().unwrap();
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::Song(id) => {
+                        let s = self.get_song(id);
+                        dbg!(s);
+                    }
+                    ID::ContentProvider(id) => {
+                        let cp = self.get_provider(id);
+                        dbg!(cp);
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
+
+    pub fn poll_action(&mut self) {
+        self.parallel_handle.poll().apply(self);
+    }
+
     pub fn enter_selected(&mut self) {
         let &id = self.content_stack.last().unwrap();
         match id {
@@ -378,7 +446,6 @@ impl ContentHandler {
                                 let cp = self.get_provider_mut(id);
                                 let action = cp.apply_selected_option(id);
                                 action.apply(self);
-                                self.back();
                             }
                             ContentProviderContentType::Edit(e) => { 
                                 let cp = self.get_provider_mut(id);
@@ -434,55 +501,89 @@ impl ContentHandler {
         }
     }
 
-    pub fn get_selected_index(&self) -> SelectedIndex {
+    pub fn get_selected_index(&mut self) -> &mut SelectedIndex {
         let &id = self.content_stack.last().unwrap();
         match id {
             GlobalContent::ID(id) => {
                 match id {
                     ID::Song(..) => {
-                        Default::default() // no need to save index for options
+                        // &mut Default::default() // no need to save index for options
+                        todo!()
                     }
                     ID::ContentProvider(id) => {
-                        let cp = self.get_provider(id);
+                        let cp = self.get_provider_mut(id);
                         let t = id.get_content_type();
                         cp.get_selected_index(t)
                     }
                 }
             }
             GlobalContent::Log | GlobalContent::Notifier => {
-                Default::default() // no need to save index
+                // &mut Default::default() // no need to save index
+                todo!()
             }
         }
     }
 
-    pub fn open_menu_for_current(&mut self) -> bool {
+    pub fn open_menu_for_current(&mut self) {
         let &id = self.content_stack.last().unwrap();
+        self.open_menu_for(id);
+    }
+
+    fn open_menu_for(&mut self, id: GlobalContent) {
         let id = match id {
             GlobalContent::ID(id) => GlobalContent::ID(
                 match id {
                     ID::Song(id) => ID::Song({
                         let s = self.get_song(id);
-                        if !s.has_menu() {return false}
+                        if !s.has_menu() {return}
                         let mut id = id;
                         id.t = SongContentType::Menu;
                         id
                     }),
                     ID::ContentProvider(mut id) => ID::ContentProvider({
                         let cp = self.get_provider(id);
-                        if !cp.has_menu() {return false}
+                        if !cp.has_menu() {return}
                         id.set_content_type(ContentProviderContentType::Menu);
                         id
                     }),
                 }
             ),
             GlobalContent::Log | GlobalContent::Notifier => {
-                return false
+                return
             }
         };
         
         self.content_stack.push(id);
         self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
-        true
+    }
+
+    pub fn open_edit_for_current(&mut self) {
+        let &id = self.content_stack.last().unwrap();
+        self.open_edit_for(id);
+    }
+
+    fn open_edit_for(&mut self, id: GlobalContent) {
+        let id = match id {
+            GlobalContent::ID(id) => GlobalContent::ID(
+                match id {
+                    ID::Song(..) => {
+                        todo!()
+                    },
+                    ID::ContentProvider(mut id) => ID::ContentProvider({
+                        let cp = self.get_provider(id);
+                        if !cp.has_editables() {return}
+                        id.set_content_type(ContentProviderContentType::Edit(ContentProviderEditables::None));
+                        id
+                    }),
+                }
+            ),
+            GlobalContent::Log | GlobalContent::Notifier => {
+                return
+            }
+        };
+        
+        self.content_stack.push(id);
+        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
     }
     
     pub fn open_menu_for_selected(&mut self) {
@@ -498,14 +599,29 @@ impl ContentHandler {
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
                         let id = cp.get_selected();
-                        self.content_stack.push(id.into()); // temporarily pushing it up the stack so the other function knows what to open the menu on
-                        if self.open_menu_for_current() {
-                            let id = self.content_stack.pop().unwrap();
-                            let _ = self.content_stack.pop().unwrap();
-                            self.content_stack.push(id);
-                        } else {
-                            let _ = self.content_stack.pop().unwrap();
-                        }
+                        self.open_menu_for(id.into());
+                    }
+                }
+            }
+            GlobalContent::Log | GlobalContent::Notifier => {
+                return
+            }
+        }
+    }
+
+    pub fn open_edit_for_selected(&mut self) {
+        let &id = self.content_stack.last().unwrap();
+        dbg!(&self.content_stack);
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::Song(..) => {
+                        todo!();
+                    }
+                    ID::ContentProvider(id) => {
+                        let cp = self.get_provider(id);
+                        let id = cp.get_selected();
+                        self.open_edit_for(id.into());
                     }
                 }
             }

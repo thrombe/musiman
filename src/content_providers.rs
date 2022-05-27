@@ -58,6 +58,17 @@ impl Default for ContentProviderContentType {
 }
 
 impl ContentProvider {
+    pub fn new(name: String, t: ContentProviderType, loaded: bool) -> Self {
+        Self {
+            providers: Default::default(),
+            songs: Default::default(),
+            name,
+            cp_type: t,
+            selected: Default::default(),
+            loaded,
+        }
+    }
+
     pub fn get_content_names(&self, t: ContentProviderContentType) -> DisplayContent {
         match t {
             ContentProviderContentType::Menu => {
@@ -189,6 +200,7 @@ impl ContentProvider {
     }
 
     pub fn has_editables(&self) -> bool {
+        dbg!(&self);
         match self.cp_type {
             ContentProviderType::YTExplorer {..} => true,
             _ => todo!(),
@@ -204,28 +216,37 @@ impl ContentProvider {
             ContentProviderMenuOptions::Main(o) => {
                 match o {
                     MainContentProviderMenuOptions::ADD_FILE_EXPLORER => {
-                        ContentHandlerAction::AddCPToCP {
-                            id: self_id,
-                            cp: Self::new_file_explorer(
-                                "/home/issac/daata/phon-data/.musi/IsBac/".to_owned(),
-                                "File Explorer: ".to_owned()
-                            ),
-                            new_cp_content_type: ContentProviderContentType::Normal,
-                        }
+                        vec![
+                            ContentHandlerAction::PopContentStack,
+                            ContentHandlerAction::AddCPToCPAndContentStack {
+                                id: self_id,
+                                cp: Self::new_file_explorer(
+                                    "/home/issac/daata/phon-data/.musi/IsBac/".to_owned(),
+                                    "File Explorer: ".to_owned()
+                                ),
+                                new_cp_content_type: ContentProviderContentType::Normal,
+                            },
+                        ].into()
                     }
                     MainContentProviderMenuOptions::ADD_QUEUE_PROVIDER => {
-                        ContentHandlerAction::AddCPToCP {
-                            id: self_id,
-                            cp: Self::new_queue_provider(),
-                            new_cp_content_type: ContentProviderContentType::Normal,
-                        }
+                        vec![
+                            ContentHandlerAction::PopContentStack,
+                            ContentHandlerAction::AddCPToCPAndContentStack {
+                                id: self_id,
+                                cp: Self::new_queue_provider(),
+                                new_cp_content_type: ContentProviderContentType::Normal,
+                            },
+                        ].into()
                     }
                     MainContentProviderMenuOptions::ADD_YT_EXPLORER => {
-                        ContentHandlerAction::AddCPToCP {
-                            id: self_id,
-                            cp: Self::new_yt_explorer(),
-                            new_cp_content_type: ContentProviderContentType::Edit(ContentProviderEditables::None),
-                        }
+                        vec![
+                            ContentHandlerAction::PopContentStack,
+                            ContentHandlerAction::AddCPToCPAndContentStack {
+                                id: self_id,
+                                cp: Self::new_yt_explorer(),
+                                new_cp_content_type: ContentProviderContentType::Normal,
+                            },
+                        ].into()
                     }
                     _ => todo!()
                 }
@@ -255,7 +276,7 @@ impl ContentProvider {
                                 vec![
                                     ContentHandlerAction::PushToContentStack { id }, // TODO: check if i called back() after coming out of typing mode
                                     ContentHandlerAction::EnableTyping { content: search_term.clone()},
-                                ].into()        
+                                ].into()
                             }
                             _ => panic!(),
                         }
@@ -290,12 +311,14 @@ impl ContentProvider {
                                         // self.loaded = false;
                                         id.set_content_type(ContentProviderContentType::Normal);
                                         return vec![
-                                            ContentHandlerAction::PopContentStack,
-                                            // ContentHandlerAction::PopContentStack,
-                                            // ContentHandlerAction::PushToContentStack { id },
+                                            ContentHandlerAction::PopContentStack, // typing
+                                            ContentHandlerAction::PopContentStack, // edit
                                             match search_type {
                                                 YTSearchType::Album => {
-                                                    ParallelAction::YTAlbumSearch {term: search_term.clone()}.into() // TODO: do this properly
+                                                    ParallelAction::YTAlbumSearch {
+                                                        term: search_term.clone(),
+                                                        add_to: id,
+                                                    }.into()
                                                 }
                                                 YTSearchType::Playlist => {
                                                     todo!()
@@ -366,7 +389,7 @@ impl ContentProvider {
                 search_type: YTSearchType::Album,
             },
             selected: Default::default(),
-            loaded: true,
+            loaded: false,
         }
     }
 
@@ -399,6 +422,21 @@ impl ContentProvider {
                 });
 
                 ContentHandlerAction::LoadContentManager {songs: s, content_providers: sp, loader_id: id}
+            }
+            ContentProviderType::YTExplorer { .. } => {
+                let mut id = id;
+                id.set_content_type(ContentProviderContentType::Edit(ContentProviderEditables::None));
+                vec![
+                    ContentHandlerAction::PushToContentStack { id },
+                ].into()
+            }
+            ContentProviderType::Album {browse_id} => {
+                vec![
+                    ParallelAction::YTGetAlbum {
+                        browse_id: browse_id.clone(),
+                        add_to: id,
+                    }.into(),
+                ].into()
             }
             _ => panic!()
         }
@@ -455,12 +493,12 @@ impl ContentProvider {
         }
     }
 
-    pub fn get_selected_index(&self, t: ContentProviderContentType) -> SelectedIndex {
-        if self.selected.contains_key(&t) {
-            self.selected.get(&t).unwrap().clone()
-        } else {
-            SelectedIndex::new()
+    pub fn get_selected_index(&mut self, t: ContentProviderContentType) -> &mut SelectedIndex {
+        if !self.selected.contains_key(&t) {
+            let i = SelectedIndex::new();
+            self.selected.insert(t, i);
         }
+        self.selected.get_mut(&t).unwrap()
     }
 
     pub fn selection_increment(&mut self, t: ContentProviderContentType) -> bool {
@@ -485,13 +523,17 @@ impl ContentProvider {
 
     /// ensure that index is within limits
     fn set_selected_index(&mut self, t: ContentProviderContentType, index: usize) {
-        let mut i = self.get_selected_index(t);
+        let i = self.get_selected_index(t);
         i.select(index);
-        self.selected.insert(t, i);    
     }
 
     fn get_raw_selected_index(&self, t: ContentProviderContentType) -> usize {
-        self.get_selected_index(t).selected_index()
+        let i = if !self.selected.contains_key(&t) {
+            SelectedIndex::new().selected_index()
+        } else {
+            self.selected.get(&t).unwrap().selected_index()
+        };
+        i
     }
 
     pub fn get_name(&self) -> &str {
@@ -627,7 +669,9 @@ pub enum ContentProviderType {
     Queue,
     YTArtist,
     LocalArtist,
-    Album, //??
+    Album {
+        browse_id: String,
+    },
     
     Playlists,
     Queues,
@@ -644,5 +688,6 @@ pub enum ContentProviderType {
     MainProvider,
     Seperator,
     Loading, // load the content manager in another thread and use this as placeholder and apply it when ready
+    Borked,
 }
 
