@@ -112,6 +112,7 @@ pub enum YTAction {
 }
 impl YTAction {
     fn run(&mut self, py: Python, pyd: &Py<PyAny>, pyh: &mut PyHandel) -> Result<()> {
+        dbg!(&self);
         let globals = [
             ("res", &*pyd),
             ("thread", &pyh.thread),
@@ -125,9 +126,8 @@ impl YTAction {
                     def dbg_res():
                         with open('config/temp/get_song.log', 'r') as f:
                             res['data'] = f.read()
-                            res['found'] = True 
+                            res['found'] = True
                     def f():
-                        global res
                         ytdl_data = ytdl.extract_info(url='{url}', download=False)
                         res['data'] = json.dumps(ytdl_data, indent=4)
                         res['found'] = True
@@ -143,9 +143,8 @@ impl YTAction {
                     def dbg_res():
                         with open('config/temp/album_search.log', 'r') as f:
                             res['data'] = f.read()
-                            res['found'] = True 
+                            res['found'] = True
                     def f():
-                        global res
                         data = ytmusic.search('{term}', filter='albums', limit=75, ignore_spelling=True)
                         res['data'] = json.dumps(data, indent=4)
                         res['found'] = True
@@ -158,13 +157,17 @@ impl YTAction {
             }
             Self::GetAlbum {browse_id, ..} => {
                 let code = format!("
+                    def try_catch(f):
+                        try: f()
+                        except Exception as e:
+                            import traceback
+                            res['error'] = traceback.format_exc()
+                            res['found'] = True
                     def dbg_res():
                         with open('config/temp/get_album.log', 'r') as f:
                             res['data'] = f.read()
-                            res['found'] = True 
-                    def f():
-                        global res
-
+                            res['found'] = True
+                    def get_data():
                         album_data = ytmusic.get_album('{browse_id}')
                         playlist_id = album_data.get('playlistId', None)
                         if playlist_id is None: playlist_id = album_data['audioPlaylistId']
@@ -172,8 +175,9 @@ impl YTAction {
                         
                         res['data'] = json.dumps(data, indent=4)
                         res['found'] = True
-                    f = dbg_res
-                    handle = thread(target=f, args=())
+                    f = get_data
+                    f = dbg_res # // dbg:
+                    handle = thread(target=try_catch, args=[f])
                     handle.start()
                 ");
                 let code = fix_python_indentation(code);
@@ -187,6 +191,8 @@ impl YTAction {
         dbg!("resolving YTAction", &self);
         let globals = [("res", pyd)].into_py_dict(py);
         let pyd = py.eval("res['data']", Some(globals), None)?.extract::<Py<PyAny>>()?;
+        let err = py.eval("str(res['error'])", Some(globals), None).unwrap().extract::<String>().unwrap();
+        debug!("{err}");
         let action = match self {
             Self::GetSong {..} => {
                 let res = pyd.extract::<String>(py)?;
@@ -287,6 +293,7 @@ impl YTManager {
     }
 
     pub fn run(&mut self, action: YTAction) -> Result<()> {
+        dbg!(&action);
         self.sender.send(action).ok().context("")
     }
 
@@ -306,7 +313,7 @@ impl YTManager {
                         // choosing the default value of a dict so that the new data can be inserted into this dict, and
                         // the memory location does not change. res = data changes the memory location something something
                         // but res['data'] = data does what i want
-                        let pyd = py.eval("{'data': None, 'found': False}", None, None)?.extract()?;
+                        let pyd = py.eval("{'data': None, 'found': False, 'error': None}", None, None)?.extract()?;
                         let entry = YTActionEntry {action: a, pyd };
                         actions.push(entry);
                         let a = actions.last_mut().unwrap();

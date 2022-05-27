@@ -57,13 +57,14 @@ pub use log::debug;
 #[macro_export]
 macro_rules! dbg {
     () => {
-        log::debug!("[{}:{}]", $crate::file!(), $crate::line!());
+        // log::debug!("[{}:{}]", file!(), line!());
+        log::debug!();
     };
     ($val:expr $(,)?) => {
         match $val {
             tmp => {
-                log::debug!("[{}:{}] {} = {:#?}",
-                    file!(), line!(), stringify!($val), &tmp);
+                // log::debug!("[{}:{}] {} = {:#?}", file!(), line!(), stringify!($val), &tmp);
+                log::debug!("{} = {:#?}", stringify!($val), &tmp);
                 tmp
             }
         }
@@ -146,9 +147,11 @@ fn init_logger() -> Result<()> {
     let file_config = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
-                "[{}] {}",
+                "[{}] [{}:{}] {}",
                 record.level(),
-                message
+                record.file().unwrap(),
+                record.line().unwrap(),
+                message,
             ))
         })
         .chain(fern::log_file(log_file)?);
