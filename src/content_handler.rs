@@ -40,6 +40,67 @@ use crate::{
 };
 use musiplayer::Player;
 
+use std::{
+    thread,
+    sync::mpsc::{
+        self,
+        Receiver,
+        Sender,
+    },
+};
+
+struct ParallelHandle {
+    handles: Vec<thread::JoinHandle<()>>,
+    receiver: Receiver<ContentHandlerAction>,
+    sender: Sender<ContentHandlerAction>,
+}
+impl Default for ParallelHandle {
+    fn default() -> Self {
+        let (sender, receiver) = mpsc::channel();
+        Self {
+            handles: Default::default(),
+            receiver,
+            sender,
+        }
+    }
+}
+impl ParallelHandle {
+    fn run(&mut self, action: ParallelAction) {
+        let sender = self.sender.clone();
+        match self.handles.iter_mut().filter(|h| h.is_finished()).next() {
+            Some(h) => {
+                let handle = thread::spawn(move || action.run(sender));
+                match std::mem::replace(h, handle).join() {
+                    Ok(()) => (),
+                    Err(e) => log::error!("{:#?}", e),
+                }
+            }
+            None => {
+                self.handles.push(thread::spawn(move || action.run(sender)));
+            }
+        }
+    }
+
+    fn poll(&mut self) -> ContentHandlerAction {
+        match self.receiver.try_recv().ok() {
+            Some(a) => a,
+            None => ContentHandlerAction::None
+        }
+    }
+}
+
+// pyo3 cant do python in multiple rust threads at a time. so gotta make sure only one is active at a time
+enum ParallelAction {
+
+}
+impl ParallelAction {
+    fn run(self, send: Sender<ContentHandlerAction>) {
+        match self {
+
+        }
+    }
+}
+
 pub struct ContentHandler {
     // TODO: maybe try having just one ContentManager of enum of Song, ContentProvider, etc
     songs: ContentManager<Song, SongID>,
@@ -58,6 +119,7 @@ pub struct ContentHandler {
     active_queue: Option<ContentProviderID>, // can also be a bunch of queues? like -> play all artists
     active_song: Option<SongID>,
 
+    parallel_handle: ParallelHandle,
     app_action: AppAction,
 }
 
@@ -217,6 +279,7 @@ impl ContentHandler {
             logger: Logger::new(),
             active_queue: None,
             active_song: None,
+            parallel_handle: Default::default(),
             app_action: Default::default(),
         }
     }

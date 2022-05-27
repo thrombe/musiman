@@ -73,35 +73,9 @@ macro_rules! dbg {
     };
 }
 
-fn test() {
-    // let ytm = yt_manager::YTManager::new()?;
-
-    // use std::thread;
-    // let t_handle = thread::spawn(|| {
-    //     ytm.search_song().unwrap();
-    // });
-    // t_handle.join().unwrap();
-
-    // use tokio::runtime::Runtime;
-    // let rt = Runtime::new().unwrap();
-    // let handle = rt.handle();
-    // let t_handle = handle.spawn_blocking(|| {
-    //     println!("now running on a worker thread");
-    // });
-
-    // use tokio::task;
-    // let j_handle = task::spawn_blocking(|| -> Result<()>{
-    //     println!("now running on a worker thread");
-    //     ytm.search_song()
-    // });
-    
-    // return Ok(());
-}
-
 // #[tokio::main]
 // async fn main() -> Result<()> {
 fn main() -> Result<()> {
-
     init_logger().expect("failed to init logger");
 
     let hook = take_hook();

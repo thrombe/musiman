@@ -1,3 +1,10 @@
+
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+};
+
 use pyo3::{
     types::{IntoPyDict, PyAny},
     Py,
@@ -6,18 +13,19 @@ use serde;
 use serde_json;
 use anyhow::{Result, Context};
 
-
+#[derive(Clone)]
 pub struct YTManager {
     ytmusic: Py<PyAny>,
     ytdl: Py<PyAny>,
     json: Py<PyAny>,
+    thread: Py<PyAny>,
 }
 
 impl YTManager {
-    pub fn new() -> Result<Self> {
-        pyo3::prepare_freethreaded_python();
-        let p = pyo3::Python::acquire_gil(); 
-        let py = p.python();
+    pub fn new(py: pyo3::Python) -> Result<Self> {
+        // pyo3::prepare_freethreaded_python();
+        // let p = pyo3::Python::acquire_gil(); 
+        // let py = p.python();
         let headers_path = "/home/issac/0Git/musimanager/db/headers_auth.json";
         let ytmusic = py
         .import("ytmusicapi")?
@@ -47,43 +55,204 @@ impl YTManager {
         // println!("{}", &code);
         let ytdl = py.import("yt_dlp")?
         .getattr("YoutubeDL")?
-        .call1((py.eval(
-            &code
-            , None, None)?,))?
+        .call1((py.eval(&code, None, None)?,))?
         .extract()?;
         let json = py
         .import("json")?
+        .extract()?;
+        let thread = py.import("threading")?
+        .getattr("Thread")?
         .extract()?;
 
         Ok(Self {
             ytmusic,
             ytdl,
             json,
+            thread,
         })
     }
 
-    pub fn search_song(&self) -> Result<()> {
-        let p = pyo3::Python::acquire_gil();
-        let py = p.python();
-        let s = self.ytdl
+    // pub fn search_song(&self, py: pyo3::Python, key: &str) -> Result<()> {
+    //     // let p = pyo3::Python::acquire_gil();
+    //     // let py = p.python();
+    //     let s = self.ytdl
+    //     .getattr(py, "extract_info")?
+    //     .call1(py, (key,))?
+    //     .extract::<Py<PyAny>>(py)?;
+    //     let dumps = self.json
+    //     .getattr(py, "dumps")?;
+    //     let locals = [("s", s), ("dumps", dumps)].into_py_dict(py);
+    //     let s = py.eval("dumps(list(s.keys()), indent=4)", None, Some(locals))?
+    //     .extract::<String>()?;
+    //     // println!("{}", &s);
+    //     // let s = serde_json::from_str::<serde_json::Value>(&s);
+    //     debug!("{s}");
+    //     Ok(())
+    // }
+
+    pub fn search_song(&self, py: pyo3::Python, key: &str) -> Result<Py<PyAny>> {
+        // let p = pyo3::Python::acquire_gil();
+        // let py = p.python();
+        let f = py.None();
+        let extract_info = self.ytdl
         .getattr(py, "extract_info")?
-        .call1(py, ("AjesoBGztF8",))?
+        // .call1(py, (key,))?
         .extract::<Py<PyAny>>(py)?;
         let dumps = self.json
         .getattr(py, "dumps")?;
-        let locals = [("s", s), ("dumps", dumps)].into_py_dict(py);
-        let s = py.eval("dumps(list(s.keys()), indent=4)", None, Some(locals))?
-        .extract::<String>()?;
-        println!("{}", &s);
+        let globals = [
+            (stringify!(extract_info), extract_info),
+            (stringify!(dumps), dumps),
+            (stringify!(f), f.clone()),
+            (stringify!(key), pyo3::types::PyString::new(py, key).into()),
+            ].into_py_dict(py);
+        // let s = py.eval("dumps(list(s.keys()), indent=4)", Some(globals), None)?
+        // .extract::<String>()?;
+        // println!("{}", &s);
         // let s = serde_json::from_str::<serde_json::Value>(&s);
-        // dbg!(s);
-        Ok(())
+        let code = "
+def func():
+    return dumps(extract_info(key), indent=4)
+f = func
+        ";
+        py.run(code, Some(globals), None)?;
+        Ok(f)
+    }
+
+    // pub fn search_song(&self) -> Result<()> {
+    //     pyo3::Python::with_gil(|py| -> Result<()> {
+    //         let s = self.ytdl
+    //         .getattr(py, "extract_info")?
+    //         .call1(py, ("AjesoBGztF8",))?
+    //         .extract::<Py<PyAny>>(py)?;
+    //         let dumps = self.json
+    //         .getattr(py, "dumps")?;
+    //         let locals = [("s", s), ("dumps", dumps)].into_py_dict(py);
+    //         let s = py.eval("dumps(list(s.keys()), indent=4)", None, Some(locals))?
+    //         .extract::<String>()?;
+    //         // println!("{}", &s);
+    //         // let s = serde_json::from_str::<serde_json::Value>(&s);
+    //         debug!("{s}");
+    //         Ok(())
+    //     })
+    // }
+}
+
+enum Faction {
+    GetSong {
+        key: String,
     }
 }
 
+fn testing_python_threading_action() -> Result<()> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+
+    std::thread::spawn(move || -> Result<()> {
+        pyo3::prepare_freethreaded_python();
+        let p = pyo3::Python::acquire_gil(); 
+        let py = p.python();
+        let ytman = YTManager::new(py)?;
+        let mut actions = vec![];
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs_f64(0.1));
+            match receiver.try_recv() {
+                Ok(a) => {
+                    actions.push(a);
+                    let a = actions.last().unwrap();
+                    match a {
+                        Faction::GetSong { key } => { // "AjesoBGztF8"
+                            let f = ytman.search_song(py, key)?;
+                        }
+                    }
+                }
+                Err(_) => {
+                    for a in &actions {
+                        match a {
+                            Faction::GetSong { key } => {
+
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+
+    Ok(())
+}
+
+fn wierd_threading_test() -> Result<()> {
+    pyo3::prepare_freethreaded_python();
+    let p = pyo3::Python::acquire_gil(); 
+    let py = p.python();
+    let thread = py.import("threading")?
+    .getattr("Thread")?
+    .extract()?;
+    let enu = py.None();
+    let globals = [("thread", thread), ("enu", enu)].into_py_dict(py);
+    let code = "
+enu = None
+def f():
+    global enu
+    print('ininnu')
+    import time
+    time.sleep(2)
+    enu = 42
+handle = thread(target=f, args=())
+handle.start()
+thread = handle
+print('enu', enu)
+    ";
+    py.run(code, Some(globals), None)?;
+    let code = "
+thread.join()
+print('from other run', enu)
+    ";
+    py.run(code, Some(globals), None)?;
+    
 
 
 
+
+    Ok(())
+}
+
+pub fn test() -> Result<()> {
+    return wierd_threading_test();
+
+    // use std::thread;
+    // let t_handle1 = thread::spawn(move || -> Result<()> {
+    //     let ytm = YTManager::new()?;
+    //     dbg!("t1");
+    //     ytm.search_song().unwrap();
+    //     Ok(())
+    // });
+    // let t_handle2 = thread::spawn(move || -> Result<()> {
+    //     let ytm = YTManager::new()?;
+    //     dbg!("t2");
+    //     ytm.search_song().unwrap();
+    //     Ok(())
+    // });
+    // dbg!("main");
+    // t_handle1.join().unwrap().unwrap();
+    // t_handle2.join().unwrap().unwrap();
+
+    // use tokio::runtime::Runtime;
+    // let rt = Runtime::new().unwrap();
+    // let handle = rt.handle();
+    // let t_handle = handle.spawn_blocking(|| {
+    //     println!("now running on a worker thread");
+    // });
+
+    // use tokio::task;
+    // let j_handle = task::spawn_blocking(|| -> Result<()>{
+    //     println!("now running on a worker thread");
+    //     ytm.search_song()
+    // });
+    
+    return Ok(());
+}
 
 
 
