@@ -108,7 +108,7 @@ pub enum YTAction {
     },
     AlbumSearch {
         term: String,
-        add_to: ContentProviderID,
+        loader: ContentProviderID,
     },
     GetAlbumPlaylistId {
         browse_id: String,
@@ -227,7 +227,7 @@ impl YTAction {
                 debug!("{res}");
                 todo!();
             }
-            Self::AlbumSearch {add_to, ..} => {
+            Self::AlbumSearch {loader, ..} => {
                 let res = pyd.extract::<String>(py)?;
                 // debug!("{res}");
                 let content_providers = serde_json::from_str::<Vec<YTMusicAlbumSearchAlbum>>(&res);
@@ -238,7 +238,7 @@ impl YTAction {
                     ContentHandlerAction::LoadContentProvider {
                         songs: Default::default(),
                         content_providers,
-                        loader_id: *add_to,
+                        loader_id: *loader,
                     },
                     ContentHandlerAction::RefreshDisplayContent,
                 ].into()

@@ -73,11 +73,11 @@ impl Default for ParallelHandle {
 }
 impl ParallelHandle {
     fn run(&mut self, action: ParallelAction) {
-        let action = match action.into() {
-            ParallelActionSplit::Python(a) => {
+        let action = match action {
+            ParallelAction::Python(a) => {
                 return self.yt_man.run(a).unwrap();
             }
-            ParallelActionSplit::Rust(a) => a,
+            ParallelAction::Rust(a) => a,
         };
         let sender = self.sender.clone();
         match self.handles.iter_mut().filter(|h| h.is_finished()).next() {
@@ -106,12 +106,7 @@ impl ParallelHandle {
 }
 
 #[derive(Debug)]
-enum ParallelActionSplit {
-    Rust(RustParallelAction),
-    Python(YTAction),
-}
-#[derive(Debug)]
-enum RustParallelAction {
+pub enum RustParallelAction {
 
 }
 impl RustParallelAction {
@@ -123,46 +118,22 @@ impl RustParallelAction {
 }
 #[derive(Debug)]
 pub enum ParallelAction {
-    YTAlbumSearch {
-        term: String,
-        add_to: ContentProviderID,
-    },
-    YTGetPlaylist {
-        playlist_id: String,
-        loader: ContentProviderID,
-    },
-    YTGetAlbumPlaylistId {
-        browse_id: String,
-        loader: ContentProviderID,
+    Rust(RustParallelAction),
+    Python(YTAction),
+}
+impl Into<ParallelAction> for YTAction {
+    fn into(self) -> ParallelAction {
+        ParallelAction::Python(self)
     }
 }
-impl Into<ParallelActionSplit> for ParallelAction {
-    fn into(self) -> ParallelActionSplit {
-        match self {
-            Self::YTAlbumSearch {term, add_to} => {
-                ParallelActionSplit::Python(YTAction::AlbumSearch {
-                    term,
-                    add_to,
-                })
-            }
-            Self::YTGetAlbumPlaylistId {browse_id, loader} => {
-                ParallelActionSplit::Python(YTAction::GetAlbumPlaylistId {
-                    browse_id,
-                    loader,
-                })
-            }
-            Self::YTGetPlaylist {playlist_id, loader: add_to} => {
-                ParallelActionSplit::Python(YTAction::GetPlaylist {
-                    playlist_id,
-                    loader: add_to,
-                })
-            }
-        }
+impl Into<ParallelAction> for RustParallelAction {
+    fn into(self) -> ParallelAction {
+        ParallelAction::Rust(self)
     }
 }
-impl Into<ContentHandlerAction> for ParallelAction {
-    fn into(self) -> ContentHandlerAction {
-        ContentHandlerAction::ParallelAction { action: self }
+impl<T: Into<ParallelAction>> From<T> for ContentHandlerAction {
+    fn from(a: T) -> Self {
+        Self::ParallelAction { action: a.into() }
     }
 }
 
@@ -243,6 +214,18 @@ pub enum ContentHandlerAction {
 impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
     fn into(self) -> ContentHandlerAction {
         ContentHandlerAction::Actions(self)
+    }
+}
+impl Into<ContentHandlerAction> for Option<ContentHandlerAction> {
+    fn into(self) -> ContentHandlerAction {
+        match self {
+            Self::Some(a) => {
+                a
+            }
+            None => {
+                ContentHandlerAction::None
+            }
+        }
     }
 }
 impl ContentHandlerAction {

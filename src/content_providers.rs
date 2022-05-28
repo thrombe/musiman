@@ -20,7 +20,9 @@ use crate::{
     content_handler::{
         DisplayContent,
         ContentHandlerAction,
-        ParallelAction,
+    },
+    yt_manager::{
+        YTAction,
     },
     content_manager::{
         ContentProviderID,
@@ -315,9 +317,9 @@ impl ContentProvider {
                                             ContentHandlerAction::PopContentStack, // edit
                                             match search_type {
                                                 YTSearchType::Album => {
-                                                    ParallelAction::YTAlbumSearch {
+                                                    YTAction::AlbumSearch {
                                                         term: search_term.clone(),
-                                                        add_to: id,
+                                                        loader: id,
                                                     }.into()
                                                 }
                                                 YTSearchType::Playlist => {
@@ -432,7 +434,7 @@ impl ContentProvider {
             }
             ContentProviderType::YTAlbum {browse_id} => {
                 vec![
-                    ParallelAction::YTGetAlbumPlaylistId {
+                    YTAction::GetAlbumPlaylistId {
                         browse_id: browse_id.clone(),
                         loader: id,
                     }.into(),
@@ -440,7 +442,7 @@ impl ContentProvider {
             }
             ContentProviderType::YTAudioPlaylist { playlist_id }  | ContentProviderType::YTPlaylist { playlist_id }=> {
                 vec![
-                    ParallelAction::YTGetPlaylist {
+                    YTAction::GetPlaylist {
                         playlist_id: playlist_id.to_owned(),
                         loader: id,
                     }.into()
