@@ -329,7 +329,10 @@ impl ContentProvider {
                                                     todo!()
                                                 }
                                                 YTSearchType::Video => {
-                                                    todo!()
+                                                    YTAction::VideoSearch {
+                                                        term: search_term.clone(),
+                                                        loader: id,
+                                                    }.into()
                                                 }
                                             }
                                         ].into();

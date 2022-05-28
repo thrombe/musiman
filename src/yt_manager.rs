@@ -106,7 +106,13 @@ pub enum YTAction {
     GetSong {
         url: String,
     },
+    // TODO: more search actions
+    // https://ytmusicapi.readthedocs.io/en/latest/reference.html#ytmusicapi.YTMusic.search
     AlbumSearch {
+        term: String,
+        loader: ContentProviderID,
+    },
+    VideoSearch {
         term: String,
         loader: ContentProviderID,
     },
@@ -154,7 +160,7 @@ impl YTAction {
                     get_data = dbg_data # // dbg:
                 ")
             }
-            Self::AlbumSearch {term, ..} => {
+            Self::AlbumSearch {term, ..} => { // TODO: allow to choose limit and ignore_spelling from ui too
                 format!("
                     def dbg_data():
                         with open('config/temp/album_search.log', 'r') as f:
@@ -162,6 +168,19 @@ impl YTAction {
                         return data
                     def get_data():
                         data = ytmusic.search('{term}', filter='albums', limit=75, ignore_spelling=True)
+                        data = json.dumps(data, indent=4)
+                        return data
+                    get_data = dbg_data # // dbg:
+                ")
+            }
+            Self::VideoSearch {term, ..} => {
+                format!("
+                    def dbg_data():
+                        with open('config/temp/video_search.log', 'r') as f:
+                            data = f.read()
+                        return data
+                    def get_data():
+                        data = ytmusic.search('{term}', filter='videos', limit=75, ignore_spelling=True)
                         data = json.dumps(data, indent=4)
                         return data
                     get_data = dbg_data # // dbg:
@@ -230,14 +249,28 @@ impl YTAction {
             Self::AlbumSearch {loader, ..} => {
                 let res = pyd.extract::<String>(py)?;
                 // debug!("{res}");
-                let content_providers = serde_json::from_str::<Vec<YTMusicAlbumSearchAlbum>>(&res);
-                // dbg!(&content_providers);
-                let content_providers = content_providers?.into_iter().map(Into::into).collect();
+                let albums = serde_json::from_str::<Vec<YTMusicSearchAlbum>>(&res);
+                // dbg!(&albums);
+                let content_providers = albums?.into_iter().map(Into::into).collect();
                 // dbg!(&content_providers);
                 vec![
                     ContentHandlerAction::LoadContentProvider {
                         songs: Default::default(),
                         content_providers,
+                        loader_id: *loader,
+                    },
+                    ContentHandlerAction::RefreshDisplayContent,
+                ].into()
+            }
+            Self::VideoSearch {loader, ..} => {
+                let res = pyd.extract::<String>(py)?;
+                debug!("{res}");
+                let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
+                let songs = videos.into_iter().map(Into::into).collect();
+                vec![
+                    ContentHandlerAction::LoadContentProvider {
+                        songs,
+                        content_providers: Default::default(),
                         loader_id: *loader,
                     },
                     ContentHandlerAction::RefreshDisplayContent,
@@ -276,18 +309,18 @@ impl YTAction {
 // https://serde.rs/attributes.html
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all(deserialize = "camelCase"))]
-struct YTMusicAlbumSearchAlbum {
+struct YTMusicSearchAlbum {
     title: Option<String>,
     browse_id: Option<String>,
-    artists: Option<Vec<Option<YTMusicAlbumArtist>>>,
+    artists: Option<Vec<Option<YTMusicSearchArtist>>>,
 }
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all(deserialize = "camelCase"))]
-struct YTMusicAlbumArtist {
+struct YTMusicSearchArtist {
     name: Option<String>,
     id: Option<String>,
 }
-impl Into<ContentProvider> for YTMusicAlbumSearchAlbum {
+impl Into<ContentProvider> for YTMusicSearchAlbum {
     fn into(self) -> ContentProvider {
         let loaded = self.browse_id.is_none();
         let t = if self.browse_id.is_some() {
@@ -311,7 +344,7 @@ impl Into<ContentProvider> for YTMusicAlbumSearchAlbum {
 #[serde(rename_all(deserialize = "camelCase"))]
 struct YTMusicAlbum {
     title: Option<String>,
-    artists: Option<Vec<Option<YTMusicAlbumArtist>>>,
+    artists: Option<Vec<Option<YTMusicSearchArtist>>>,
     audio_playlist_id: Option<String>,
     playlist_id: Option<String>,
     // tracks from here are not as useful as the ones from the playlist_id
@@ -362,6 +395,24 @@ impl Into<Song> for YTDLPlaylistSong {
             metadata: SongMetadata::YT {
                 title: self.title.unwrap(),
                 id: self.id.unwrap(),
+            }
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct YTMusicSearchVideo {
+    title: Option<String>,
+    video_id: Option<String>,
+    artists: Vec<YTMusicSearchArtist>,
+}
+impl Into<Song> for YTMusicSearchVideo {
+    fn into(self) -> Song {
+        Song {
+            metadata: SongMetadata::YT {
+                title: self.title.unwrap(),
+                id: self.video_id.unwrap(),
             }
         }
     }
