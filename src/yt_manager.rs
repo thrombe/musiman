@@ -3,6 +3,7 @@
 use crate::{
     dbg,
     debug,
+    error,
 };
 
 use crate::{
@@ -13,6 +14,10 @@ use crate::{
     content_providers::{
         ContentProvider,
         ContentProviderType,
+    },
+    song::{
+        Song,
+        SongMetadata,
     },
 };
 
@@ -105,9 +110,13 @@ pub enum YTAction {
         term: String,
         add_to: ContentProviderID,
     },
-    GetAlbum {
+    GetAlbumPlaylistId {
         browse_id: String,
-        add_to: ContentProviderID,
+        loader: ContentProviderID,
+    },
+    GetPlaylist {
+        playlist_id: String,
+        loader: ContentProviderID,
     },
 }
 impl YTAction {
@@ -120,70 +129,86 @@ impl YTAction {
             ("ytmusic", &pyh.ytmusic),
             ("json", &pyh.json),
         ].into_py_dict(py);
-        match self {
+        " #// ? template
+        def dbg_data():
+            with open('config/temp/{file_name}.log', 'r') as f:
+                data = f.read()
+            return data
+        def get_data():
+            {code_here}
+            data = json.dumps(ytdl_data, indent=4)
+            return data
+        get_data = dbg_data # // dbg:
+        ";
+        let code = match self {
             Self::GetSong {url} => {
-                let code = format!("
-                    def dbg_res():
+                format!("
+                    def dbg_data():
                         with open('config/temp/get_song.log', 'r') as f:
-                            res['data'] = f.read()
-                            res['found'] = True
-                    def f():
+                            data = f.read()
+                        return data
+                    def get_data():
                         ytdl_data = ytdl.extract_info(url='{url}', download=False)
-                        res['data'] = json.dumps(ytdl_data, indent=4)
-                        res['found'] = True
-                    f = dbg_res
-                    handle = thread(target=f, args=())
-                    handle.start()
-                ");
-                let code = fix_python_indentation(code);
-                py.run(&code, Some(globals), None)?;
+                        data = json.dumps(ytdl_data, indent=4)
+                        return data
+                    get_data = dbg_data # // dbg:
+                ")
             }
             Self::AlbumSearch {term, ..} => {
-                let code = format!("
-                    def dbg_res():
+                format!("
+                    def dbg_data():
                         with open('config/temp/album_search.log', 'r') as f:
-                            res['data'] = f.read()
-                            res['found'] = True
-                    def f():
+                            data = f.read()
+                        return data
+                    def get_data():
                         data = ytmusic.search('{term}', filter='albums', limit=75, ignore_spelling=True)
-                        res['data'] = json.dumps(data, indent=4)
-                        res['found'] = True
-                    f = dbg_res
-                    handle = thread(target=f, args=())
-                    handle.start()
-                ");
-                let code = fix_python_indentation(code);
-                py.run(&code, Some(globals), None)?;
+                        data = json.dumps(data, indent=4)
+                        return data
+                    get_data = dbg_data # // dbg:
+                ")
             }
-            Self::GetAlbum {browse_id, ..} => {
-                let code = format!("
-                    def try_catch(f):
-                        try: f()
-                        except Exception as e:
-                            import traceback
-                            res['error'] = traceback.format_exc()
-                            res['found'] = True
-                    def dbg_res():
-                        with open('config/temp/get_album.log', 'r') as f:
-                            res['data'] = f.read()
-                            res['found'] = True
+            Self::GetAlbumPlaylistId {browse_id, ..} => {
+                format!("
+                    def dbg_data():
+                        with open('config/temp/get_album_playlist_id.log', 'r') as f:
+                            data = f.read()
+                        return data
                     def get_data():
                         album_data = ytmusic.get_album('{browse_id}')
-                        playlist_id = album_data.get('playlistId', None)
-                        if playlist_id is None: playlist_id = album_data['audioPlaylistId']
-                        data = ytdl.extract_info(playlist_id, download=False) # // BAD: make another action just for playlist_id, and handle errors
-                        
-                        res['data'] = json.dumps(data, indent=4)
-                        res['found'] = True
-                    f = get_data
-                    f = dbg_res # // dbg:
-                    handle = thread(target=try_catch, args=[f])
-                    handle.start()
-                ");
-                let code = fix_python_indentation(code);
-                py.run(&code, Some(globals), None)?;
+                        data = json.dumps(album_data, indent=4)
+                        return data
+                    get_data = dbg_data # // dbg:
+                ")
             }
-        }
+            Self::GetPlaylist {playlist_id, ..} => {
+                format!("
+                    def dbg_data():
+                        with open('config/temp/get_playlist.log', 'r') as f:
+                            data = f.read()
+                        return data
+                    def get_data():
+                        data = ytdl.extract_info('{playlist_id}', download=False)
+                        data = json.dumps(data, indent=4)
+                        return data
+                    get_data = dbg_data # // dbg:
+                ")
+            }
+        };
+        let try_catch = fix_python_indentation("
+            def try_catch(f):
+                try:
+                    res['data'] = f()
+                except Exception as e:
+                    import traceback
+                    res['error'] = traceback.format_exc()
+                res['found'] = True
+            handle = thread(target=try_catch, args=[get_data])
+            handle.start()
+        ");
+        let code = fix_python_indentation(&code);
+        let code = append_python_code(code, try_catch);
+        debug!("{code}");
+        py.run(&code, Some(globals), None)?;
         Ok(())
     }
 
@@ -191,8 +216,11 @@ impl YTAction {
         dbg!("resolving YTAction", &self);
         let globals = [("res", pyd)].into_py_dict(py);
         let pyd = py.eval("res['data']", Some(globals), None)?.extract::<Py<PyAny>>()?;
-        let err = py.eval("str(res['error'])", Some(globals), None).unwrap().extract::<String>().unwrap();
-        debug!("{err}");
+        if py.eval("res['error'] != None", Some(globals), None)?.extract::<bool>()? {
+            let err = py.eval("res['error']", Some(globals), None)?.extract::<String>()?;
+            error!("{err}");
+            return Ok(ContentHandlerAction::None); // ?
+        }
         let action = match self {
             Self::GetSong {..} => {
                 let res = pyd.extract::<String>(py)?;
@@ -202,12 +230,12 @@ impl YTAction {
             Self::AlbumSearch {add_to, ..} => {
                 let res = pyd.extract::<String>(py)?;
                 // debug!("{res}");
-                let content_providers = serde_json::from_str::<Vec<Album>>(&res);
+                let content_providers = serde_json::from_str::<Vec<YTMusicAlbumSearchAlbum>>(&res);
                 // dbg!(&content_providers);
                 let content_providers = content_providers?.into_iter().map(Into::into).collect();
                 // dbg!(&content_providers);
                 vec![
-                    ContentHandlerAction::LoadContentManager {
+                    ContentHandlerAction::LoadContentProvider {
                         songs: Default::default(),
                         content_providers,
                         loader_id: *add_to,
@@ -215,10 +243,30 @@ impl YTAction {
                     ContentHandlerAction::RefreshDisplayContent,
                 ].into()
             }
-            Self::GetAlbum {add_to, ..} => {
+            Self::GetAlbumPlaylistId {loader, ..} => {
+                // the data we get from here have songs not necessarily the music videos
+                // but the data we get from the playlistId has the music videos
+                // (music videos being the songs with album art rather than the ones with dances and stuff)
                 let res = pyd.extract::<String>(py)?;
                 debug!("{res}");
-                ContentHandlerAction::None
+                let ytm_album = serde_json::from_str::<YTMusicAlbum>(&res)?;
+                ContentHandlerAction::ReplaceContentProvider {
+                    old_id: *loader,
+                    cp: ytm_album.into(),
+                }
+            }
+            Self::GetPlaylist {loader, ..} => {
+                let res = pyd.extract::<String>(py)?;
+                debug!("{res}");
+                let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
+                vec![
+                    ContentHandlerAction::LoadContentProvider {
+                        loader_id: *loader,
+                        songs: playlist.songs.into_iter().map(Into::into).collect(),
+                        content_providers: Default::default(),
+                    },
+                    ContentHandlerAction::RefreshDisplayContent,
+                ].into()
             }
         };
         Ok(action)
@@ -228,23 +276,26 @@ impl YTAction {
 // https://serde.rs/attributes.html
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all(deserialize = "camelCase"))]
-struct Album {
+struct YTMusicAlbumSearchAlbum {
     title: Option<String>,
     browse_id: Option<String>,
-    artists: Option<Vec<Option<AlbumArtist>>>,
+    artists: Option<Vec<Option<YTMusicAlbumArtist>>>,
 }
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all(deserialize = "camelCase"))]
-struct AlbumArtist {
+struct YTMusicAlbumArtist {
     name: Option<String>,
     id: Option<String>,
 }
-impl Into<ContentProvider> for Album {
+impl Into<ContentProvider> for YTMusicAlbumSearchAlbum {
     fn into(self) -> ContentProvider {
         let loaded = self.browse_id.is_none();
         let t = if self.browse_id.is_some() {
-            ContentProviderType::Album {browse_id: self.browse_id.unwrap()}
+            ContentProviderType::YTAlbum {
+                browse_id: self.browse_id.unwrap(),
+            }
         } else {
+            error!("borked data: {self:#?}");
             ContentProviderType::Borked
         };
 
@@ -253,6 +304,66 @@ impl Into<ContentProvider> for Album {
             t,
             loaded,
         )
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct YTMusicAlbum {
+    title: Option<String>,
+    artists: Option<Vec<Option<YTMusicAlbumArtist>>>,
+    audio_playlist_id: Option<String>,
+    playlist_id: Option<String>,
+    // tracks from here are not as useful as the ones from the playlist_id
+}
+impl Into<ContentProvider> for YTMusicAlbum {
+    fn into(self) -> ContentProvider {
+        let mut loaded = false;
+        let t = if self.audio_playlist_id.is_some() {
+            ContentProviderType::YTAudioPlaylist {
+                playlist_id: self.audio_playlist_id.unwrap(),
+            }
+        } else if self.playlist_id.is_some() {
+            ContentProviderType::YTPlaylist {
+                playlist_id: self.playlist_id.unwrap(),
+            }
+        } else {
+            error!("borked data: {self:#?}");
+            loaded = true;
+            ContentProviderType::Borked
+        };
+
+        ContentProvider::new(
+            self.title.unwrap().into(),
+            t,
+            loaded,
+        )
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct YTDLPlaylist {
+    title: Option<String>,
+    #[serde(rename(deserialize = "entries"))]
+    songs: Vec<YTDLPlaylistSong>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct YTDLPlaylistSong {
+    id: Option<String>,
+    title: Option<String>,
+    uploader: Option<String>,
+    channel_id: Option<String>,
+}
+impl Into<Song> for YTDLPlaylistSong {
+    fn into(self) -> Song {
+        Song {
+            metadata: SongMetadata::YT {
+                title: self.title.unwrap(),
+                id: self.id.unwrap(),
+            }
+        }
     }
 }
 
@@ -356,7 +467,7 @@ impl YTManager {
 }
 
 /// assumes all lines have consistent exclusive spaces/tabs
-fn fix_python_indentation(code: String) -> String {
+fn fix_python_indentation(code: &str) -> String {
     let line = match code.lines().find(|line| !line.trim().is_empty()) {
         Some(line) => line,
         None => return "".to_owned(),
@@ -372,6 +483,10 @@ fn fix_python_indentation(code: String) -> String {
     )
     .map(|line| String::from(line) + "\n")
     .collect()
+}
+
+fn append_python_code(a: String, b: String) -> String {
+    a.lines().chain(b.lines()).collect::<Vec<_>>().join("\n")
 }
 
 // pub fn test() -> Result<()> {

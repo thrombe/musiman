@@ -421,7 +421,7 @@ impl ContentProvider {
                     }
                 });
 
-                ContentHandlerAction::LoadContentManager {songs: s, content_providers: sp, loader_id: id}
+                ContentHandlerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id}
             }
             ContentProviderType::YTExplorer { .. } => {
                 let mut id = id;
@@ -430,12 +430,20 @@ impl ContentProvider {
                     ContentHandlerAction::PushToContentStack { id },
                 ].into()
             }
-            ContentProviderType::Album {browse_id} => {
+            ContentProviderType::YTAlbum {browse_id} => {
                 vec![
-                    ParallelAction::YTGetAlbum {
+                    ParallelAction::YTGetAlbumPlaylistId {
                         browse_id: browse_id.clone(),
-                        add_to: id,
+                        loader: id,
                     }.into(),
+                ].into()
+            }
+            ContentProviderType::YTAudioPlaylist { playlist_id }  | ContentProviderType::YTPlaylist { playlist_id }=> {
+                vec![
+                    ParallelAction::YTGetPlaylist {
+                        playlist_id: playlist_id.to_owned(),
+                        loader: id,
+                    }.into()
                 ].into()
             }
             _ => panic!()
@@ -665,11 +673,17 @@ impl Into<ContentProviderEditables> for YTSearchType {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContentProviderType {
-    Playlist,
+    YTPlaylist {
+        playlist_id: String,
+    },
+    YTAudioPlaylist {
+        playlist_id: String,
+    },
+    LocalPlaylist,
     Queue,
     YTArtist,
     LocalArtist,
-    Album {
+    YTAlbum {
         browse_id: String,
     },
     

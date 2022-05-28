@@ -127,10 +127,14 @@ pub enum ParallelAction {
         term: String,
         add_to: ContentProviderID,
     },
-    YTGetAlbum {
-        browse_id: String,
-        add_to: ContentProviderID,
+    YTGetPlaylist {
+        playlist_id: String,
+        loader: ContentProviderID,
     },
+    YTGetAlbumPlaylistId {
+        browse_id: String,
+        loader: ContentProviderID,
+    }
 }
 impl Into<ParallelActionSplit> for ParallelAction {
     fn into(self) -> ParallelActionSplit {
@@ -141,10 +145,16 @@ impl Into<ParallelActionSplit> for ParallelAction {
                     add_to,
                 })
             }
-            Self::YTGetAlbum {browse_id, add_to} => {
-                ParallelActionSplit::Python(YTAction::GetAlbum {
+            Self::YTGetAlbumPlaylistId {browse_id, loader} => {
+                ParallelActionSplit::Python(YTAction::GetAlbumPlaylistId {
                     browse_id,
-                    add_to,
+                    loader,
+                })
+            }
+            Self::YTGetPlaylist {playlist_id, loader: add_to} => {
+                ParallelActionSplit::Python(YTAction::GetPlaylist {
+                    playlist_id,
+                    loader: add_to,
                 })
             }
         }
@@ -194,9 +204,12 @@ impl Logger {
 
 #[derive(Debug)]
 pub enum ContentHandlerAction {
-    LoadContentManager {
+    LoadContentProvider {
         songs: Vec<Song>,
         content_providers: Vec<ContentProvider>,
+        loader_id: ContentProviderID,
+    },
+    TryLoadContentProvider {
         loader_id: ContentProviderID,
     },
     ReplaceContentProvider {
@@ -237,7 +250,12 @@ impl ContentHandlerAction {
         self.dbg_log();
         match self {
             Self::None => (),
-            Self::LoadContentManager {songs, content_providers, loader_id} => {
+            Self::TryLoadContentProvider {loader_id} => {
+                let loaded = ch.get_provider_mut(loader_id);
+                let action = loaded.load(loader_id);
+                action.apply(ch);
+            }
+            Self::LoadContentProvider {songs, content_providers, loader_id} => {
                 let mut loader = ch.get_provider(loader_id).clone();
                 for s in songs {
                     let ci = ch.songs.alloc(s);
@@ -254,8 +272,10 @@ impl ContentHandlerAction {
                 let old_loader = ch.get_provider_mut(loader_id);
                 *old_loader = loader;        
             }
-            Self::ReplaceContentProvider {..} => {
-                todo!()
+            Self::ReplaceContentProvider {old_id, cp} => {
+                let p = ch.get_provider_mut(old_id);
+                *p = cp;
+                Self::TryLoadContentProvider { loader_id: old_id }.apply(ch);
             }
             Self::AddCPToCP {id, cp, new_cp_content_type} => {
                 let mut loaded_id: ContentProviderID = if id.is_temp() {
@@ -266,6 +286,8 @@ impl ContentHandlerAction {
                 loaded_id.set_content_type(new_cp_content_type);
                 let loader = ch.get_provider_mut(id);
                 loader.add(loaded_id.into());
+
+                Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch);
             }
             Self::AddCPToCPAndContentStack {id, cp, new_cp_content_type} => {
                 let mut loaded_id: ContentProviderID = if id.is_temp() {
@@ -278,9 +300,7 @@ impl ContentHandlerAction {
                 loader.add(loaded_id.into());
                 ch.content_stack.push(loaded_id.into());
 
-                let loaded = ch.get_provider_mut(loaded_id);
-                let action = loaded.load(loaded_id);
-                action.apply(ch);
+                Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch);
 
                 ch.app_action.queue(AppAction::UpdateDisplayContent { content: ch.get_content_names() })
             }
@@ -437,8 +457,6 @@ impl ContentHandler {
                                     }
                                     ID::ContentProvider(id) => {
                                         self.content_stack.push(id.into());
-                                        let action = self.get_provider_mut(id).load(id);
-                                        action.apply(self)
                                     }
                                 }
                             }

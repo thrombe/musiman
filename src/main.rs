@@ -50,7 +50,10 @@ use log;
 use anyhow::Result;
 // use tokio;
 
-pub use log::debug;
+pub use log::{
+    debug,
+    error,
+};
 
 /// dbg macro but eprintln replaced with log::debug
 /// https://github.com/rust-lang/rust/blob/3bcce82d14b85996c134420ac3c6790a410f7842/library/std/src/macros.rs#L287-L309

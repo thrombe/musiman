@@ -27,17 +27,18 @@ use crate::{
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Song {
-    metadata: SongMetadata,
+    pub metadata: SongMetadata,
     // stype: SongType,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-enum SongMetadata {
+pub enum SongMetadata {
     YT {
-        key: String,
+        title: String,
+        id: String,
     },
     YTFile {
-        key: String,
+        id: String,
         path: String,
     },
     TaggedFile {
@@ -51,6 +52,7 @@ enum SongMetadata {
         path: String,
     },
     Seperator,
+    Borked,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -113,7 +115,6 @@ impl Song {
         }
     }
 
-    // TODO: temporary implimentation
     pub fn get_name(&self) -> &str {
         match &self.metadata {
             SongMetadata::TaggedFile { title, .. } => {
@@ -121,6 +122,9 @@ impl Song {
             }
             SongMetadata::UntaggedFile { path } => {
                 path.rsplit_terminator("/").next().unwrap()
+            }
+            SongMetadata::YT {title, ..} => {
+                title
             }
             _ => panic!()
         }
@@ -184,8 +188,8 @@ impl Song {
             SongMetadata::YTFile { path , ..} => {
                 SongPath::LocalPath(path.into())
             }
-            SongMetadata::YT { key } => {
-                SongPath::YTKey(key.into())
+            SongMetadata::YT { id, .. } => {
+                SongPath::YTKey(id.into())
             }
             _ => panic!()
         }
