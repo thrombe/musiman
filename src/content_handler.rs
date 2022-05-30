@@ -30,8 +30,6 @@ use crate::{
         ContentManager,
         ContentProviderID,
         GlobalContent,
-        PersistentContentID,
-        TemporaryContentID,
         ID,
     },
     ui::{
@@ -72,7 +70,7 @@ impl Default for ParallelHandle {
     }
 }
 impl ParallelHandle {
-    fn run(&mut self, action: ParallelAction) {
+    fn run(&mut self, action: ParallelAction) { // TODO: use threadpool crate instead of creating threads as they are required
         let action = match action {
             ParallelAction::Python(a) => {
                 return self.yt_man.run(a).unwrap();
@@ -140,8 +138,7 @@ impl<T: Into<ParallelAction>> From<T> for ContentHandlerAction {
 pub struct ContentHandler {
     // TODO: maybe try having just one ContentManager of enum of Song, ContentProvider, etc
     songs: ContentManager<Song, SongID>,
-    content_providers: ContentManager<ContentProvider, PersistentContentID>,
-    temp_content_providers: ContentManager<ContentProvider, TemporaryContentID>,
+    content_providers: ContentManager<ContentProvider, ContentProviderID>,
     db_handler: DBHandler,
 
     content_stack: Vec<GlobalContent>,
@@ -198,7 +195,7 @@ pub enum ContentHandlerAction {
         new_cp_content_type: ContentProviderContentType,
     },
     PushToContentStack {
-        id: ContentProviderID,
+        id: GlobalContent,
     },
     EnableTyping {
         content: String,
@@ -229,7 +226,7 @@ impl Into<ContentHandlerAction> for Option<ContentHandlerAction> {
     }
 }
 impl ContentHandlerAction {
-    fn apply(self, ch: &mut ContentHandler) {
+    pub fn apply(self, ch: &mut ContentHandler) {
         self.dbg_log();
         match self {
             Self::None => (),
@@ -241,15 +238,11 @@ impl ContentHandlerAction {
             Self::LoadContentProvider {songs, content_providers, loader_id} => {
                 let mut loader = ch.get_provider(loader_id).clone();
                 for s in songs {
-                    let ci = ch.songs.alloc(s);
-                    loader.songs.push(ci.into());
+                    let ci = ch.alloc_song(s);
+                    loader.songs.push(ci);
                 }
                 for cp in content_providers {
-                    let id = if loader_id.is_temp() {
-                        ch.temp_content_providers.alloc(cp).into()
-                    } else {
-                        ch.content_providers.alloc(cp).into()
-                    };
+                    let id = ch.alloc_content_provider(cp);
                     loader.providers.push(id);
                 }
                 let old_loader = ch.get_provider_mut(loader_id);
@@ -261,11 +254,7 @@ impl ContentHandlerAction {
                 Self::TryLoadContentProvider { loader_id: old_id }.apply(ch);
             }
             Self::AddCPToCP {id, cp, new_cp_content_type} => {
-                let mut loaded_id: ContentProviderID = if id.is_temp() {
-                    ch.temp_content_providers.alloc(cp).into()
-                } else {
-                    ch.content_providers.alloc(cp).into()
-                };
+                let mut loaded_id = ch.alloc_content_provider(cp);
                 loaded_id.set_content_type(new_cp_content_type);
                 let loader = ch.get_provider_mut(id);
                 loader.add(loaded_id.into());
@@ -273,15 +262,13 @@ impl ContentHandlerAction {
                 Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch);
             }
             Self::AddCPToCPAndContentStack {id, cp, new_cp_content_type} => {
-                let mut loaded_id: ContentProviderID = if id.is_temp() {
-                    ch.temp_content_providers.alloc(cp).into()
-                } else {
-                    ch.content_providers.alloc(cp).into()
-                };
+                let mut loaded_id = ch.alloc_content_provider(cp);
                 loaded_id.set_content_type(new_cp_content_type);
                 let loader = ch.get_provider_mut(id);
                 loader.add(loaded_id.into());
+
                 ch.content_stack.push(loaded_id.into());
+                ch.register(loaded_id.into());
 
                 Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch);
 
@@ -290,6 +277,13 @@ impl ContentHandlerAction {
             Self::PushToContentStack { id } => {
                 dbg!(id);
                 ch.content_stack.push(id.into());
+                ch.register(id.into());
+                match id {
+                    GlobalContent::ID(ID::ContentProvider(id)) => {
+                        Self::TryLoadContentProvider { loader_id: id }.apply(ch);
+                    }
+                    _ => (),
+                }
             }
             Self::EnableTyping { content } => {
                 ch.app_action.queue(
@@ -297,7 +291,11 @@ impl ContentHandlerAction {
                 );
             }
             Self::PopContentStack => {
-                ch.back();
+                if ch.content_stack.len() > 1 {
+                    let id = ch.content_stack.pop().unwrap();
+                    ch.unregister(id.into());
+                    Self::RefreshDisplayContent.apply(ch);
+                }
             }
             Self::Actions(actions) => {
                 for action in actions {
@@ -350,20 +348,71 @@ pub enum MenuOptions {
 }
 
 impl ContentHandler {
+    pub fn alloc_song(&mut self, s: Song) -> SongID {
+        self.songs.alloc(s)
+    }
+
+    pub fn alloc_content_provider(&mut self, cp: ContentProvider) -> ContentProviderID {
+        self.content_providers.alloc(cp)
+    }
+
+    pub fn register(&mut self, id: GlobalContent) {
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::Song(id) => {
+                        self.songs.register(id);
+                    }
+                    ID::ContentProvider(id) => {
+                        self.content_providers.register(id);
+                    }
+                }
+            }
+            GlobalContent::Log | GlobalContent::Notifier => (),
+        }
+    }
+    
+    pub fn unregister(&mut self, id: GlobalContent) {
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::Song(id) => {
+                        let _ = self.songs.unregister(id);
+                    }
+                    ID::ContentProvider(id) => {
+                        let cp = self.content_providers.unregister(id);
+                        match cp {
+                            Some(cp) => {
+                                for s_id in cp.songs {
+                                    let _ = self.unregister(s_id.into());
+                                }
+                                for cp_id in cp.providers {
+                                    let _ = self.unregister(cp_id.into());
+                                }
+                            }
+                            None => (),
+                        }
+                    }
+                }
+            }
+            GlobalContent::Log | GlobalContent::Notifier => (),
+        }
+    }
+}
+
+impl ContentHandler {
     pub fn new() -> Self {
         let dbh = DBHandler::try_load();
-        let cp = ContentManager::new();
-        let mut tcp = ContentManager::new();
-        let main_ci = tcp.alloc(ContentProvider::new_main_provider());
+        let mut cp = ContentManager::new();
+        let main_ci = cp.alloc(ContentProvider::new_main_provider());
         Self {
             songs: ContentManager::new(),
             content_providers: cp,
-            temp_content_providers: tcp,
             db_handler: dbh,
             content_stack: vec![main_ci.into()],
             yanker: Yanker::new(),
             edit_manager: EditManager::new(),
-            image_handler: ImageHandler {},
+            image_handler: Default::default(),
             player: Player::new(),
             notifier: Notifier::new(),
             logger: Logger::new(),
@@ -380,6 +429,7 @@ impl ContentHandler {
     }
 
     pub fn debug_current(&self) {
+        dbg!(&self.content_providers);
         dbg!(&self.content_stack);
         let &id = self.content_stack.last().unwrap();
         match id {
@@ -416,7 +466,6 @@ impl ContentHandler {
                                 // let opt = opts[index]; // TODO: track with edit manager
                                 // let action = s.apply_option(opt);
                                 // action.apply(self);
-                                self.back();
                                 todo!()
                             }
                             SongContentType::Edit => {
@@ -439,7 +488,7 @@ impl ContentHandler {
                                         self.set_queue(id);
                                     }
                                     ID::ContentProvider(id) => {
-                                        self.content_stack.push(id.into());
+                                        ContentHandlerAction::PushToContentStack { id: id.into() }.apply(self);
                                     }
                                 }
                             }
@@ -462,16 +511,6 @@ impl ContentHandler {
             }
         }
         self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
-    }
-
-    pub fn back(&mut self) {
-        // TODO: should also delete a few kinds of content
-        // maybe use refrence counting to yeet the content without a identifier
-
-        if self.content_stack.len() > 1 {
-            self.content_stack.pop().unwrap();
-            self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
-        }
     }
 
     pub fn get_content_names(&self) -> Vec<String> {
@@ -554,7 +593,7 @@ impl ContentHandler {
             }
         };
         
-        self.content_stack.push(id);
+        ContentHandlerAction::PushToContentStack { id: id.into() }.apply(self);
         self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
     }
 
@@ -583,7 +622,7 @@ impl ContentHandler {
             }
         };
         
-        self.content_stack.push(id);
+        ContentHandlerAction::PushToContentStack { id: id.into() }.apply(self);
         self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
     }
     
@@ -633,25 +672,11 @@ impl ContentHandler {
     }
 
     fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
-        match id {
-            ContentProviderID::PersistentContent {id, ..} => {
-                self.content_providers.get(id).unwrap()
-            }
-            ContentProviderID::TemporaryContent {id, ..} => {
-                self.temp_content_providers.get(id).unwrap()
-            }
-        }
+        self.content_providers.get(id).unwrap()
     }
 
     fn get_provider_mut(&mut self, id: ContentProviderID) -> &mut ContentProvider {
-        match id {
-            ContentProviderID::PersistentContent {id, .. } => {
-                self.content_providers.get_mut(id).unwrap()
-            }
-            ContentProviderID::TemporaryContent {id, ..} => {
-                self.temp_content_providers.get_mut(id).unwrap()
-            }
-        }
+        self.content_providers.get_mut(id).unwrap()
     }
 
     fn get_song(&self, id: SongID) -> &Song {
@@ -692,10 +717,7 @@ impl ContentHandler {
     pub fn toggle_song_pause(&mut self) {
         self.player.toggle_pause().unwrap();
     }
-    fn get_mut_queue(&mut self) -> Option<&mut ContentProvider> {
-        self.active_queue.map(|id| self.get_provider_mut(id))
-    }
-    pub fn next_song(&mut self) {
+    pub fn next_song(&mut self) { // FIX: browsing around changes the next song instead of choosing the song next to the current song
         debug!("trying to play next");
         let id = match self.active_queue {
             Some(id) => id,
@@ -704,7 +726,7 @@ impl ContentHandler {
         if !self.increment_selection_on(id.into()) {
             return
         }        
-        let q = self.get_mut_queue().unwrap(); //can't fail as id exists
+        let q = self.get_provider_mut(id);
         let song_id = q.get_selected();
         if let ID::Song(id) = song_id {
             self.play_song(id);
@@ -719,7 +741,7 @@ impl ContentHandler {
         if !self.increment_selection_on(id.into()) {
             return
         }        
-        let q = self.get_mut_queue().unwrap(); //can't fail as id exists      
+        let q = self.get_provider_mut(id);
         let song_id = q.get_selected();
         if let ID::Song(id) = song_id {
             self.play_song(id);

@@ -48,7 +48,10 @@ use crossterm::{
 use anyhow::Result;
 
 use crate::{
-    content_handler::ContentHandler,
+    content_handler::{
+        ContentHandler,
+        ContentHandlerAction,
+    },
 };
 
 
@@ -199,7 +202,7 @@ impl BrowserWidget {
                 ch.enter_selected();
             }
             KeyCode::Left => {
-                ch.back();
+                ContentHandlerAction::PopContentStack.apply(ch);
             }
             _ => return false,
         }
@@ -410,7 +413,7 @@ impl App {
                     match key.code {
                         KeyCode::Esc => {
                             self.state = AppState::Browser; // TODO: should this be a stack too?
-                            self.content_handler.back();
+                            ContentHandlerAction::PopContentStack.apply(&mut self.content_handler);
                         }
                         KeyCode::Char(c) => {
                             self.input.insert(self.input_cursor_pos, c);

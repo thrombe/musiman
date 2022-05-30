@@ -269,14 +269,14 @@ impl ContentProvider {
                 id.set_content_type(ContentProviderContentType::Edit(e.into()));
                 match e {
                     YTExplorerEditables::SEARCH_TYPE => {
-                        ContentHandlerAction::PushToContentStack { id }
+                        ContentHandlerAction::PushToContentStack { id: id.into() }
                     }
                     YTExplorerEditables::SEARCH_TERM => {
                         self.set_selected_index(id.get_content_type(), index);
                         match &mut self.cp_type {
                             ContentProviderType::YTExplorer { search_term , ..} => {
                                 vec![
-                                    ContentHandlerAction::PushToContentStack { id }, // TODO: check if i called back() after coming out of typing mode
+                                    ContentHandlerAction::PushToContentStack { id: id.into() }, // TODO: check if i called back() after coming out of typing mode
                                     ContentHandlerAction::EnableTyping { content: search_term.clone()},
                                 ].into()
                             }
@@ -432,7 +432,7 @@ impl ContentProvider {
                 let mut id = id;
                 id.set_content_type(ContentProviderContentType::Edit(ContentProviderEditables::None));
                 vec![
-                    ContentHandlerAction::PushToContentStack { id },
+                    ContentHandlerAction::PushToContentStack { id: id.into() },
                 ].into()
             }
             ContentProviderType::YTAlbum {browse_id} => {

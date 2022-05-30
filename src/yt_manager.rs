@@ -102,7 +102,7 @@ impl PyHandel {
 
 // pyo3 cant do python in multiple rust threads at a time. so gotta make sure only one is active at a time
 #[derive(Debug)]
-pub enum YTAction {
+pub enum YTAction { // TODO: use cow for strings in actions?
     GetSong {
         url: String,
     },
@@ -427,7 +427,7 @@ pub struct YTActionEntry {
 pub struct YTManager {
     sender: Sender<YTAction>,
     receiver: Receiver<ContentHandlerAction>,
-    thread: JoinHandle<Result<()>>,
+    thread: JoinHandle<Result<()>>, // FIX: a crash in this thread silently kills the thread without communication
 }
 
 impl YTManager {

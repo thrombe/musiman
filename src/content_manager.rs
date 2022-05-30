@@ -39,27 +39,19 @@ to_from_content_id!(SongID, Song);
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PersistentContentID {
+pub struct ContentProviderID {
     id: ContentID<ContentProvider>,
+    t: ContentProviderContentType,
 }
-impl PersistentContentID {
+impl ContentProviderID {
     fn from_id(id: ContentID<ContentProvider>) -> Self {
-        Self { id }
+        Self {
+            id,
+            t: Default::default(),
+        }
     }
 }
-to_from_content_id!(PersistentContentID, ContentProvider);
-
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TemporaryContentID {
-    id: ContentID<ContentProvider>,
-}
-impl TemporaryContentID {
-    fn from_id(id: ContentID<ContentProvider>) -> Self {
-        Self { id }
-    }
-}
-to_from_content_id!(TemporaryContentID, ContentProvider);
+to_from_content_id!(ContentProviderID, ContentProvider);
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,73 +64,21 @@ impl From<SongID> for ID {
         Self::Song(id)
     }
 }
-impl<T> From<T> for ID
-where T: Into<ContentProviderID>
-{
-    fn from(id: T) -> Self {
-        Self::ContentProvider(id.into())
+impl From<ContentProviderID> for ID {
+    fn from(id: ContentProviderID) -> Self {
+        Self::ContentProvider(id)
     }
 }
 
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ContentProviderID {
-    PersistentContent{
-        id: PersistentContentID,
-        t: ContentProviderContentType,
-    },
-    TemporaryContent {
-        id: TemporaryContentID,
-        t: ContentProviderContentType,
-    },
-}
 impl ContentProviderID {
     pub fn get_content_type(self) -> ContentProviderContentType {
-        match self {
-            Self::PersistentContent {t, ..} => {
-                t
-            }
-            Self::TemporaryContent {t, ..} => {
-                t
-            }
-        }
+        self.t
     }
 
     pub fn set_content_type(&mut self, new_t: ContentProviderContentType) {
-        match self {
-            Self::PersistentContent {t, ..} => {
-                *t = new_t;
-            }
-            Self::TemporaryContent {t, ..} => {
-                *t = new_t;
-            }
-        }
-    }    
-
-    pub fn is_temp(&self) -> bool {
-        match self {
-            Self::TemporaryContent {..} => true,
-            Self::PersistentContent {..} => false,
-        }
+        self.t = new_t;
     }
 }
-impl From<PersistentContentID> for ContentProviderID {
-    fn from(id: PersistentContentID) -> Self {
-        Self::PersistentContent {
-            id,
-            t: Default::default(),
-        }
-    }
-}
-impl From<TemporaryContentID> for ContentProviderID {
-    fn from(id: TemporaryContentID) -> Self {
-        Self::TemporaryContent {
-            id,
-            t: Default::default()
-        }
-    }
-}
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GlobalContent {
@@ -155,6 +95,7 @@ where T: Into<ID>
 }
 
 
+#[derive(Debug)]
 pub struct ContentManager<T, P> {
     items: Vec<Option<ContentEntry<T>>>,
     
@@ -166,7 +107,9 @@ pub struct ContentManager<T, P> {
 }
 
 impl<T, P> ContentManager<T, P>
-where T: Clone, P: From<ContentID<T>> + Into<ContentID<T>>
+    where
+        T: Clone,
+        P: From<ContentID<T>> + Into<ContentID<T>>
 {
     pub fn new() -> Self {
         Self {
@@ -177,8 +120,8 @@ where T: Clone, P: From<ContentID<T>> + Into<ContentID<T>>
         }
     }
 
-    pub fn dealloc(&mut self, content_identifier: P) -> Option<T> {
-        let id: ContentID<T> = content_identifier.into();
+    fn dealloc(&mut self, id: P) -> Option<T> {
+        let id: ContentID<T> = id.into();
         self.generation += 1;
         self.empty_indices.push(id.index);
 
@@ -188,16 +131,16 @@ where T: Clone, P: From<ContentID<T>> + Into<ContentID<T>>
         }
     }
 
-    pub fn get(&self, content_identifier: P) -> Option<&T> {
-        let id: ContentID<T> = content_identifier.into();
+    pub fn get(&self, id: P) -> Option<&T> {
+        let id: ContentID<T> = id.into();
         match self.items.get(id.index) {
             Some(Some(e)) =>  Some(&e.val),
             _ => None,
         }
     }
 
-    pub fn get_mut(&mut self, content_identifier: P) -> Option<&mut T> {
-        let id: ContentID<T> = content_identifier.into();
+    pub fn get_mut(&mut self, id: P) -> Option<&mut T> {
+        let id: ContentID<T> = id.into();
         match self.items.get_mut(id.index) {
             Some(Some(e)) => Some(&mut e.val),
             _ => None,
@@ -218,12 +161,41 @@ where T: Clone, P: From<ContentID<T>> + Into<ContentID<T>>
         }
     }
 
+    pub fn register(&mut self, id: P) {
+        let id: ContentID<_> = id.into();
+        match self.items.get_mut(id.index) {
+            Some(Some(e)) => {
+                e.id_counter += 1;
+            }
+            _ => panic!("cant register if its not there"),
+        }
+    } 
+
+    pub fn unregister(&mut self, id: P) -> Option<T> {
+        let id: ContentID<_> = id.into();
+        match self.items.get_mut(id.index) {
+            Some(Some(e)) => {
+                e.id_counter -= 1;
+                if e.id_counter == 0 {
+                    self.dealloc(id.into())
+                } else {
+                    None
+                }
+            }
+            _ => panic!("cant unregister if its not there"),
+        }
+    }
+
     /// panics if index > len
     fn set(&mut self, item: T, index: usize) -> P {
         if index < self.items.len() {
             self.generation += 1;
         }
-        self.items.insert(index, Some(ContentEntry {val: item, generation: self.generation}));
+        self.items.insert(index, Some(ContentEntry {
+            val: item,
+            generation: self.generation,
+            id_counter: 1,
+        }));
         P::from(ContentID {
             index,
             generation: self.generation,
@@ -232,9 +204,11 @@ where T: Clone, P: From<ContentID<T>> + Into<ContentID<T>>
     }
 }
 
+#[derive(Debug)]
 struct ContentEntry<T> {
     val: T,
     generation: u64,
+    id_counter: u32,
 }
 
 // TODO: maybe impliment some RC to auto yeet unneeded content
