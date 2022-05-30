@@ -7,7 +7,7 @@ mod song;
 mod content_providers;
 mod content_handler;
 mod content_manager;
-mod image_handler;
+mod image;
 mod ui;
 mod editors;
 mod db_handler;

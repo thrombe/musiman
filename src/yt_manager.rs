@@ -127,7 +127,7 @@ pub enum YTAction { // TODO: use cow for strings in actions?
 }
 impl YTAction {
     fn run(&mut self, py: Python, pyd: &Py<PyAny>, pyh: &mut PyHandel) -> Result<()> {
-        dbg!(&self);
+        dbg!("running ytaction", &self);
         let globals = [
             ("res", &*pyd),
             ("thread", &pyh.thread),

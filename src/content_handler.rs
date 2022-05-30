@@ -18,7 +18,7 @@ use crate::{
         ContentProviderType,
         ContentProviderEditables,
     },
-    image_handler::ImageHandler,
+    image::ImageHandler,
     editors::{
         Yanker,
         EditManager,
@@ -144,7 +144,7 @@ pub struct ContentHandler {
     content_stack: Vec<GlobalContent>,
     yanker: Yanker,
     edit_manager: EditManager,
-    image_handler: ImageHandler,
+    pub image_handler: ImageHandler,
     pub player: Player,
     notifier: Notifier,
     logger: Logger,

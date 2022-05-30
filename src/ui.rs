@@ -507,6 +507,10 @@ impl App {
         self.status_bar.render(f, status_rect);
         self.player_widget.render(f, right_rect);
         self.browser_widget.render(f, left_rect, self.content_handler.get_selected_index());
+        
+        self.content_handler.image_handler.set_offset(right_rect.x + 1, right_rect.y as i16 + 1);
+        self.content_handler.image_handler.set_size(Some(right_rect.width as u32 - 2), Some(right_rect.height as u32 - 2));
+        self.content_handler.image_handler.maybe_print();
 
         match self.state {
             AppState::Typing => {
