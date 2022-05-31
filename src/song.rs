@@ -5,9 +5,11 @@ use crate::{
     debug,
 };
 
+use image::DynamicImage;
 use lofty::{
     self,
-    AudioFile, Accessor,
+    AudioFile,
+    Accessor,
 };
 use anyhow::{
     Result,
@@ -175,6 +177,33 @@ impl Song {
         Ok(Self {
             metadata: SongMetadata::UntaggedFile {path},
         })
+    }
+
+    pub fn get_art(&self) -> Result<DynamicImage> {
+        match &self.metadata {
+            SongMetadata::TaggedFile { path, ..} => {
+                let tf = lofty::read_from_path(&path, true)?;
+                let tags = tf.primary_tag().unwrap(); // its a tagged image tho it may still crash if user does something fishy
+                let pics = tags.pictures();
+                if pics.len() >= 1 {
+                    Ok(
+                        image::io::Reader::new(
+                            std::io::Cursor::new(
+                                pics[0].data().to_owned()
+                            )
+                        )
+                        .with_guessed_format()?
+                        .decode()?
+                    )
+                } else {
+                    Err(anyhow::anyhow!("no image"))
+                }
+            }
+            SongMetadata::UntaggedFile { .. } => {
+                anyhow::bail!("no image");
+            }
+            _ => todo!(),
+        }
     }
     
     pub fn path(&self) -> SongPath {

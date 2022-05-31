@@ -26,61 +26,27 @@ mod sixel;
 pub use self::sixel::{
     is_sixel_supported,
     SixelPrinter,
+    SixelOutput,
 };
 
-
-pub trait Printer {
-    // Print the given image in the terminal while respecting the options in the config struct.
-    // Return the dimensions of the printed image in **terminal cells**.
-    fn print(
-        &self,
-        stdout: &mut impl Write,
-        img: &DynamicImage,
-        config: &Config,
-    ) -> Result<(u32, u32)>;
-    fn print_from_file<P: AsRef<Path>>(
-        &self,
-        stdout: &mut impl Write,
-        filename: P,
-        config: &Config,
-    ) -> Result<(u32, u32)> {
-        let img = image::io::Reader::open(filename)?
-            .with_guessed_format()?
-            .decode()?;
-        self.print(stdout, &img, config)
-    }
-}
-
 #[allow(non_camel_case_types)]
-pub enum PrinterType {
+pub enum Printer {
     Block,
-    Sixel,
+    SixelEncoder,
+    SixelOutput,
 }
 
-impl Printer for PrinterType {
-    fn print(
-        &self,
-        stdout: &mut impl Write,
-        img: &DynamicImage,
-        config: &Config,
-    ) -> Result<(u32, u32)> {
-        match self {
-            PrinterType::Block => BlockPrinter.print(stdout, img, config),
-            PrinterType::Sixel => SixelPrinter.print(stdout, img, config),
-        }
-    }
+impl Printer {
+    // pub fn print(&self, stdout: &mut impl Write, img: &DynamicImage, config: &Config) -> Result<(u32, u32)> {
+    //     match self {
+    //         Printer::Block => BlockPrinter.print(stdout, img, config),
+    //         Printer::Sixel => SixelPrinter.print(stdout, img, config),
+    //     }
+    // }
 
-    fn print_from_file<P: AsRef<Path>>(
-        &self,
-        stdout: &mut impl Write,
-        filename: P,
-        config: &Config,
-    ) -> Result<(u32, u32)> {
-        match self {
-            PrinterType::Block => BlockPrinter.print_from_file(stdout, filename, config),
-            PrinterType::Sixel => SixelPrinter.print_from_file(stdout, filename, config),
-        }
-    }
+    // pub fn print_from_file<P: AsRef<Path>>(&self, stdout: &mut impl Write, filename: P, config: &Config) -> Result<(u32, u32)> {
+    //     self.print(stdout, &image::io::Reader::open(filename)?.with_guessed_format()?.decode()?, config)
+    // }
 }
 
 /// Resize a [image::DynamicImage] so that it fits within optional width and height bounds.

@@ -22,7 +22,6 @@ use crossterm::{
 use crate::image::{
     printer::{
         adjust_offset,
-        Printer,
     },
     config::Config,
 };
@@ -35,16 +34,15 @@ const CHECKERBOARD_BACKGROUND_DARK: (u8, u8, u8) = (102, 102, 102);
 
 pub struct BlockPrinter;
 
-impl Printer for BlockPrinter {
-    fn print(
+impl BlockPrinter {
+    pub fn print(
         &self,
         // TODO: The provided object is not used because termcolor needs an implementation of the WriteColor trait
-        _stdout: &mut impl Write,
+        stdout: &mut impl WriteColor,
         img: &DynamicImage,
         config: &Config,
     ) -> Result<(u32, u32)> {
-        let mut stream = BufferedStandardStream::stdout(ColorChoice::Always);
-        print_to_writecolor(&mut stream, img, config)
+        print_to_writecolor(stdout, img, config)
     }
 }
 

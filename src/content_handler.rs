@@ -10,6 +10,7 @@ use crate::{
         Song,
         SongContentType,
         SongMenuOptions,
+        SongPath,
     },
     content_providers::{
         ContentProvider,
@@ -18,7 +19,10 @@ use crate::{
         ContentProviderType,
         ContentProviderEditables,
     },
-    image::ImageHandler,
+    image::{
+        ImageHandler,
+        UnprocessedImage,
+    },
     editors::{
         Yanker,
         EditManager,
@@ -713,6 +717,21 @@ impl ContentHandler {
         self.player.stop().unwrap();
         self.player.play(path.into()).unwrap();
         self.active_song = Some(id);
+        let path = song.path();
+        match path { // FIX: temp here, do parallel
+            SongPath::LocalPath(..) => {
+                let art = song.get_art();
+                match art {
+                    Ok(art) => {
+                        self.image_handler.set_image(art);
+                    }
+                    Err(_) => (),
+                }
+            }
+            SongPath::YTURL(..) | SongPath::YTKey(..) => {
+                self.image_handler.set_image(UnprocessedImage::Url(path.to_string()))
+            }
+        }
     }
     pub fn toggle_song_pause(&mut self) {
         self.player.toggle_pause().unwrap();
