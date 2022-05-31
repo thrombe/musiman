@@ -14,7 +14,7 @@ use sixel::{
         Encoder,
         QuickFrameBuilder, QuickFrame,
     },
-    optflags::EncodePolicy,
+    optflags,
 };
 use std::io::Write;
 use termion;
@@ -39,7 +39,7 @@ pub fn is_sixel_supported() -> bool {
 }
 
 impl SixelPrinter {
-    pub fn get_quickframe(&self, img: &DynamicImage, config: &Config,) -> (u32, u32, Vec<u8>) {
+    pub fn get_quickframe(&self, img: &DynamicImage, config: &Config,) -> QuickFrame {
         let (w, mut h) = get_size_pix(img, config.width, config.height);
 
         // https://en.wikipedia.org/wiki/Sixel
@@ -56,34 +56,33 @@ impl SixelPrinter {
         let rgba = resized_img.to_rgba8();
         let raw = rgba.as_raw();
 
-        (width, height, raw.to_vec())
+        let frame = QuickFrameBuilder::new()
+            .width(width as usize)
+            .height(height as usize)
+            .format(sixel_sys::PixelFormat::RGBA8888)
+            .pixels(raw.to_vec());
+
+        frame
     }
 
-    pub fn print_quickframe(&self, img: &mut Vec<u8>, width: u32, height: u32, config: &Config) -> Result<()> {
+    pub fn print_quickframe(&self, frame: &QuickFrame, config: &Config) -> Result<()> {
         let mut stdout = std::io::stdout();
 
         adjust_offset(&mut stdout, config)?;
 
         let encoder = Encoder::new().unwrap();
-        encoder.set_quality(sixel::optflags::Quality::Full).unwrap();
-        // encoder.set_quality(sixel::optflags::Quality::High).unwrap();
-        // encoder.set_quality(sixel::optflags::Quality::Low).unwrap();
-
-        encoder.set_resampling(sixel::optflags::ResampleMethod::Nearest).unwrap();
-
-        encoder.set_encode_policy(EncodePolicy::Fast).unwrap();
-        // encoder.set_encode_policy(EncodePolicy::Size).unwrap();
-
+        encoder.set_encode_policy(optflags::EncodePolicy::Size).unwrap();
         encoder.set_diffusion(sixel::optflags::DiffusionMethod::None).unwrap();
+        encoder.set_color_select(sixel::optflags::ColorSelectionMethod::Histogram).unwrap();
 
-        let frame = QuickFrameBuilder::new()
-            .width(width as usize)
-            .height(height as usize)
-            .format(sixel_sys::PixelFormat::RGBA8888)
-            .pixels(img.clone());
-
-        encoder.encode_bytes(frame).unwrap();
+        encoder.set_quality(sixel::optflags::Quality::High).unwrap();
+        encoder.set_resampling(sixel::optflags::ResampleMethod::Bilinear).unwrap();
+        // encoder.set_color_option(sixel::optflags::ColorOption::Highcolor).unwrap(); // ?
+        // encoder.set_num_colors(255).unwrap();
+        encoder.set_palette_type(sixel::optflags::PaletteType::Auto).unwrap();
         
+        encoder.encode_bytes(&frame).unwrap();
+
         Ok(())
     }
 
@@ -113,7 +112,7 @@ impl SixelPrinter {
 
         let encoder = Encoder::new().unwrap();
 
-        encoder.set_encode_policy(EncodePolicy::Fast).unwrap();
+        encoder.set_encode_policy(optflags::EncodePolicy::Fast).unwrap();
 
         let frame = QuickFrameBuilder::new()
             .width(width as usize)
@@ -121,9 +120,9 @@ impl SixelPrinter {
             .format(sixel_sys::PixelFormat::RGBA8888)
             .pixels(raw.to_vec());
 
-        encoder.encode_bytes(frame).unwrap();
+        encoder.encode_bytes(&frame).unwrap();
 
-        Ok((w, h)) // returning the number of pixels rendered (not number of sixels)
+        Ok((w, h))
     }
 }
 
