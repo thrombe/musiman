@@ -55,6 +55,8 @@ use sixel_sys::{
     DiffusionMethod,
     PaletteType,
     EncodePolicy,
+    Dither,
+    Output,
 };
 
 
@@ -94,53 +96,75 @@ impl Sixel {
         let img = img.resize_exact(w, h, FilterType::Triangle);
 
         let mut data = img.to_rgb8().to_vec();
-        let data: *mut c_uchar = data.as_mut_ptr() as *mut c_uchar;
         let mut output: Vec<u8> = Vec::new();
-        let mut sixel_output = ptr::null_mut();
-        if unsafe {
-            sixel_output_new(
+        
+        let sixel_output = Self::get_output(&mut output)?;
+        let dither = Self::get_dither(&mut data, img.width(), img.height())?;
+        Self::encode(&mut data, img.width(), img.height(), dither, sixel_output)?;
+
+        Ok(Self {
+            output,
+        })
+    }
+
+    fn encode(data: &mut Vec<u8>, img_width: u32, img_height: u32, dither: *mut Dither, output: *mut Output) -> Result<()> {
+        unsafe {
+            let res = sixel_encode(data.as_mut_ptr() as *mut c_uchar, img_width as i32, img_height as i32, 0, dither, output);
+            if res != 0 {
+                anyhow::bail!("encode error");
+            }
+            Ok(())
+        }
+    }
+
+    fn get_output(output: &mut Vec<u8>) -> Result<*mut Output> {
+        unsafe {
+            let mut sixel_output = ptr::null_mut();
+            let res = sixel_output_new(
                 &mut sixel_output,
                 Some(write_fn),
-                &mut output as *mut _ as *mut c_void,
+                output as *mut _ as *mut c_void,
                 ptr::null_mut()
-            )
-        } != 0 {
-            return Err(anyhow::anyhow!("sixel_output_new error"));
+            );
+            if res != 0 {
+                anyhow::bail!("could not create sixel output");
+            }
+            sixel_output_set_palette_type(sixel_output, PaletteType::RGB);
+            sixel_output_set_encode_policy(sixel_output, EncodePolicy::Size);
+            Ok(sixel_output)
         }
-        let dither = unsafe {
-            // sixel_dither_new(*mut dither, )
+    }
+
+    fn get_dither(data: &mut Vec<u8>, img_width: u32, img_height: u32) -> Result<*mut Dither> {
+        unsafe {
+            // let dither = ptr::null_mut();
+            // let res = sixel_dither_new(
+            //     dither as *mut *mut _,
+            //     25, // cap of 256?
+            //     ptr::null_mut(),
+            // );
+            // if res != 0 {
+            //     anyhow::bail!("sixel dither initialization falure");
+            // }
             // let dither = unsafe { sixel_dither_get(BuiltinDither::XTerm256) };
             let dither = sixel_dither_create(256); // cap of 256 ig
             let res = sixel_dither_initialize(
                 dither,
-                data,
-                img.width() as i32,
-                img.height() as i32,
+                data.as_mut_ptr() as *mut c_uchar,
+                img_width as i32,
+                img_height as i32,
                 PixelFormat::RGB888,
                 MethodForLargest::Auto,
                 MethodForRepColor::AveragePixels,
                 QualityMode::High, // histogram processing quality
             );
             if res != 0 {
-                panic!();
+                anyhow::bail!("sixel dither initialization falure");
             }
             // sixel_dither_set_palette(dither, ) // a new pallet is being created for the image anyway ig
             sixel_dither_set_diffusion_type(dither, DiffusionMethod::None);
-            sixel_output_set_palette_type(sixel_output, PaletteType::RGB);
-            sixel_output_set_encode_policy(sixel_output, EncodePolicy::Size);
             sixel_dither_set_optimize_palette(dither, 0); // 0 for do, 1 for don't
-            dither
-        };
-
-        let result = unsafe {
-            sixel_encode(data, img.width() as i32, img.height() as i32, 0, dither, sixel_output)
-        };
-        if result == 0 {
-            Ok(Self {
-                output,
-            })
-        } else {
-            Err(anyhow::anyhow!("sixel_encode error"))
+            Ok(dither)
         }
     }
 
