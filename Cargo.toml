@@ -27,11 +27,6 @@ ansi_colours = "1.0"
 termcolor = "1.1"
 lazy_static = "1.4"
 
-
-[dependencies.sixel]
-version = "0.3.2"
-path = "../../1Git/sixel-rs"
-
 [dependencies.reqwest]
 version = "0.11.10"
 features = ["blocking"]

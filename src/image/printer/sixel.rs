@@ -9,13 +9,6 @@ use image::{
     GenericImageView,
 };
 use lazy_static::lazy_static;
-use sixel::{
-    encoder::{
-        Encoder,
-        QuickFrameBuilder, QuickFrame,
-    },
-    optflags,
-};
 use std::io::Write;
 use termion;
 use anyhow::Result;
@@ -27,8 +20,6 @@ use crate::image::{
     config::Config,
 };
 
-pub struct SixelPrinter;
-
 lazy_static! {
     static ref SIXEL_SUPPORT: bool = check_sixel_support();
 }
@@ -36,94 +27,6 @@ lazy_static! {
 /// Returns the terminal's support for Sixel.
 pub fn is_sixel_supported() -> bool {
     *SIXEL_SUPPORT
-}
-
-impl SixelPrinter {
-    pub fn get_quickframe(&self, img: &DynamicImage, config: &Config,) -> QuickFrame {
-        let (w, mut h) = get_size_pix(img, config.width, config.height);
-
-        // https://en.wikipedia.org/wiki/Sixel
-        // a sixel is 1 pixel wide
-        // a sexel is 6 pixels in height
-        // so we make the final image height a multiple of 6 which is less than or equal to h*char_height
-        h = (h/6)*6;
-
-        let resized_img =
-            img.resize_exact(w, h, FilterType::Triangle);
-
-        let (width, height) = resized_img.dimensions();
-
-        let rgba = resized_img.to_rgba8();
-        let raw = rgba.as_raw();
-
-        let frame = QuickFrameBuilder::new()
-            .width(width as usize)
-            .height(height as usize)
-            .format(sixel_sys::PixelFormat::RGBA8888)
-            .pixels(raw.to_vec());
-
-        frame
-    }
-
-    pub fn print_quickframe(&self, frame: &QuickFrame, config: &Config) -> Result<()> {
-        let mut stdout = std::io::stdout();
-
-        adjust_offset(&mut stdout, config)?;
-
-        let encoder = Encoder::new().unwrap();
-        encoder.set_encode_policy(optflags::EncodePolicy::Size).unwrap();
-        encoder.set_diffusion(sixel::optflags::DiffusionMethod::None).unwrap();
-        encoder.set_color_select(sixel::optflags::ColorSelectionMethod::Histogram).unwrap();
-
-        encoder.set_quality(sixel::optflags::Quality::High).unwrap();
-        encoder.set_resampling(sixel::optflags::ResampleMethod::Bilinear).unwrap();
-        // encoder.set_color_option(sixel::optflags::ColorOption::Highcolor).unwrap(); // ?
-        // encoder.set_num_colors(255).unwrap();
-        encoder.set_palette_type(sixel::optflags::PaletteType::Auto).unwrap();
-        
-        encoder.encode_bytes(&frame).unwrap();
-
-        Ok(())
-    }
-
-    pub fn print(
-        &self,
-        stdout: &mut impl Write,
-        img: &DynamicImage,
-        config: &Config,
-    ) -> Result<(u32, u32)> {
-        let (w, mut h) = get_size_pix(img, config.width, config.height);
-
-        // https://en.wikipedia.org/wiki/Sixel
-        // a sixel is 1 pixel wide
-        // a sexel is 6 pixels in height
-        // so we make the final image height a multiple of 6 which is less than or equal to h*char_height
-        h = (h/6)*6;
-
-        let resized_img =
-            img.resize_exact(w, h, FilterType::Triangle);
-
-        let (width, height) = resized_img.dimensions();
-
-        let rgba = resized_img.to_rgba8();
-        let raw = rgba.as_raw();
-
-        adjust_offset(stdout, config)?;
-
-        let encoder = Encoder::new().unwrap();
-
-        encoder.set_encode_policy(optflags::EncodePolicy::Fast).unwrap();
-
-        let frame = QuickFrameBuilder::new()
-            .width(width as usize)
-            .height(height as usize)
-            .format(sixel_sys::PixelFormat::RGBA8888)
-            .pixels(raw.to_vec());
-
-        encoder.encode_bytes(&frame).unwrap();
-
-        Ok((w, h))
-    }
 }
 
 fn get_size_pix(img: &DynamicImage, width: Option<u32>, height: Option<u32>) -> (u32, u32) {

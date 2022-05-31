@@ -16,10 +16,11 @@ use reqwest;
 use self::{
     config::Config,
     printer::{
-        Printer, BlockPrinter, SixelPrinter, SixelOutput,
+        Printer,
+        BlockPrinter,
+        SixelOutput,
     },
 };
-use sixel::encoder::QuickFrame;
 
 pub enum UnprocessedImage {
     Path(String),
@@ -92,11 +93,6 @@ pub enum ProcessedImage {
         width: u32,
         height: u32,
     },
-    SixelEncoder {
-        img: QuickFrame,
-        width: u32,
-        height: u32,
-    },
     SixelOutput {
         img: SixelOutput,
         width: u32,
@@ -122,9 +118,6 @@ impl ProcessedImage {
             Self::Block {width, height, ..} => {
                 (width, height)
             }
-            Self::SixelEncoder {width, height, ..} => {
-                (width, height)
-            }
             Self::SixelOutput { width, height , ..} => {
                 (width, height)
             }
@@ -144,14 +137,6 @@ impl ProcessedImage {
                     height: config.height.unwrap(),
                 };
             }
-            Printer::SixelEncoder => {
-                let frame = SixelPrinter.get_quickframe(image, &Config {x: 0, y: 0, ..*config});
-                *self = Self::SixelEncoder {
-                    img: frame,
-                    width: config.width.unwrap(),
-                    height: config.height.unwrap(),
-                }
-            }
             Printer::SixelOutput => {
                 let out = SixelOutput::new(image, config).unwrap();
                 *self = Self::SixelOutput {
@@ -168,9 +153,6 @@ impl ProcessedImage {
             Self::Block {img, ..} => {
                 use std::io::Write;
                 std::io::BufWriter::new(std::io::stdout()).write_all(img.as_slice()).unwrap();
-            }
-            Self::SixelEncoder {img, ..} => {
-                SixelPrinter.print_quickframe(img, config).unwrap();
             }
             Self::SixelOutput {img, ..} => {
                 img.print(config).unwrap();

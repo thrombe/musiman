@@ -13,7 +13,6 @@ use image::{
 };
 use std::{
     io::Write,
-    path::Path,
 };
 use anyhow::Result;
 
@@ -25,28 +24,13 @@ pub use block::BlockPrinter;
 mod sixel;
 pub use self::sixel::{
     is_sixel_supported,
-    SixelPrinter,
     SixelOutput,
 };
 
 #[allow(non_camel_case_types)]
 pub enum Printer {
     Block,
-    SixelEncoder,
     SixelOutput,
-}
-
-impl Printer {
-    // pub fn print(&self, stdout: &mut impl Write, img: &DynamicImage, config: &Config) -> Result<(u32, u32)> {
-    //     match self {
-    //         Printer::Block => BlockPrinter.print(stdout, img, config),
-    //         Printer::Sixel => SixelPrinter.print(stdout, img, config),
-    //     }
-    // }
-
-    // pub fn print_from_file<P: AsRef<Path>>(&self, stdout: &mut impl Write, filename: P, config: &Config) -> Result<(u32, u32)> {
-    //     self.print(stdout, &image::io::Reader::open(filename)?.with_guessed_format()?.decode()?, config)
-    // }
 }
 
 /// Resize a [image::DynamicImage] so that it fits within optional width and height bounds.
