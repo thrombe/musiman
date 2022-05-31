@@ -19,7 +19,7 @@ use anyhow::Result;
 use crate::image::config::Config;
 
 mod block;
-pub use block::BlockPrinter;
+pub use block::Block;
 
 mod sixel;
 pub use self::sixel::{

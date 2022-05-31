@@ -9,7 +9,10 @@ use image::{
     GenericImageView,
 };
 use lazy_static::lazy_static;
-use std::io::Write;
+use std::io::{
+    Write,
+    Stdout,
+};
 use termion;
 use anyhow::Result;
 
@@ -167,9 +170,8 @@ impl Sixel {
         }
     }
 
-    pub fn print(&self, config: &Config) -> Result<()> {
-        let mut stdout = std::io::stdout();
-        adjust_offset(&mut stdout, config)?;
+    pub fn print(&self, stdout: &mut Stdout, config: &Config) -> Result<()> {
+        adjust_offset(stdout, config)?;
         write!(stdout, "{}", std::str::from_utf8(&self.output)?)?;
         Ok(())
     }

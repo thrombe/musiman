@@ -17,14 +17,19 @@ use self::{
     config::Config,
     printer::{
         Printer,
-        BlockPrinter,
+        Block,
         Sixel,
     },
 };
 
+use std::{
+    path::PathBuf,
+    io::Stdout,
+};
+
 pub enum UnprocessedImage {
-    Path(String),
-    Url(String),
+    Path(PathBuf),
+    Url(String), // implimenting into From<String> might be dangerous? accidental string path to Url
     Image(image::DynamicImage),
     None,
 }
@@ -46,6 +51,12 @@ impl From<DynamicImage> for UnprocessedImage {
         Self::Image(o)
     }
 }
+impl From<PathBuf> for UnprocessedImage {
+    fn from(o: PathBuf) -> Self {
+        Self::Path(o)
+    }
+}
+
 impl UnprocessedImage {
     pub fn needs_preparing(&self) -> bool {
         match self {
@@ -89,11 +100,11 @@ impl UnprocessedImage {
 pub enum ProcessedImage {
     None,
     Block {
-        img: termcolor::Buffer,
+        img: Block,
         width: u32,
         height: u32,
     },
-    SixelOutput {
+    Sixel {
         img: Sixel,
         width: u32,
         height: u32,
@@ -112,13 +123,14 @@ impl From<Option<ProcessedImage>> for ProcessedImage {
         }
     }
 }
+
 impl ProcessedImage {
     pub fn needs_processing(&self, config: &Config) -> bool {
         let (width, height) = match self {
             Self::Block {width, height, ..} => {
                 (width, height)
             }
-            Self::SixelOutput { width, height , ..} => {
+            Self::Sixel { width, height , ..} => {
                 (width, height)
             }
             Self::None => return true,
@@ -129,17 +141,16 @@ impl ProcessedImage {
     pub fn process(&mut self, image: &DynamicImage, config: &Config, printer: &Printer) {
         match printer {
             Printer::Block => {
-                let mut buf = termcolor::Buffer::ansi();
-                BlockPrinter.print(&mut buf, image, config).unwrap();
+                let block = Block::new(image, config).unwrap();
                 *self = Self::Block {
-                    img: buf,
+                    img: block,
                     width: config.width.unwrap(),
                     height: config.height.unwrap(),
                 };
             }
             Printer::Sixel => {
                 let out = Sixel::new(image, config).unwrap();
-                *self = Self::SixelOutput {
+                *self = Self::Sixel {
                     img: out,
                     width: config.width.unwrap(),
                     height: config.height.unwrap(),
@@ -148,17 +159,17 @@ impl ProcessedImage {
         }
     }
 
-    pub fn print(&mut self, config: &Config) {
+    pub fn print(&mut self, stdout: &mut Stdout, config: &Config) -> Result<()> {
         match self {
             Self::Block {img, ..} => {
-                use std::io::Write;
-                std::io::BufWriter::new(std::io::stdout()).write_all(img.as_slice()).unwrap();
+                img.print(stdout)?;
             }
-            Self::SixelOutput {img, ..} => {
-                img.print(config).unwrap();
+            Self::Sixel {img, ..} => {
+                img.print(stdout, config).unwrap();
             }
             Self::None => (),
         }
+        Ok(())
     }
 }
 
@@ -226,7 +237,7 @@ impl ImageHandler {
         }
     }
 
-    pub fn maybe_print(&mut self) {
+    pub fn maybe_print(&mut self) -> Result<()> {
         dbg!("maybe printing");
         if self.dimensions_changed { // TODO:
 
@@ -243,15 +254,15 @@ impl ImageHandler {
         };
         let mut stdout = std::io::stdout();
         if self.config.restore_cursor {
-            execute!(&mut stdout, SavePosition).unwrap();
+            execute!(&mut stdout, SavePosition)?;
         }
 
         self.prepare_image();
-        self.processed_image.print(&self.config);
+        self.processed_image.print(&mut stdout, &self.config)?;
 
         if self.config.restore_cursor {
-            execute!(&mut stdout, RestorePosition).unwrap();
+            execute!(&mut stdout, RestorePosition)?;
         };
-
+        Ok(())
     }
 }

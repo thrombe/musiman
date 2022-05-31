@@ -10,12 +10,17 @@ use termcolor::{
     Color,
     ColorSpec,
     WriteColor,
+    Buffer,
 };
 use crossterm::{
     cursor::MoveRight,
     execute,
 };
-
+use std::io::{
+    Write,
+    BufWriter,
+    Stdout,
+};
 use crate::image::{
     printer::adjust_offset,
     config::Config,
@@ -27,12 +32,15 @@ const LOWER_HALF_BLOCK: &str = "\u{2584}";
 const CHECKERBOARD_BACKGROUND_LIGHT: (u8, u8, u8) = (153, 153, 153);
 const CHECKERBOARD_BACKGROUND_DARK: (u8, u8, u8) = (102, 102, 102);
 
-pub struct BlockPrinter;
+pub struct Block {
+    img: Buffer,
+}
 
-impl BlockPrinter {
-    pub fn print(&self, stdout: &mut impl WriteColor, img: &DynamicImage, config: &Config) -> Result<()> {
+impl Block {
+    pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
+        let mut buff = Buffer::ansi();
         // adjust with x=0 and handle horizontal offset entirely below
-        adjust_offset(stdout, &Config { x: 0, ..*config })?;
+        adjust_offset(&mut buff, &Config { x: 0, ..*config })?;
         
         // resize the image so that it fits in the constraints, if any
         let img = super::resize(img, config.width, config.height);
@@ -47,7 +55,7 @@ impl BlockPrinter {
             
             // move right if x offset is specified
             if config.x > 0 && (!is_even_row || is_last_row) {
-                execute!(stdout, MoveRight(config.x))?;
+                execute!(buff, MoveRight(config.x))?;
             }
             
             for pixel in img_row {
@@ -68,25 +76,32 @@ impl BlockPrinter {
                 if is_even_row {
                     colorspec.set_bg(color);
                     if is_last_row {
-                        write_character(stdout, colorspec, true)?;
+                        write_character(&mut buff, colorspec, true)?;
                     }
                 } else {
                     colorspec.set_fg(color);
-                    write_character(stdout, colorspec, false)?;
+                    write_character(&mut buff, colorspec, false)?;
                 }
             }
     
             if !is_even_row && !is_last_row {
-                stdout.reset()?;
-                writeln!(stdout, "\r")?;
+                buff.reset()?;
+                writeln!(&mut buff as &mut dyn WriteColor, "\r")?;
             }    
         }
-        stdout.reset()?;
-        writeln!(stdout)?;
-        stdout.flush()?;
+        buff.reset()?;
+        writeln!(&mut buff as &mut dyn WriteColor)?;
+        (&mut buff as &mut dyn WriteColor).flush()?;
         
+        Ok(Self {
+            img: buff,
+        })
+    }    
+    
+    pub fn print(&self, stdout: &mut Stdout) -> Result<()> {
+        BufWriter::new(stdout).write_all(self.img.as_slice())?;
         Ok(())
-    }        
+    }
 }
 
 fn write_character(stdout: &mut impl WriteColor, c: &ColorSpec, is_last_row: bool) -> Result<()> {
