@@ -7,7 +7,6 @@ use image::{
     imageops::FilterType,
     DynamicImage,
     GenericImageView,
-    Pixel,
 };
 use lazy_static::lazy_static;
 use std::io::Write;

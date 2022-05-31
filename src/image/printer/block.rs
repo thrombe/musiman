@@ -6,11 +6,8 @@ use image::{
     GenericImageView,
     Rgba,
 };
-use std::io::Write;
 use termcolor::{
-    BufferedStandardStream,
     Color,
-    ColorChoice,
     ColorSpec,
     WriteColor,
 };
@@ -20,9 +17,7 @@ use crossterm::{
 };
 
 use crate::image::{
-    printer::{
-        adjust_offset,
-    },
+    printer::adjust_offset,
     config::Config,
 };
 
@@ -35,85 +30,66 @@ const CHECKERBOARD_BACKGROUND_DARK: (u8, u8, u8) = (102, 102, 102);
 pub struct BlockPrinter;
 
 impl BlockPrinter {
-    pub fn print(
-        &self,
-        // TODO: The provided object is not used because termcolor needs an implementation of the WriteColor trait
-        stdout: &mut impl WriteColor,
-        img: &DynamicImage,
-        config: &Config,
-    ) -> Result<(u32, u32)> {
-        print_to_writecolor(stdout, img, config)
-    }
-}
-
-fn print_to_writecolor(
-    stdout: &mut impl WriteColor,
-    img: &DynamicImage,
-    config: &Config,
-) -> Result<(u32, u32)> {
-    // adjust with x=0 and handle horizontal offset entirely below
-    adjust_offset(stdout, &Config { x: 0, ..*config })?;
-
-    // resize the image so that it fits in the constraints, if any
-    let img = super::resize(img, config.width, config.height);
-    let (width, height) = img.dimensions();
-
-    let mut row_color_buffer: Vec<ColorSpec> = vec![ColorSpec::new(); width as usize];
-    let img_buffer = img.to_rgba8(); //TODO: Can conversion be avoided?
-
-    for (curr_row, img_row) in img_buffer.enumerate_rows() {
-        let is_even_row = curr_row % 2 == 0;
-        let is_last_row = curr_row == height - 1;
-
-        // move right if x offset is specified
-        if config.x > 0 && (!is_even_row || is_last_row) {
-            execute!(stdout, MoveRight(config.x))?;
-        }
-
-        for pixel in img_row {
-            // choose the half block's color
-            let color = if is_pixel_transparent(pixel) {
-                if config.transparent {
-                    None
-                } else {
-                    Some(get_transparency_color(curr_row, pixel.0, config.truecolor))
-                }
-            } else {
-                Some(get_color_from_pixel(pixel, config.truecolor))
-            };
-
-            // Even rows modify the background, odd rows the foreground
-            // because lower half blocks are used by default
-            let colorspec = &mut row_color_buffer[pixel.0 as usize];
-            if is_even_row {
-                colorspec.set_bg(color);
-                if is_last_row {
-                    write_colored_character(stdout, colorspec, true)?;
-                }
-            } else {
-                colorspec.set_fg(color);
-                write_colored_character(stdout, colorspec, false)?;
+    pub fn print(&self, stdout: &mut impl WriteColor, img: &DynamicImage, config: &Config) -> Result<()> {
+        // adjust with x=0 and handle horizontal offset entirely below
+        adjust_offset(stdout, &Config { x: 0, ..*config })?;
+        
+        // resize the image so that it fits in the constraints, if any
+        let img = super::resize(img, config.width, config.height);
+        let (width, height) = img.dimensions();
+        
+        let mut row_color_buffer: Vec<ColorSpec> = vec![ColorSpec::new(); width as usize];
+        let img_buffer = img.to_rgba8();
+        
+        for (curr_row, img_row) in img_buffer.enumerate_rows() {
+            let is_even_row = curr_row % 2 == 0;
+            let is_last_row = curr_row == height - 1;
+            
+            // move right if x offset is specified
+            if config.x > 0 && (!is_even_row || is_last_row) {
+                execute!(stdout, MoveRight(config.x))?;
             }
+            
+            for pixel in img_row {
+                // choose the half block's color
+                let color = if is_pixel_transparent(pixel) {
+                    if config.transparent {
+                        None
+                    } else {
+                        Some(get_transparency_color(curr_row, pixel.0, config.truecolor))
+                    }
+                } else {
+                    Some(get_color_from_pixel(pixel, config.truecolor))
+                };
+                
+                // Even rows modify the background, odd rows the foreground
+                // because lower half blocks are used by default
+                let colorspec = &mut row_color_buffer[pixel.0 as usize];
+                if is_even_row {
+                    colorspec.set_bg(color);
+                    if is_last_row {
+                        write_character(stdout, colorspec, true)?;
+                    }
+                } else {
+                    colorspec.set_fg(color);
+                    write_character(stdout, colorspec, false)?;
+                }
+            }
+    
+            if !is_even_row && !is_last_row {
+                stdout.reset()?;
+                writeln!(stdout, "\r")?;
+            }    
         }
-
-        if !is_even_row && !is_last_row {
-            stdout.reset()?;
-            writeln!(stdout, "\r")?;
-        }
-    }
-
-    stdout.reset()?;
-    writeln!(stdout)?;
-    stdout.flush()?;
-
-    Ok((width, height / 2 + height % 2))
+        stdout.reset()?;
+        writeln!(stdout)?;
+        stdout.flush()?;
+        
+        Ok(())
+    }        
 }
 
-fn write_colored_character(
-    stdout: &mut impl WriteColor,
-    c: &ColorSpec,
-    is_last_row: bool,
-) -> Result<()> {
+fn write_character(stdout: &mut impl WriteColor, c: &ColorSpec, is_last_row: bool) -> Result<()> {
     let out_color;
     let out_char;
     let mut new_color;
