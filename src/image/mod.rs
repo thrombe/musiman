@@ -203,7 +203,7 @@ impl Default for ImageHandler {
                 use_sixel: true,
                 alignment: Default::default(),
             },
-            printer: Printer::SixelEncoder,
+            printer: Printer::SixelOutput,
             processed_image: Default::default(),
             unprocessed_image: Default::default(),
             dimensions_changed: false,

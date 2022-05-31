@@ -231,11 +231,33 @@ use std::{
 };
 use image::Pixel;
 
+#[allow(unused_imports)]
 use sixel_sys::{
     sixel_output_new,
     sixel_dither_get,
     sixel_encode,
+
+    // sixel_output_new,
+    sixel_output_set_palette_type,
+    sixel_output_set_encode_policy,
+    
+    sixel_dither_create,
+    sixel_dither_new,
+    sixel_dither_initialize,
+    sixel_dither_set_diffusion_type,
+    // sixel_dither_get,
+    sixel_dither_set_palette,
+    sixel_dither_set_optimize_palette,
+    sixel_dither_set_body_only,
+
     BuiltinDither,
+    PixelFormat,
+    MethodForLargest,
+    MethodForRepColor,
+    QualityMode,
+    DiffusionMethod,
+    PaletteType,
+    EncodePolicy,
 };
 
 
@@ -287,9 +309,33 @@ impl SixelOutput {
         } != 0 {
             return Err(anyhow::anyhow!("sixel_output_new error"));
         }
-        let sixel_dither = unsafe { sixel_dither_get(BuiltinDither::XTerm256) };
+        let dither = unsafe {
+            // sixel_dither_new(*mut dither, )
+            // let dither = unsafe { sixel_dither_get(BuiltinDither::XTerm256) };
+            let dither = sixel_dither_create(256); // cap of 256 if
+            let res = sixel_dither_initialize(
+                dither,
+                data,
+                img.width() as i32,
+                img.height() as i32,
+                PixelFormat::RGB888,
+                MethodForLargest::Auto,
+                MethodForRepColor::AveragePixels,
+                QualityMode::High, // histogram processing quality
+            );
+            if res != 0 {
+                panic!();
+            }
+            // sixel_dither_set_palette(dither, ) // a new pallet is being created for the image anyway ig
+            sixel_dither_set_diffusion_type(dither, DiffusionMethod::None);
+            sixel_output_set_palette_type(sixel_output, PaletteType::RGB);
+            sixel_output_set_encode_policy(sixel_output, EncodePolicy::Size);
+            sixel_dither_set_optimize_palette(dither, 0); // 0 for do, 1 for don't
+            dither
+        };
+
         let result = unsafe {
-            sixel_encode(data, img.width() as i32, img.height() as i32, 0, sixel_dither, sixel_output)
+            sixel_encode(data, img.width() as i32, img.height() as i32, 0, dither, sixel_output)
         };
         if result == 0 {
             Ok(Self {
