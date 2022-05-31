@@ -18,7 +18,7 @@ use self::{
     printer::{
         Printer,
         BlockPrinter,
-        SixelOutput,
+        Sixel,
     },
 };
 
@@ -94,7 +94,7 @@ pub enum ProcessedImage {
         height: u32,
     },
     SixelOutput {
-        img: SixelOutput,
+        img: Sixel,
         width: u32,
         height: u32,
     },
@@ -137,8 +137,8 @@ impl ProcessedImage {
                     height: config.height.unwrap(),
                 };
             }
-            Printer::SixelOutput => {
-                let out = SixelOutput::new(image, config).unwrap();
+            Printer::Sixel => {
+                let out = Sixel::new(image, config).unwrap();
                 *self = Self::SixelOutput {
                     img: out,
                     width: config.width.unwrap(),
@@ -185,7 +185,7 @@ impl Default for ImageHandler {
                 use_sixel: true,
                 alignment: Default::default(),
             },
-            printer: Printer::SixelOutput,
+            printer: Printer::Sixel,
             processed_image: Default::default(),
             unprocessed_image: Default::default(),
             dimensions_changed: false,

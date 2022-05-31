@@ -7,6 +7,7 @@ use image::{
     imageops::FilterType,
     DynamicImage,
     GenericImageView,
+    Pixel,
 };
 use lazy_static::lazy_static;
 use std::io::Write;
@@ -20,6 +21,44 @@ use crate::image::{
     config::Config,
 };
 
+use std::{
+    os::raw::{
+        c_uchar,
+        c_char,
+        c_int,
+        c_void,
+    },
+    ptr,
+    slice
+};
+
+#[allow(unused_imports)]
+use sixel_sys::{
+    sixel_output_new,
+    sixel_dither_get,
+    sixel_encode,
+    sixel_output_set_palette_type,
+    sixel_output_set_encode_policy,
+    sixel_dither_create,
+    sixel_dither_new,
+    sixel_dither_initialize,
+    sixel_dither_set_diffusion_type,
+    sixel_dither_set_palette,
+    sixel_dither_set_optimize_palette,
+    sixel_dither_set_body_only,
+
+    BuiltinDither,
+    PixelFormat,
+    MethodForLargest,
+    MethodForRepColor,
+    QualityMode,
+    DiffusionMethod,
+    PaletteType,
+    EncodePolicy,
+};
+
+
+
 lazy_static! {
     static ref SIXEL_SUPPORT: bool = check_sixel_support();
 }
@@ -28,6 +67,92 @@ lazy_static! {
 pub fn is_sixel_supported() -> bool {
     *SIXEL_SUPPORT
 }
+
+
+extern "C" fn write_fn(data: *mut c_char, len: c_int, userdata: *mut c_void) -> c_int {
+    unsafe {
+        let output: &mut Vec<u8> = &mut *(userdata as *mut Vec<u8>);
+        output.write_all(slice::from_raw_parts(data as *mut c_uchar, len as usize)).unwrap();
+        0
+    }
+}
+
+pub struct Sixel {
+    output: Vec<u8>,
+}
+
+impl Sixel {
+    pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
+        let (w, mut h) = get_size_pix(img, config.width, config.height);
+
+        // https://en.wikipedia.org/wiki/Sixel
+        // a sixel is 1 pixel wide
+        // a sexel is 6 pixels in height
+        // so we make the final image height a multiple of 6 which is less than or equal to h*char_height
+        h = (h/6)*6;
+
+        let img = img.resize_exact(w, h, FilterType::Triangle);
+
+        let mut data = img.to_rgb8().to_vec();
+        let data: *mut c_uchar = data.as_mut_ptr() as *mut c_uchar;
+        let mut output: Vec<u8> = Vec::new();
+        let mut sixel_output = ptr::null_mut();
+        if unsafe {
+            sixel_output_new(
+                &mut sixel_output,
+                Some(write_fn),
+                &mut output as *mut _ as *mut c_void,
+                ptr::null_mut()
+            )
+        } != 0 {
+            return Err(anyhow::anyhow!("sixel_output_new error"));
+        }
+        let dither = unsafe {
+            // sixel_dither_new(*mut dither, )
+            // let dither = unsafe { sixel_dither_get(BuiltinDither::XTerm256) };
+            let dither = sixel_dither_create(256); // cap of 256 ig
+            let res = sixel_dither_initialize(
+                dither,
+                data,
+                img.width() as i32,
+                img.height() as i32,
+                PixelFormat::RGB888,
+                MethodForLargest::Auto,
+                MethodForRepColor::AveragePixels,
+                QualityMode::High, // histogram processing quality
+            );
+            if res != 0 {
+                panic!();
+            }
+            // sixel_dither_set_palette(dither, ) // a new pallet is being created for the image anyway ig
+            sixel_dither_set_diffusion_type(dither, DiffusionMethod::None);
+            sixel_output_set_palette_type(sixel_output, PaletteType::RGB);
+            sixel_output_set_encode_policy(sixel_output, EncodePolicy::Size);
+            sixel_dither_set_optimize_palette(dither, 0); // 0 for do, 1 for don't
+            dither
+        };
+
+        let result = unsafe {
+            sixel_encode(data, img.width() as i32, img.height() as i32, 0, dither, sixel_output)
+        };
+        if result == 0 {
+            Ok(Self {
+                output,
+            })
+        } else {
+            Err(anyhow::anyhow!("sixel_encode error"))
+        }
+    }
+
+    pub fn print(&self, config: &Config) -> Result<()> {
+        let mut stdout = std::io::stdout();
+        adjust_offset(&mut stdout, config)?;
+        write!(stdout, "{}", std::str::from_utf8(&self.output)?)?;
+        Ok(())
+    }
+}
+
+
 
 fn get_size_pix(img: &DynamicImage, width: Option<u32>, height: Option<u32>) -> (u32, u32) {
     let (img_width_pix, img_height_pix) = img.dimensions();
@@ -125,135 +250,3 @@ fn check_sixel_support() -> bool {
     }
     false
 }
-
-use std::{
-    io::{self},
-    os::raw::{c_uchar, c_char, c_int, c_void},
-    ptr,
-    slice
-};
-use image::Pixel;
-
-#[allow(unused_imports)]
-use sixel_sys::{
-    sixel_output_new,
-    sixel_dither_get,
-    sixel_encode,
-
-    // sixel_output_new,
-    sixel_output_set_palette_type,
-    sixel_output_set_encode_policy,
-    
-    sixel_dither_create,
-    sixel_dither_new,
-    sixel_dither_initialize,
-    sixel_dither_set_diffusion_type,
-    // sixel_dither_get,
-    sixel_dither_set_palette,
-    sixel_dither_set_optimize_palette,
-    sixel_dither_set_body_only,
-
-    BuiltinDither,
-    PixelFormat,
-    MethodForLargest,
-    MethodForRepColor,
-    QualityMode,
-    DiffusionMethod,
-    PaletteType,
-    EncodePolicy,
-};
-
-
-extern "C" fn write_fn(data: *mut c_char, len: c_int, userdata: *mut c_void) -> c_int {
-    unsafe {
-        let output: &mut Vec<u8> = &mut *(userdata as *mut Vec<u8>);
-        output.write_all(slice::from_raw_parts(data as *mut c_uchar, len as usize)).unwrap();
-        0
-    }
-}
-
-pub struct SixelOutput {
-    output: Vec<u8>,
-}
-
-impl SixelOutput {
-    pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
-        let (w, mut h) = get_size_pix(img, config.width, config.height);
-
-        // https://en.wikipedia.org/wiki/Sixel
-        // a sixel is 1 pixel wide
-        // a sexel is 6 pixels in height
-        // so we make the final image height a multiple of 6 which is less than or equal to h*char_height
-        h = (h/6)*6;
-
-        let img =
-            img.resize_exact(w, h, FilterType::Triangle);
-
-
-        let mut data = Vec::with_capacity(img.width() as usize * img.height() as usize * 3);
-        for y in 0..img.height() {
-            for x in 0..img.width() {
-                let pixel = img.get_pixel(x, y).to_rgb();
-                data.push(pixel[0]);
-                data.push(pixel[1]);
-                data.push(pixel[2]);
-            }
-        }
-        let data: *mut c_uchar = data.as_mut_ptr() as *mut c_uchar;
-        let mut output: Vec<u8> = Vec::new();
-        let mut sixel_output = ptr::null_mut();
-        if unsafe {
-            sixel_output_new(
-                &mut sixel_output,
-                Some(write_fn),
-                &mut output as *mut _ as *mut c_void,
-                ptr::null_mut()
-            )
-        } != 0 {
-            return Err(anyhow::anyhow!("sixel_output_new error"));
-        }
-        let dither = unsafe {
-            // sixel_dither_new(*mut dither, )
-            // let dither = unsafe { sixel_dither_get(BuiltinDither::XTerm256) };
-            let dither = sixel_dither_create(256); // cap of 256 if
-            let res = sixel_dither_initialize(
-                dither,
-                data,
-                img.width() as i32,
-                img.height() as i32,
-                PixelFormat::RGB888,
-                MethodForLargest::Auto,
-                MethodForRepColor::AveragePixels,
-                QualityMode::High, // histogram processing quality
-            );
-            if res != 0 {
-                panic!();
-            }
-            // sixel_dither_set_palette(dither, ) // a new pallet is being created for the image anyway ig
-            sixel_dither_set_diffusion_type(dither, DiffusionMethod::None);
-            sixel_output_set_palette_type(sixel_output, PaletteType::RGB);
-            sixel_output_set_encode_policy(sixel_output, EncodePolicy::Size);
-            sixel_dither_set_optimize_palette(dither, 0); // 0 for do, 1 for don't
-            dither
-        };
-
-        let result = unsafe {
-            sixel_encode(data, img.width() as i32, img.height() as i32, 0, dither, sixel_output)
-        };
-        if result == 0 {
-            Ok(Self {
-                output,
-            })
-        } else {
-            Err(anyhow::anyhow!("sixel_encode error"))
-        }
-    }
-
-    pub fn print(&self, config: &Config) -> Result<()> {
-        let mut stdout = std::io::stdout();
-        adjust_offset(&mut stdout, config)?;
-        write!(stdout, "{}", std::str::from_utf8(&self.output)?)?;
-        Ok(())
-    }
-}
-

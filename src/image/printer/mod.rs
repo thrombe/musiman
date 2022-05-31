@@ -24,13 +24,13 @@ pub use block::BlockPrinter;
 mod sixel;
 pub use self::sixel::{
     is_sixel_supported,
-    SixelOutput,
+    Sixel,
 };
 
 #[allow(non_camel_case_types)]
 pub enum Printer {
     Block,
-    SixelOutput,
+    Sixel,
 }
 
 /// Resize a [image::DynamicImage] so that it fits within optional width and height bounds.
