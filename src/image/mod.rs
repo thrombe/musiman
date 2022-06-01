@@ -10,7 +10,7 @@ mod config;
 mod utils;
 
 use anyhow::Result;
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView};
 use reqwest;
 
 use self::{
@@ -25,6 +25,10 @@ use self::{
 use std::{
     path::PathBuf,
     io::Stdout,
+    fmt::{
+        Display,
+        Debug,
+    },
 };
 
 pub enum UnprocessedImage {
@@ -32,6 +36,32 @@ pub enum UnprocessedImage {
     Url(String), // implimenting into From<String> might be dangerous? accidental string path to Url
     Image(image::DynamicImage),
     None,
+}
+impl Debug for UnprocessedImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
+}
+impl Display for UnprocessedImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Path(path) => {
+                write!(f, "{:#?}", path)?;
+            }
+            Self::Url(url) => {
+                write!(f, "{url}")?;
+
+            }
+            Self::None => {
+                write!(f, "None")?;
+
+            }
+            Self::Image(..) => {
+                write!(f, "Image")?;
+            }
+        }
+        Ok(())
+    }
 }
 impl Default for UnprocessedImage {
     fn default() -> Self {
@@ -66,17 +96,24 @@ impl UnprocessedImage {
     }
 
     pub fn prepare_image(&mut self) -> Result<()> {
-        match &self {
+        match self {
             Self::Path(path) => {
                 let img = image::io::Reader::open(path)?.with_guessed_format()?.decode()?;
                 *self = Self::Image(img);
+                self.prepare_image()?;
             }
             Self::Url(url) => {
-                let res = reqwest::blocking::get(url)?;
+                let res = reqwest::blocking::get(&*url)?;
                 let img = image::load_from_memory(&res.bytes()?)?;
                 *self = Self::Image(img);
+                self.prepare_image()?;
             }
-            Self::Image(..) => (),
+            Self::Image(img) => {
+                let (x, y) = img.dimensions();
+                if x > y {
+                    *img = img.crop((x-y)/2, 0, y, y);
+                }
+            }
             Self::None => (),
         }
         Ok(())
@@ -223,6 +260,7 @@ impl ImageHandler {
             T: Into<UnprocessedImage>
     {
         self.unprocessed_image = img.into();
+        self.processed_image = None.into();
     }
 
     fn prepare_image(&mut self) {
@@ -238,7 +276,7 @@ impl ImageHandler {
     }
 
     pub fn maybe_print(&mut self) -> Result<()> {
-        dbg!("maybe printing");
+        // dbg!("maybe printing");
         if self.dimensions_changed { // TODO:
 
         } else {

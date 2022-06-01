@@ -14,7 +14,7 @@ use lofty::{
 use anyhow::{
     Result,
 };
-
+use std::path::PathBuf;
 use serde::{
     Serialize,
     Deserialize,
@@ -22,8 +22,9 @@ use serde::{
 
 use crate::{
     content_handler::{
-        ContentHandlerAction,
+        ContentHandlerAction, RustParallelAction,
     },
+    yt_manager::YTAction,
 };
 
 
@@ -60,6 +61,34 @@ pub enum SongMetadata {
 #[derive(Debug, Clone, Copy)]
 pub enum SongMenuOptions {}
 
+
+pub enum SongArt {
+    DynamicImage(DynamicImage),
+    TaggedFile(PathBuf),
+    YTSongID(String),
+    ImageUrl(String),
+}
+
+impl SongArt {
+    pub fn load(self) -> ContentHandlerAction {
+        match self {
+            Self::DynamicImage(img) => {
+                ContentHandlerAction::UpdateImage { img: img.into() }
+            }
+            Self::TaggedFile(path) => {
+                RustParallelAction::ProcessAndUpdateImageFromSongPath { path }.into()
+            }
+            Self::YTSongID(id) => {
+                YTAction::ShowSongArt {
+                    id: id.clone(),
+                }.into()
+            }
+            Self::ImageUrl(url) => {
+                todo!();
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum SongPath {
@@ -179,28 +208,13 @@ impl Song {
         })
     }
 
-    pub fn get_art(&self) -> Result<DynamicImage> {
+    pub fn get_art(&self) -> SongArt {
         match &self.metadata {
-            SongMetadata::TaggedFile { path, ..} => {
-                let tf = lofty::read_from_path(&path, true)?;
-                let tags = tf.primary_tag().unwrap(); // its a tagged image tho it may still crash if user does something fishy
-                let pics = tags.pictures();
-                if pics.len() >= 1 {
-                    Ok(
-                        image::io::Reader::new(
-                            std::io::Cursor::new(
-                                pics[0].data().to_owned()
-                            )
-                        )
-                        .with_guessed_format()?
-                        .decode()?
-                    )
-                } else {
-                    Err(anyhow::anyhow!("no image"))
-                }
+            SongMetadata::YT { id, .. } => {
+                SongArt::YTSongID(id.clone())
             }
-            SongMetadata::UntaggedFile { .. } => {
-                anyhow::bail!("no image");
+            SongMetadata::TaggedFile { path, .. } => {
+                SongArt::TaggedFile(PathBuf::from(path))
             }
             _ => todo!(),
         }

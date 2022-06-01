@@ -10,7 +10,6 @@ use crate::{
         Song,
         SongContentType,
         SongMenuOptions,
-        SongPath,
     },
     content_providers::{
         ContentProvider,
@@ -46,6 +45,7 @@ use crate::{
     },
 };
 use musiplayer::Player;
+use anyhow::Result;
 
 use std::{
     thread,
@@ -53,11 +53,11 @@ use std::{
         self,
         Receiver,
         Sender,
-    },
+    }, path::PathBuf,
 };
 
 struct ParallelHandle {
-    handles: Vec<thread::JoinHandle<()>>,
+    handles: Vec<thread::JoinHandle<Result<()>>>,
     receiver: Receiver<ContentHandlerAction>,
     sender: Sender<ContentHandlerAction>,
     yt_man: YTManager,
@@ -86,8 +86,9 @@ impl ParallelHandle {
             Some(h) => {
                 let handle = thread::spawn(move || action.run(sender));
                 match std::mem::replace(h, handle).join() {
-                    Ok(()) => (),
+                    Ok(Ok(())) => (),
                     Err(e) => log::error!("{:#?}", e),
+                    Ok(Err(e)) => log::error!("{:#?}", e),
                 }
             }
             None => {
@@ -109,13 +110,49 @@ impl ParallelHandle {
 
 #[derive(Debug)]
 pub enum RustParallelAction {
-
+    ProcessAndUpdateImageFromUrl {
+        url: String,
+    },
+    ProcessAndUpdateImageFromSongPath {
+        path: PathBuf,
+    }
 }
 impl RustParallelAction {
-    fn run(self, send: Sender<ContentHandlerAction>) {
+    fn run(self, send: Sender<ContentHandlerAction>) -> Result<()> {
         match self {
+            Self::ProcessAndUpdateImageFromUrl {url}=> {
+                let mut img = UnprocessedImage::Url(url);
+                img.prepare_image().unwrap();
+                send.send(ContentHandlerAction::UpdateImage {
+                    img,
+                })?;
+            }
+            Self::ProcessAndUpdateImageFromSongPath {path} => {
+                let tf = lofty::read_from_path(&path, true)?;
+                let tags = tf.primary_tag().unwrap(); // its a tagged image tho it may still crash if user does something fishy
+                let pics = tags.pictures();
+                let img = if pics.len() >= 1 {
+                    Ok(
+                        image::io::Reader::new(
+                            std::io::Cursor::new(
+                                pics[0].data().to_owned()
+                            )
+                        )
+                        .with_guessed_format()?
+                        .decode()?
+                    )
+                } else {
+                    Err(anyhow::anyhow!("no image"))
+                };
 
+                let mut img = UnprocessedImage::Image(img?);
+                img.prepare_image().unwrap();
+                send.send(ContentHandlerAction::UpdateImage {
+                    img,
+                })?;
+            }
         }
+        Ok(())
     }
 }
 #[derive(Debug)]
@@ -208,6 +245,9 @@ pub enum ContentHandlerAction {
     Actions(Vec<Self>),
     ParallelAction {
         action: ParallelAction,
+    },
+    UpdateImage{
+        img: UnprocessedImage,
     },
     RefreshDisplayContent,
     None,
@@ -311,6 +351,9 @@ impl ContentHandlerAction {
             }
             Self::RefreshDisplayContent => {
                 ch.app_action.queue(AppAction::UpdateDisplayContent { content: ch.get_content_names() });
+            }
+            Self::UpdateImage {img} => {
+                ch.image_handler.set_image(img);
             }
         }
     }
@@ -717,21 +760,9 @@ impl ContentHandler {
         self.player.stop().unwrap();
         self.player.play(path.into()).unwrap();
         self.active_song = Some(id);
-        let path = song.path();
-        match path { // FIX: temp here, do parallel
-            SongPath::LocalPath(..) => {
-                let art = song.get_art();
-                match art {
-                    Ok(art) => {
-                        self.image_handler.set_image(art);
-                    }
-                    Err(_) => (),
-                }
-            }
-            SongPath::YTURL(..) | SongPath::YTKey(..) => {
-                self.image_handler.set_image(UnprocessedImage::Url(path.to_string()))
-            }
-        }
+        let art = song.get_art();
+        let action = art.load();
+        action.apply(self);
     }
     pub fn toggle_song_pause(&mut self) {
         self.player.toggle_pause().unwrap();

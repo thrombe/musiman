@@ -9,6 +9,7 @@ use crate::{
 use crate::{
     content_handler::{
         ContentHandlerAction,
+        RustParallelAction,
     },
     content_manager::ContentProviderID,
     content_providers::{
@@ -124,6 +125,9 @@ pub enum YTAction { // TODO: use cow for strings in actions?
         playlist_id: String,
         loader: ContentProviderID,
     },
+    ShowSongArt {
+        id: String,
+    },
 }
 impl YTAction {
     fn run(&mut self, py: Python, pyd: &Py<PyAny>, pyh: &mut PyHandel) -> Result<()> {
@@ -142,7 +146,7 @@ impl YTAction {
             return data
         def get_data():
             {code_here}
-            data = json.dumps(ytdl_data, indent=4)
+            data = json.dumps(data, indent=4)
             return data
         get_data = dbg_data # // dbg:
         ";
@@ -170,7 +174,7 @@ impl YTAction {
                         data = ytmusic.search('{term}', filter='albums', limit=75, ignore_spelling=True)
                         data = json.dumps(data, indent=4)
                         return data
-                    get_data = dbg_data # // dbg:
+                    #get_data = dbg_data # // dbg:
                 ")
             }
             Self::VideoSearch {term, ..} => {
@@ -183,7 +187,7 @@ impl YTAction {
                         data = ytmusic.search('{term}', filter='videos', limit=75, ignore_spelling=True)
                         data = json.dumps(data, indent=4)
                         return data
-                    get_data = dbg_data # // dbg:
+                    #get_data = dbg_data # // dbg:
                 ")
             }
             Self::GetAlbumPlaylistId {browse_id, ..} => {
@@ -196,7 +200,7 @@ impl YTAction {
                         album_data = ytmusic.get_album('{browse_id}')
                         data = json.dumps(album_data, indent=4)
                         return data
-                    get_data = dbg_data # // dbg:
+                    #get_data = dbg_data # // dbg:
                 ")
             }
             Self::GetPlaylist {playlist_id, ..} => {
@@ -209,7 +213,22 @@ impl YTAction {
                         data = ytdl.extract_info('{playlist_id}', download=False)
                         data = json.dumps(data, indent=4)
                         return data
-                    get_data = dbg_data # // dbg:
+                    #get_data = dbg_data # // dbg:
+                ")
+            }
+            Self::ShowSongArt {id} => {
+                format!("
+                    def dbg_data():
+                        with open('config/temp/show_song_art.log', 'r') as f:
+                            data = f.read()
+                        return data
+                    def get_data():
+                        data = {{}}
+                        data['ytmusic'] = ytmusic.get_song('{id}')
+                        data['ytdl'] = ytdl.extract_info(url='https://youtu.be/{id}', download=False)
+                        data = json.dumps(data, indent=4)
+                        return data
+                    #get_data = dbg_data # // dbg:      
                 ")
             }
         };
@@ -223,6 +242,7 @@ impl YTAction {
                 res['found'] = True
             handle = thread(target=try_catch, args=[get_data])
             handle.start()
+            #try_catch(get_data)
         ");
         let code = fix_python_indentation(&code);
         let code = append_python_code(code, try_catch);
@@ -264,7 +284,7 @@ impl YTAction {
             }
             Self::VideoSearch {loader, ..} => {
                 let res = pyd.extract::<String>(py)?;
-                debug!("{res}");
+                // debug!("{res}");
                 let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
                 let songs = videos.into_iter().map(Into::into).collect();
                 vec![
@@ -281,7 +301,7 @@ impl YTAction {
                 // but the data we get from the playlistId has the music videos
                 // (music videos being the songs with album art rather than the ones with dances and stuff)
                 let res = pyd.extract::<String>(py)?;
-                debug!("{res}");
+                // debug!("{res}");
                 let ytm_album = serde_json::from_str::<YTMusicAlbum>(&res)?;
                 ContentHandlerAction::ReplaceContentProvider {
                     old_id: *loader,
@@ -290,7 +310,7 @@ impl YTAction {
             }
             Self::GetPlaylist {loader, ..} => {
                 let res = pyd.extract::<String>(py)?;
-                debug!("{res}");
+                // debug!("{res}");
                 let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
                 vec![
                     ContentHandlerAction::LoadContentProvider {
@@ -299,6 +319,29 @@ impl YTAction {
                         content_providers: Default::default(),
                     },
                     ContentHandlerAction::RefreshDisplayContent,
+                ].into()
+            }
+            Self::ShowSongArt {..} => {
+                let res = pyd.extract::<String>(py)?;
+                // debug!("{res}");
+                let song = serde_json::from_str::<YtdlAndYTMusicSong>(&res)?;
+                // dbg!(song);
+                let best_thumbnail_url = song
+                    .ytdl
+                    .thumbnails.context("")?
+                    .into_iter()
+                    .filter(|e| e.preference.is_some() && e.url.is_some())
+                    .reduce(|a, b| {
+                        if a.preference.unwrap() > b.preference.unwrap() {
+                            a
+                        } else {
+                            b
+                        }
+                    }).context("")?.url.unwrap();
+                vec![
+                    RustParallelAction::ProcessAndUpdateImageFromUrl {
+                        url: best_thumbnail_url,
+                    }.into()
                 ].into()
             }
         };
@@ -416,6 +459,77 @@ impl Into<Song> for YTMusicSearchVideo {
             }
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct YtdlAndYTMusicSong {
+    ytdl: YtdlSong,
+    ytmusic: YTMusicSong,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct YTMusicSong {
+    video_details: Option<YTMusicSongVideoDetails>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct YTMusicSongVideoDetails {
+    video_id: Option<String>,
+    title: Option<String>,
+    channel_id: Option<String>,
+    thumbnail: Option<YTMusicSongThumbnails>,
+    author: Option<String>,
+    microformat: Option<YTMusicSongVideoDetailsMicroformat>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct YTMusicSongThumbnails {
+    thumbnails: Option<Vec<YTMusicSongThumbnail>>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct YTMusicSongThumbnail {
+    url: Option<String>,
+    width: Option<u32>,
+    height: Option<u32>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct YTMusicSongVideoDetailsMicroformat { // eh
+
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct YtdlSong {
+    id: Option<String>,
+    title: Option<String>,
+    thumbnails: Option<Vec<YtdlSongThumbnail>>,
+    uploader: Option<String>,
+    uploader_id: Option<String>,
+    channel_id: Option<String>,
+    tags: Option<Vec<String>>,
+    album: Option<String>,
+    artist: Option<String>,
+    track: Option<String>,
+    channel: Option<String>,
+    creator: Option<String>,
+    alt_title: Option<String>,
+    availability: Option<String>,
+    fulltitle: Option<String>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct YtdlSongThumbnail { // the fields always seem to be there, but just to be sure
+    preference: Option<i32>,
+    url: Option<String>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct YtdlSongFormat {
+    ext: Option<String>,
+    vcodec: Option<String>,
+    acodec: Option<String>,
+    url: Option<String>,
+    audio_ext: Option<String>,
+    video_ext: Option<String>,
+    format: Option<String>,
 }
 
 pub struct YTActionEntry {
