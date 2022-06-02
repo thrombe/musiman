@@ -1,8 +1,130 @@
 
+/. behaviour:
+  /. delete items easily
+  /. no leaks in terms of items without an active id
+/. plans:
+  \. keep an Arc<()> in ids and items
+    . items can have a weak<()>
+    . this would still need a pass through whole vec of items to find out who should be removed
+  \. keep an Arc<ActionChannel> in ids
+    . ActionChannel will impliment a drop method that will send a message to ContentHandler to delete the item.
+    . disadvantage is a whole lot of Arc overhead
+  \. instead of the Arc<ActionChannel>, impliment Clone and Drop on ActionChannel such that they send a message to
+    ContentHandler to add/remove 1 from counter and remove element if counter is zero
+    \. remove the Copy trait from ids
+    \. disadvantage is that there will be a lot of add/remove messages
+  /. Register ids
+    /. impliment register() and unregister() on ContentManager that keeps a counter in ContentEntry
+    /. when dropping something, call unregister() on all its related ids
+    /. if counter zero while unregistering, call the unregister() for all its related ids
+
+. behaviour:
+  . save state easily
+  . load state easily
+. plans:
+  \. save only the MainProvider
+    . can grab MainProvider id from content_stack[0]
+    . go through all ids in main_provider, keep 2 lists of ids, one for songs, another for song_providers.
+      go through all song_providers one by one and add its stuff to these lists. finally dump all of this in db
+    . disadvantage is that temporary stuff needs to tell if its worth saving or no
+  \. save all of the non temporary stuff
+    . this would need dropping everything from temp_content_providers including its exclusive songs before its saved
+    . or this would need another ContentManager for temp_songs
+      . and also would need to move all stuff that is moved to non_temporary
+    . a strategy to remove both temporary lists is to make ContentEntry save if its temporary or not.
+      . everything that is moved into something else which is not temp, has its state saved as non_temp
+      . but, add a temp song to something non-temp, then remove it from the non-temp. and now its only in the original
+        temp thing. so it will be saved but it should not be saved
+  . if ActionChannel + (custom Clone, Drop / Register ids)
+    . save all the main temp stuff in temp_content_providers and all its stuff in non_temp. just before saving,
+      drop temp_content_providers and execute the messages till there are none left. now just save everything
+      including MainProvider
+      . but now MainProvider has a few ids which are not active. so just replace these with new ones when MainProvider
+        gets loaded next time
+    . since all the main temp stuff is supposed to start in MainProvider, just yeet the temp_content_providers and save
+      everything in non_temp. now just drop the temp stuff from MainProvider before saving
+
+. behaviour:
+  . be able to instruct the ui part to show something in some specific way. like "dont show numbers here." or
+    "highlight this one in blue"
+. plan:
+  . use custom types/enums wrappers and wrap the special formatted ones with these types
+    . this would no longer mean that the two parts are decoupled tho.
+    . but well what else can i do?
+    . the wrappers can maybe take multiple things, like maybe
+      wrapper{texts: Vec<wrapper{text, format_type: highlighted}>, overallformat_type: numbered}
+    . maybe repurpose GetNames for this
+  \. use the tui-rs stuff directly and send in the formatted text directly
+    . this means ui is also done in ContentHandler
+    . maybe add a type that handles the ui here and try not to leak stuff outside it.
+    . also use enums to let the ui part handle both formatted and unformatted types
+
+async?
+  \. not worth doing in this project as the tokio::fs stuff is built with std::fs in another thread (atleast the part i saw)
+    so would be simpler to just manage a seperate thread
+    . but things might get simpler
+  \. and the ytdl/ytmusic stuff isnt async any way
+
+. behaviour:
+  . multiline items (like songs with name, artist on different lines)
+. plan:
+  . ?
+
+\. behaviour:
+  \. show images on terminal
+\. plan:
+  \. terminal window size/terminal xy => get the terminal block width to heighy ratio ??
+  \. maybe get the terminal font and check the height to width ratio of it?
+  /. what does sixel say for the sizes?
+  \. try printing blocks and checking dimension https://en.m.wikipedia.org/wiki/Block_Elements
+
+. behaviour:
+  . fire actions from ContentProviders and receive the results back
+. plan:
+  . any actions that request data will have a callback function that will receive &mut ContentProvider and the data or something and
+    may return another action
+  . same can be applied for EnableEditing
+  . callback can be enum like Callback::OnContentProvider {f: FOnce(cp: &mut ContentProvider, data: ?), id: ContentProviderID}
+    . execute using Callback::apply(self, ch: &Contenthandler) -> Action
+
+. behaviour:
+  . have a lot of different kinds of content providers
+. plan:
+  . each a seperate struct with trait implimentation for ContentProvider
+    . can use macros for boilerplate methods
+    . maybe downcast trait objects if needed (maybe downcasting crates? (any?))
+    . a few implimentations can know about the yt stuff, so it can me more integrated
+
+. behaviour:
+  . doing yt actions
+. plan:
+  . create a seperate ytaction for each thing that someone else might want to do, and impliment a resolve function for the data
+    and send more actions to finally complete the action that was meant to happen
+    . disadvantages:
+      . code is split between yt stuff and content providers.
+      . yt stuff know what content providers want
+    . advantage:
+      . backend for getting the yt stuff is abstracted away
+      . will be easy to change/swap the backend as just the yt stuff is to be rewritten
+  \. ytactions with callback functions for doing stuff with the raw data that YTHandler returned
+    . advantages:
+      . logic is not split as much.
+      . as raw data is received, ContentProviders can parse just what they need at that point.
+    . disadvantages:
+      . content providers know about the backend stuff
+  . if trait ContentProvider
+    . a few implimentations can know about the yt stuff. others do not need to
+
+
 . maybe do some message passing achitecture
 
 . plan
   . import relevent notes from thrombe/musimanager
+  . a global settings
+    . different image modes
+    . other setting like the ones in thrombe/musimanager
+  . have a dbg runtime variable screen to change numbers without having to recompile (maybe a debug content provider)
+    .make sliders.
   . a floating widget
     . pressing a shortcut brings up another terminal window on the current screen with with a few options
       for switching songs and stuff
@@ -27,6 +149,35 @@
     . this way i dont have to use mutexes and iternal mutability for doing things on parallel
 
 
+. rust based yt api stuff
+  . none of the rust ones have functionality for searching albums
+  . invidious is quite good
+  . rafy might also be good for replacing ytdl
+  . https://crates.io/crates/invidious
+  . (not rust) https://github.com/sigma67/ytmusicapi/
+  . https://docs.rs/rafy/0.2.1/rafy/struct.Rafy.html
+  . https://github.com/TymanWasTaken/ytmusic-rs
+  . https://github.com/smoqadam/rust-youtube-downloader
+  . https://docs.rs/ytextract/0.11.0/ytextract/
+  . https://docs.rs/rustube/0.3.8/rustube/
+  . https://github.com/Siriusmart/youtube-tui/blob/master/Cargo.toml
+  . https://github.com/j0lol/rs-youtube/blob/main/src/backend/youtube/search.rs
+
+. sixel links
+    . https://github.com/saitoha/libsixel
+    . https://askubuntu.com/questions/97542/how-do-i-make-my-terminal-display-graphical-pictures
+    . https://docs.rs/viuer/latest/viuer/
+    . https://crates.io/crates/sixel-sys
+    . https://crates.io/crates/sixel
+    . https://lib.rs/crates/hunter
+    . https://github.com/seebye/ueberzug
+
+    . https://github.com/meh/rust-sixel     -- uses a different library
+    . https://docs.rs/control-code/0.7.1/control_code/DEC/SIXEL/enum.Color.html
+
+    . https://crates.io/crates/termplay     --- uses something else for sixel?
+    . https://github.com/jD91mZM2/termplay
+    . https://github.com/jD91mZM2/termplay/blob/master/src/converters/sixel.rs
 
 
 . ui
