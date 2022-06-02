@@ -9,10 +9,12 @@ use image::DynamicImage;
 use lofty::{
     self,
     AudioFile,
-    Accessor,
+    TaggedFile,
+    ItemKey,
 };
 use anyhow::{
     Result,
+    Context,
 };
 use std::{
     path::PathBuf,
@@ -227,22 +229,19 @@ impl Song {
     pub fn from_file(path: String) -> Result<Self> {
         let tf = lofty::read_from_path(&path, true)?;
         let _ = log_song(&path);
-        let tags = tf.primary_tag();
-        if tags.is_some() {
-            let tags = tags.unwrap();
-            let artist = tags.artist();
-            let title = tags.title();
-            let album = tags.album();
-            if artist.is_some() && title.is_some() {
-                return Ok(Self {
-                    metadata: SongMetadata::TaggedFile {
-                        path,
-                        title: title.unwrap().into(),
-                        artist: title.unwrap().into(),
-                        album: album.unwrap_or("none").into(),
-                    }
-                })
-            }
+        let st: TaggedSong = tf.into();
+        let title = st.title();
+        let album = st.album();
+        let artist = st.artist();
+        if title.is_some() && album.is_some() && artist.is_some() {
+            return Ok(Self {
+                metadata: SongMetadata::TaggedFile {
+                    path,
+                    title: title.unwrap().to_owned(),
+                    album: album.unwrap().to_owned(),
+                    artist: artist.unwrap().to_owned(),
+                }
+            })
         }
         Ok(Self {
             metadata: SongMetadata::UntaggedFile {path},
@@ -280,6 +279,34 @@ impl Song {
     }
 }
 
+struct TaggedSong(TaggedFile);
+impl From<TaggedFile> for TaggedSong {
+    fn from(f: TaggedFile) -> Self {
+        Self(f)
+    }
+}
+impl TaggedSong {
+    fn artist(&self) -> Option<&str> {
+        self.get_val(&ItemKey::TrackArtist)
+    }
+    fn title(&self) -> Option<&str> {
+        self.get_val(&ItemKey::TrackTitle)
+    }
+    fn album(&self) -> Option<&str> {
+        self.get_val(&ItemKey::AlbumTitle)
+    }
+    fn get_val(&self, key: &ItemKey) -> Option<&str> {
+        self.0
+        .tags()
+        .iter()
+        .map(lofty::Tag::items)
+        .map(|t| t.iter())
+        .flatten()
+        .filter(|t| t.key() == key)
+        .find_map(|t| t.value().text())
+    }
+}
+
 /// a function i used for checking what is returned by lofty
 fn log_song(path: &str) -> Result<()> {
     debug!("logging song {path}");
@@ -290,17 +317,18 @@ fn log_song(path: &str) -> Result<()> {
     let properties = tagged_file.properties();
     // apparently a file can have multiple tags in it
     let tags = tagged_file
-    .tags().into_iter()
+    .tags().iter()
     .map(lofty::Tag::items)
     .map(|e| e.iter()).flatten()
     .map(|e| (format!("{:#?}", e.key()), e.value().text().unwrap()))
     .collect::<Vec<_>>()
     ;
     let pics = tagged_file
-    .tags().into_iter()
+    .tags().iter()
     .map(lofty::Tag::pictures)
     .collect::<Vec<_>>()
     ;
-    dbg!(file_type, properties, tags, pics);
+    let tag_type = tagged_file.primary_tag_type();
+    dbg!(file_type, properties, tags, pics, tag_type);
     Ok(())
 }
