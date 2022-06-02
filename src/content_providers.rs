@@ -92,7 +92,7 @@ impl ContentProvider {
             ContentProviderContentType::Normal => {
                 match self.cp_type {
                     ContentProviderType::Queues => {
-                        DisplayContent::IDS(
+                        DisplayContent::IDs(
                             self.providers
                             .iter().cloned()
                             .map(Into::into)
@@ -101,7 +101,7 @@ impl ContentProvider {
                         )
                     }
                     _ => {
-                        DisplayContent::IDS(
+                        DisplayContent::IDs(
                             self.providers
                             .iter().cloned()
                             .map(Into::into)
@@ -312,6 +312,8 @@ impl ContentProvider {
                                         let mut id = self_id;
                                         // self.loaded = false;
                                         id.set_content_type(ContentProviderContentType::Normal);
+                                        self.songs.clear();
+                                        self.providers.clear();
                                         return vec![
                                             ContentHandlerAction::PopContentStack, // typing
                                             ContentHandlerAction::PopContentStack, // edit

@@ -14,7 +14,10 @@ use lofty::{
 use anyhow::{
     Result,
 };
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    fmt::Debug,
+};
 use serde::{
     Serialize,
     Deserialize,
@@ -24,7 +27,6 @@ use crate::{
     content_handler::{
         ContentHandlerAction, RustParallelAction,
     },
-    yt_manager::YTAction,
 };
 
 
@@ -65,8 +67,30 @@ pub enum SongMenuOptions {}
 pub enum SongArt {
     DynamicImage(DynamicImage),
     TaggedFile(PathBuf),
-    YTSongID(String),
+    YTSong(YTSongPath),
     ImageUrl(String),
+    None,
+}
+impl Debug for SongArt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DynamicImage(..) => {
+                write!(f, "SongArt::DynamicImage")
+            }
+            Self::TaggedFile(p) => {
+                write!(f, "{p:#?}")
+            }
+            Self::YTSong(path) => {
+                write!(f, "{path:#?}")
+            }
+            Self::ImageUrl(url) => {
+                write!(f, "{url}")
+            }
+            Self::None => {
+                write!(f, "SongArt::None")
+            }
+        }
+    }
 }
 
 impl SongArt {
@@ -78,13 +102,14 @@ impl SongArt {
             Self::TaggedFile(path) => {
                 RustParallelAction::ProcessAndUpdateImageFromSongPath { path }.into()
             }
-            Self::YTSongID(id) => {
-                YTAction::ShowSongArt {
-                    id: id.clone(),
-                }.into()
+            Self::YTSong(..) => {
+                unreachable!();
             }
             Self::ImageUrl(url) => {
-                todo!();
+                RustParallelAction::ProcessAndUpdateImageFromUrl { url }.into()
+            }
+            Self::None => {
+                None.into()
             }
         }
     }
@@ -93,19 +118,35 @@ impl SongArt {
 #[derive(Debug, Clone)]
 pub enum SongPath {
     LocalPath(String),
-    YTKey(String),
-    YTURL(String),
+    YTPath(YTSongPath),
+}
+#[derive(Debug, Clone)]
+pub enum YTSongPath {
+    Key(String),
+    URL(String),    
 }
 impl ToString for SongPath {
     fn to_string(&self) -> String {
         match self {
             Self::LocalPath(s) => format!("file://{s}"),
-            Self::YTKey(s) => format!("https://youtu.be/{s}"),
-            Self::YTURL(s) => s.into(),
+            Self::YTPath(p) => p.to_string(),
+        }
+    }
+}
+impl ToString for YTSongPath {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Key(s) => format!("https://youtu.be/{s}"),
+            Self::URL(p) => p.into(),
         }
     }
 }
 impl Into<String> for SongPath {
+    fn into(self) -> String {
+        self.to_string()
+    }
+}
+impl Into<String> for YTSongPath {
     fn into(self) -> String {
         self.to_string()
     }
@@ -211,7 +252,7 @@ impl Song {
     pub fn get_art(&self) -> SongArt {
         match &self.metadata {
             SongMetadata::YT { id, .. } => {
-                SongArt::YTSongID(id.clone())
+                SongArt::YTSong(YTSongPath::Key(id.clone()))
             }
             SongMetadata::TaggedFile { path, .. } => {
                 SongArt::TaggedFile(PathBuf::from(path))
@@ -232,7 +273,7 @@ impl Song {
                 SongPath::LocalPath(path.into())
             }
             SongMetadata::YT { id, .. } => {
-                SongPath::YTKey(id.into())
+                SongPath::YTPath(YTSongPath::Key(id.clone()))
             }
             _ => panic!()
         }

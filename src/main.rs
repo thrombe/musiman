@@ -105,10 +105,10 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // create app and run it
-    let app = App::load();
-    app.run_app(&mut terminal).unwrap();
+    let app = App::load()?;
+    app.run_app(&mut terminal)?;
 
-    restore_terminal(&mut terminal).unwrap();
+    restore_terminal(&mut terminal)?;
 
     Ok(())
 }
@@ -150,10 +150,11 @@ fn init_logger() -> Result<()> {
     let file_config = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
-                "[{}] [{}:{}] {}",
+                "[{}] [{}:{}] [{}] {}",
                 record.level(),
                 record.file().unwrap(),
                 record.line().unwrap(),
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64(),
                 message,
             ))
         })

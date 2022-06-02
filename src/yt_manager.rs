@@ -32,6 +32,7 @@ use pyo3::{
 };
 use serde::{self, Serialize, Deserialize};
 use serde_json;
+use derivative::Derivative;
 use anyhow::{Result, Context};
 use std::{
     thread::{
@@ -39,6 +40,7 @@ use std::{
         JoinHandle,
     },
     sync::{
+        Arc,
         mpsc::{
             self,
             Receiver,
@@ -52,6 +54,7 @@ struct PyHandel {
     ytmusic: Py<PyAny>,
     thread: Py<PyAny>,
     json: Py<PyAny>,
+    time: Py<PyAny>,
 }
 impl PyHandel {
     fn new(py: Python) -> Result<Self> {
@@ -92,20 +95,26 @@ impl PyHandel {
         let thread = py.import("threading")?
         .getattr("Thread")?
         .extract()?;
+        let time = py.import("time")?
+        .extract()?;
         Ok(Self {
             ytmusic,
             thread,
             json,
             ytdl,
+            time,
         })
     }
 }
 
 // pyo3 cant do python in multiple rust threads at a time. so gotta make sure only one is active at a time
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub enum YTAction { // TODO: use cow for strings in actions?
     GetSong {
         url: String,
+        #[derivative(Debug="ignore")]
+        callback: Box<dyn Fn(String, String) -> ContentHandlerAction + Send + Sync>,
     },
     // TODO: more search actions
     // https://ytmusicapi.readthedocs.io/en/latest/reference.html#ytmusicapi.YTMusic.search
@@ -124,9 +133,6 @@ pub enum YTAction { // TODO: use cow for strings in actions?
     GetPlaylist {
         playlist_id: String,
         loader: ContentProviderID,
-    },
-    ShowSongArt {
-        id: String,
     },
 }
 impl YTAction {
@@ -151,17 +157,17 @@ impl YTAction {
         get_data = dbg_data # // dbg:
         ";
         let code = match self {
-            Self::GetSong {url} => {
+            Self::GetSong {url, ..} => {
                 format!("
                     def dbg_data():
-                        with open('config/temp/get_song.log', 'r') as f:
+                        with open('config/temp/ytdl_song.log', 'r') as f:
                             data = f.read()
                         return data
                     def get_data():
                         ytdl_data = ytdl.extract_info(url='{url}', download=False)
                         data = json.dumps(ytdl_data, indent=4)
                         return data
-                    get_data = dbg_data # // dbg:
+                    #get_data = dbg_data # // dbg:
                 ")
             }
             Self::AlbumSearch {term, ..} => { // TODO: allow to choose limit and ignore_spelling from ui too
@@ -216,21 +222,6 @@ impl YTAction {
                     #get_data = dbg_data # // dbg:
                 ")
             }
-            Self::ShowSongArt {id} => {
-                format!("
-                    def dbg_data():
-                        with open('config/temp/show_song_art.log', 'r') as f:
-                            data = f.read()
-                        return data
-                    def get_data():
-                        data = {{}}
-                        data['ytmusic'] = ytmusic.get_song('{id}')
-                        data['ytdl'] = ytdl.extract_info(url='https://youtu.be/{id}', download=False)
-                        data = json.dumps(data, indent=4)
-                        return data
-                    #get_data = dbg_data # // dbg:      
-                ")
-            }
         };
         let try_catch = fix_python_indentation("
             def try_catch(f):
@@ -261,10 +252,64 @@ impl YTAction {
             return Ok(ContentHandlerAction::None); // ?
         }
         let action = match self {
-            Self::GetSong {..} => {
+            Self::GetSong {callback, ..} => {
                 let res = pyd.extract::<String>(py)?;
-                debug!("{res}");
-                todo!();
+                // debug!("{res}");
+                let song = serde_json::from_str::<YtdlSong>(&res)?;
+                // dbg!(&song);
+                let best_thumbnail_url = song
+                .thumbnails
+                .context("")?
+                .into_iter()
+                .filter(|e| e.preference.is_some() && e.url.is_some())
+                .reduce(|a, b| {
+                    if a.preference.unwrap() > b.preference.unwrap() {
+                        a
+                    } else {
+                        b
+                    }
+                }).context("")?.url.unwrap();
+                
+                // yanked and translated code from ytdlp github readme
+                // https://github.com/yt-dlp/yt-dlp#use-a-custom-format-selector
+                let best_video_ext = song
+                .formats
+                .as_ref()
+                .context("")?
+                .iter()
+                .rev()
+                .filter(|f| {
+                    f.vcodec.is_some() &&
+                    f.vcodec.as_ref().unwrap() != "none" &&
+                    f.acodec.is_some() &&
+                    f.acodec.as_ref().unwrap() == "none"
+                })
+                .next()
+                .context("")?
+                .ext
+                .as_ref()
+                .context("")?;
+                let best_audio_url = song
+                .formats
+                .as_ref()
+                .context("")?
+                .iter()
+                .rev()
+                .filter(|f| {
+                    f.acodec.is_some() &&
+                    f.acodec.as_ref().unwrap() != "none" &&
+                    f.vcodec.is_some() &&
+                    f.vcodec.as_ref().unwrap() == "none" &&
+                    f.ext.is_some() &&
+                    f.ext.as_ref().unwrap() == best_video_ext
+                })
+                .next()
+                .context("")?
+                .url
+                .as_ref()
+                .context("")?
+                .clone();
+                callback(best_audio_url, best_thumbnail_url)
             }
             Self::AlbumSearch {loader, ..} => {
                 let res = pyd.extract::<String>(py)?;
@@ -319,29 +364,6 @@ impl YTAction {
                         content_providers: Default::default(),
                     },
                     ContentHandlerAction::RefreshDisplayContent,
-                ].into()
-            }
-            Self::ShowSongArt {..} => {
-                let res = pyd.extract::<String>(py)?;
-                // debug!("{res}");
-                let song = serde_json::from_str::<YtdlAndYTMusicSong>(&res)?;
-                // dbg!(song);
-                let best_thumbnail_url = song
-                    .ytdl
-                    .thumbnails.context("")?
-                    .into_iter()
-                    .filter(|e| e.preference.is_some() && e.url.is_some())
-                    .reduce(|a, b| {
-                        if a.preference.unwrap() > b.preference.unwrap() {
-                            a
-                        } else {
-                            b
-                        }
-                    }).context("")?.url.unwrap();
-                vec![
-                    RustParallelAction::ProcessAndUpdateImageFromUrl {
-                        url: best_thumbnail_url,
-                    }.into()
                 ].into()
             }
         };
@@ -515,6 +537,7 @@ struct YtdlSong {
     alt_title: Option<String>,
     availability: Option<String>,
     fulltitle: Option<String>,
+    formats: Option<Vec<YtdlSongFormat>>,
 }
 #[derive(Serialize, Deserialize, Debug)]
 struct YtdlSongThumbnail { // the fields always seem to be there, but just to be sure
@@ -583,7 +606,8 @@ impl YTManager {
             let mut actions = vec![];
 
             loop {
-                std::thread::sleep(std::time::Duration::from_secs_f64(0.2));
+                // sleeping in python seems to not ruin speed. sleeping in rust somehow destroys it
+                py.run("time.sleep(0.2)", Some([("time", &pyh.time)].into_py_dict(py)), None)?;
                 match receiver.try_recv() {
                     Ok(a) => {
                         // choosing the default value of a dict so that the new data can be inserted into this dict, and

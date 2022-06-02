@@ -294,9 +294,9 @@ impl PlayerWidget {
         }
     }
 
-    fn update(&mut self, ch: &mut ContentHandler) {
-        ch.poll_action();
-        if ch.player.is_finished() {
+    fn update(&mut self, ch: &mut ContentHandler) -> Result<()> {
+        ch.poll_action()?;
+        if ch.player.is_finished()? {
             ch.next_song();
         }
         match &mut self.render_state {
@@ -308,6 +308,7 @@ impl PlayerWidget {
 
             }
         }
+        Ok(())
     }
 }
 
@@ -362,8 +363,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn load() -> Self {
-        Self {
+    pub fn load() -> Result<Self> {
+        let a = Self {
             input: Default::default(),
             input_cursor_pos: 0,
             state: AppState::Browser,
@@ -372,15 +373,16 @@ impl App {
             browser_widget: BrowserWidget::new(),
             player_widget: PlayerWidget::new(),
 
-            content_handler: ContentHandler::load(),
-        }
+            content_handler: ContentHandler::load()?,
+        };
+        Ok(a)
     }
 
     pub fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
         terminal.draw(|f| self.render(f))?;
         loop {
             self.handle_events()?;
-            self.update();
+            self.update()?;
             terminal.draw(|f| self.render(f))?;
 
             if let AppState::Quit = self.state {
@@ -389,8 +391,8 @@ impl App {
         }
     }
 
-    fn update(&mut self) {
-        self.player_widget.update(&mut self.content_handler);
+    fn update(&mut self) -> Result<()> {
+        self.player_widget.update(&mut self.content_handler)?;
         let action = self.content_handler.get_app_action();
         action.apply(self);
         match self.state {
@@ -400,6 +402,7 @@ impl App {
             }
             _ => (),
         }
+        Ok(())
     }
     
     fn handle_events(&mut self) -> Result<()> {

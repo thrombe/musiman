@@ -26,6 +26,7 @@ console = { version = "0.15", default-features = false }
 ansi_colours = "1.0"
 termcolor = "1.1"
 lazy_static = "1.4"
+derivative = "2.2.0"
 
 [dependencies.reqwest]
 version = "0.11.10"
@@ -35,7 +36,7 @@ features = ["blocking"]
 version = "0.1"
 
 path = "../musimanager/musiplayer"
-features = ["player-mpv", "force"]
+# features = ["player-mpv", "force"]
 
 # git = "https://github.com/thrombe/musimanager"
 

@@ -22,6 +22,7 @@ use self::{
     },
 };
 
+use derivative::Derivative;
 use std::{
     path::PathBuf,
     io::Stdout,
@@ -31,6 +32,8 @@ use std::{
     },
 };
 
+// #[derive(Derivative)]
+// #[derivative(Debug)]
 pub enum UnprocessedImage {
     Path(PathBuf),
     Url(String), // implimenting into From<String> might be dangerous? accidental string path to Url
@@ -233,7 +236,7 @@ impl Default for ImageHandler {
                 use_sixel: true,
                 alignment: Default::default(),
             },
-            printer: Printer::Block,
+            printer: Printer::Sixel,
             processed_image: Default::default(),
             unprocessed_image: Default::default(),
             dimensions_changed: false,
@@ -277,11 +280,11 @@ impl ImageHandler {
 
     pub fn maybe_print(&mut self) -> Result<()> {
         // dbg!("maybe printing");
-        if self.dimensions_changed { // TODO:
+        // if self.dimensions_changed { // TODO:
 
-        } else {
+        // } else {
 
-        }
+        // }
 
         use crossterm::{
             execute,
