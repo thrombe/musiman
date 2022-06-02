@@ -40,7 +40,6 @@ use std::{
         JoinHandle,
     },
     sync::{
-        Arc,
         mpsc::{
             self,
             Receiver,
@@ -126,6 +125,10 @@ pub enum YTAction { // TODO: use cow for strings in actions?
         term: String,
         loader: ContentProviderID,
     },
+    SongSearch {
+        term: String,
+        loader: ContentProviderID,
+    },
     GetAlbumPlaylistId {
         browse_id: String,
         loader: ContentProviderID,
@@ -191,6 +194,19 @@ impl YTAction {
                         return data
                     def get_data():
                         data = ytmusic.search('{term}', filter='videos', limit=75, ignore_spelling=True)
+                        data = json.dumps(data, indent=4)
+                        return data
+                    #get_data = dbg_data # // dbg:
+                ")
+            }
+            Self::SongSearch {term, ..} => {
+                format!("
+                    def dbg_data():
+                        with open('config/temp/song_search.log', 'r') as f:
+                            data = f.read()
+                        return data
+                    def get_data():
+                        data = ytmusic.search('{term}', filter='songs', limit=75, ignore_spelling=True)
                         data = json.dumps(data, indent=4)
                         return data
                     #get_data = dbg_data # // dbg:
@@ -332,6 +348,21 @@ impl YTAction {
                 // debug!("{res}");
                 let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
                 let songs = videos.into_iter().map(Into::into).collect();
+                vec![
+                    ContentHandlerAction::LoadContentProvider {
+                        songs,
+                        content_providers: Default::default(),
+                        loader_id: *loader,
+                    },
+                    ContentHandlerAction::RefreshDisplayContent,
+                ].into()
+            }
+            Self::SongSearch {loader, ..} => {
+                let res = pyd.extract::<String>(py)?;
+                // debug!("{res}");
+                let songs = serde_json::from_str::<Vec<YTMusicSearchSong>>(&res)?;
+                // dbg!(&songs);
+                let songs = songs.into_iter().map(Into::into).collect();
                 vec![
                     ContentHandlerAction::LoadContentProvider {
                         songs,
@@ -554,6 +585,33 @@ struct YtdlSongFormat {
     video_ext: Option<String>,
     format: Option<String>,
 }
+
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct YTMusicSearchSong {
+    title: Option<String>,
+    album: Option<YTMusicSongSearchAlbum>,
+    video_id: Option<String>,
+    artists: Option<Vec<YTMusicSearchArtist>>,
+    thumbnails: Option<Vec<YTMusicSongThumbnail>>,
+}
+impl Into<Song> for YTMusicSearchSong {
+    fn into(self) -> Song {
+        Song {
+            metadata: SongMetadata::YT {
+                title: self.title.unwrap(),
+                id: self.video_id.unwrap(),
+            }
+        }
+    }
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct YTMusicSongSearchAlbum {
+    name: Option<String>,
+    id: Option<String>,
+}
+
 
 pub struct YTActionEntry {
     action: YTAction,
