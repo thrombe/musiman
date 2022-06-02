@@ -150,7 +150,7 @@ impl RustParallelAction {
                     Err(anyhow::anyhow!("no image"))
                 };
 
-                let mut img = UnprocessedImage::Image(img?);
+                let mut img = UnprocessedImage::Image {img: img?};
                 img.prepare_image()?;
                 send.send(ContentHandlerAction::UpdateImage {
                     img,
@@ -585,7 +585,7 @@ impl ContentHandler {
                                 let content_id = cp.get_selected();
                                 match content_id {
                                     ID::Song(song_id) => {
-                                        self.play_song(song_id);
+                                        self.play_song(song_id)?;
                                         self.set_queue(id);
                                     }
                                     ID::ContentProvider(id) => {
@@ -666,9 +666,10 @@ impl ContentHandler {
         }
     }
 
-    pub fn open_menu_for_current(&mut self) {
+    pub fn open_menu_for_current(&mut self) -> Result<()> {
         let &id = self.content_stack.last().unwrap();
-        self.open_menu_for(id);
+        self.open_menu_for(id)?;
+        Ok(())
     }
 
     fn open_menu_for(&mut self, id: GlobalContent) -> Result<()> {
@@ -700,9 +701,10 @@ impl ContentHandler {
         Ok(())
     }
 
-    pub fn open_edit_for_current(&mut self) {
+    pub fn open_edit_for_current(&mut self) -> Result<()> {
         let &id = self.content_stack.last().unwrap();
-        self.open_edit_for(id);
+        self.open_edit_for(id)?;
+        Ok(())
     }
 
     fn open_edit_for(&mut self, id: GlobalContent) -> Result<()> {
@@ -730,7 +732,7 @@ impl ContentHandler {
         Ok(())
     }
     
-    pub fn open_menu_for_selected(&mut self) {
+    pub fn open_menu_for_selected(&mut self) -> Result<()> {
         let &id = self.content_stack.last().unwrap();
         dbg!(&self.content_stack);
         match id {
@@ -738,22 +740,23 @@ impl ContentHandler {
                 match id {
                     ID::Song(..) => {
                         // when a menu/something else for this song is already open
-                        return
+                        // do nothing
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
                         let id = cp.get_selected();
-                        self.open_menu_for(id.into());
+                        self.open_menu_for(id.into())?;
                     }
                 }
             }
             GlobalContent::Log | GlobalContent::Notifier => {
-                return
+                // no menu
             }
         }
+        Ok(())
     }
 
-    pub fn open_edit_for_selected(&mut self) {
+    pub fn open_edit_for_selected(&mut self) -> Result<()> {
         let &id = self.content_stack.last().unwrap();
         dbg!(&self.content_stack);
         match id {
@@ -765,14 +768,15 @@ impl ContentHandler {
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
                         let id = cp.get_selected();
-                        self.open_edit_for(id.into());
+                        self.open_edit_for(id.into())?;
                     }
                 }
             }
             GlobalContent::Log | GlobalContent::Notifier => {
-                return
+                //no edit
             }
         }
+        Ok(())
     }
 
     fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
@@ -826,36 +830,38 @@ impl ContentHandler {
     pub fn toggle_song_pause(&mut self) {
         self.player.toggle_pause().unwrap();
     }
-    pub fn next_song(&mut self) { // FIX: browsing around changes the next song instead of choosing the song next to the current song
+    pub fn next_song(&mut self) -> Result<()> { // FIX: browsing around changes the next song instead of choosing the song next to the current song
         let id = match self.active_queue {
             Some(id) => id,
-            None => return,
+            None => return Ok(()),
         };
         if !self.increment_selection_on(id.into()) {
-            return
+            return Ok(())
         }        
         let q = self.get_provider_mut(id);
         let song_id = q.get_selected();
         if let ID::Song(id) = song_id {
-            self.play_song(id);
+            self.play_song(id)?;
         }
+        Ok(())
     }
-    pub fn prev_song(&mut self) {
+    pub fn prev_song(&mut self) -> Result<()> {
         let id = match self.active_queue {
             Some(id) => id,
-            None => return,
+            None => return Ok(()),
         };
         if !self.increment_selection_on(id.into()) {
-            return
+            return Ok(())
         }        
         let q = self.get_provider_mut(id);
         let song_id = q.get_selected();
         if let ID::Song(id) = song_id {
-            self.play_song(id);
+            self.play_song(id)?;
         }
+        Ok(())
     }
-    pub fn seek_song(&mut self, t: f64) {
-        self.player.seek(t).unwrap();
+    pub fn seek_song(&mut self, t: f64) -> Result<()> {
+        self.player.seek(t)
     }
 
     pub fn get_app_action(&mut self) -> AppAction {

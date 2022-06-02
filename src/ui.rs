@@ -178,7 +178,7 @@ impl BrowserWidget {
         Self::default()
     }
 
-    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> bool {
+    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> Result<bool> {
         match key.code {
             KeyCode::Char('d') => {
                 ch.debug_current();
@@ -187,10 +187,10 @@ impl BrowserWidget {
                 // self.options = ch.menu_for_selected();
             }
             KeyCode::Char('G') => {
-                ch.open_menu_for_current();
+                ch.open_menu_for_current()?;
             }
             KeyCode::Char('E') => {
-                ch.open_edit_for_current();
+                ch.open_edit_for_current()?;
             }
             KeyCode::Up => {
                 ch.decrement_selection();
@@ -199,14 +199,14 @@ impl BrowserWidget {
                 ch.increment_selection();
             }
             KeyCode::Right => {
-                ch.enter_selected();
+                ch.enter_selected()?;
             }
             KeyCode::Left => {
-                ContentHandlerAction::PopContentStack.apply(ch);
+                ContentHandlerAction::PopContentStack.apply(ch)?;
             }
-            _ => return false,
+            _ => return Ok(false),
         }
-        true
+        Ok(true)
     }
 
     fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, selected_index: &mut SelectedIndex) {
@@ -243,26 +243,26 @@ impl PlayerWidget {
         }
     }
 
-    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> bool {
+    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> Result<bool> {
         match key.code {
             KeyCode::Char('p') => {
                 ch.toggle_song_pause();
             }
             KeyCode::Char('k') => {
-                ch.seek_song(10.0);
+                ch.seek_song(10.0)?;
             }
             KeyCode::Char('j') => {
-                ch.seek_song(-10.0);
+                ch.seek_song(-10.0)?;
             }
             KeyCode::Char('l') => {
-                ch.next_song();
+                ch.next_song()?;
             }
             KeyCode::Char('h') => {
-                ch.prev_song();
+                ch.prev_song()?;
             }
-            _ => return false,
+            _ => return Ok(false),
         }
-        true
+        Ok(true)
     }
 
     fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {
@@ -297,7 +297,7 @@ impl PlayerWidget {
     fn update(&mut self, ch: &mut ContentHandler) -> Result<()> {
         ch.poll_action()?;
         if ch.player.is_finished()? {
-            ch.next_song();
+            ch.next_song()?;
         }
         match &mut self.render_state {
             RenderState::Log(logs) => {
@@ -379,11 +379,11 @@ impl App {
     }
 
     pub fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
-        terminal.draw(|f| self.render(f))?;
+        terminal.draw(|f| self.render(f).unwrap())?;
         loop {
             self.handle_events()?;
             self.update()?;
-            terminal.draw(|f| self.render(f))?;
+            terminal.draw(|f| self.render(f).unwrap())?;
 
             if let AppState::Quit = self.state {
                 return Ok(());
@@ -416,7 +416,7 @@ impl App {
                     match key.code {
                         KeyCode::Esc => {
                             self.state = AppState::Browser; // TODO: should this be a stack too?
-                            ContentHandlerAction::PopContentStack.apply(&mut self.content_handler);
+                            ContentHandlerAction::PopContentStack.apply(&mut self.content_handler)?;
                         }
                         KeyCode::Char(c) => {
                             self.input.insert(self.input_cursor_pos, c);
@@ -454,7 +454,7 @@ impl App {
                             self.input_cursor_pos = self.input.len();
                         }
                         KeyCode::Enter => {
-                            self.content_handler.apply_typed(self.input[..].iter().collect());
+                            self.content_handler.apply_typed(self.input[..].iter().collect())?;
                             self.state = AppState::Browser;
                         }
                         _ => event_handled = false,
@@ -464,12 +464,12 @@ impl App {
                 _ => {
                     let mut event_handled = false;
                     if !event_handled {
-                        event_handled = self.browser_widget.handle_events(key, &mut self.content_handler);
+                        event_handled = self.browser_widget.handle_events(key, &mut self.content_handler)?;
                         // if event_handled {
                         //     self.browser_widget.update(&mut self.content_handler);
                         // }
                     }
-                    if !event_handled {event_handled = self.player_widget.handle_events(key, &mut self.content_handler);}
+                    if !event_handled {event_handled = self.player_widget.handle_events(key, &mut self.content_handler)?;}
                     event_handled
                 },
             };
@@ -487,7 +487,7 @@ impl App {
         Ok(())
     }
     
-    fn render<B: Backend>(&mut self, f: &mut Frame<B>) {
+    fn render<B: Backend>(&mut self, f: &mut Frame<B>) -> Result<()> {
         let (status_rect, right_rect, left_rect) = {
             let mut chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -513,7 +513,7 @@ impl App {
         
         self.content_handler.image_handler.set_offset(right_rect.x + 1, right_rect.y as i16 + 1);
         self.content_handler.image_handler.set_size(Some(right_rect.width as u32 - 2), Some(right_rect.height as u32 - 2));
-        self.content_handler.image_handler.maybe_print();
+        self.content_handler.image_handler.maybe_print()?;
 
         match self.state {
             AppState::Typing => {
@@ -524,5 +524,6 @@ impl App {
             }
             _ => (),
         }
+        Ok(())
     }
 }

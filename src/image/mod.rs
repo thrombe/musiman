@@ -26,45 +26,18 @@ use derivative::Derivative;
 use std::{
     path::PathBuf,
     io::Stdout,
-    fmt::{
-        Display,
-        Debug,
-    },
 };
 
-// #[derive(Derivative)]
-// #[derivative(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub enum UnprocessedImage {
     Path(PathBuf),
     Url(String), // implimenting into From<String> might be dangerous? accidental string path to Url
-    Image(image::DynamicImage),
+    Image {
+        #[derivative(Debug="ignore")]
+        img: image::DynamicImage,
+    },
     None,
-}
-impl Debug for UnprocessedImage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self}")
-    }
-}
-impl Display for UnprocessedImage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Path(path) => {
-                write!(f, "{:#?}", path)?;
-            }
-            Self::Url(url) => {
-                write!(f, "{url}")?;
-
-            }
-            Self::None => {
-                write!(f, "None")?;
-
-            }
-            Self::Image(..) => {
-                write!(f, "Image")?;
-            }
-        }
-        Ok(())
-    }
 }
 impl Default for UnprocessedImage {
     fn default() -> Self {
@@ -81,7 +54,7 @@ impl From<Option<UnprocessedImage>> for UnprocessedImage {
 }
 impl From<DynamicImage> for UnprocessedImage {
     fn from(o: DynamicImage) -> Self {
-        Self::Image(o)
+        Self::Image {img: o}
     }
 }
 impl From<PathBuf> for UnprocessedImage {
@@ -93,7 +66,7 @@ impl From<PathBuf> for UnprocessedImage {
 impl UnprocessedImage {
     pub fn needs_preparing(&self) -> bool {
         match self {
-            Self::Image(..) => false,
+            Self::Image {..} => false,
             Self::None | Self::Url(..) | Self::Path(..) => true,
         }
     }
@@ -102,16 +75,16 @@ impl UnprocessedImage {
         match self {
             Self::Path(path) => {
                 let img = image::io::Reader::open(path)?.with_guessed_format()?.decode()?;
-                *self = Self::Image(img);
+                *self = Self::Image {img};
                 self.prepare_image()?;
             }
             Self::Url(url) => {
                 let res = reqwest::blocking::get(&*url)?;
                 let img = image::load_from_memory(&res.bytes()?)?;
-                *self = Self::Image(img);
+                *self = Self::Image {img};
                 self.prepare_image()?;
             }
-            Self::Image(img) => {
+            Self::Image {img} => {
                 let (x, y) = img.dimensions();
                 if x > y {
                     *img = img.crop((x-y)/2, 0, y, y);
@@ -131,7 +104,7 @@ impl UnprocessedImage {
 
     fn get_image(&self) -> Option<&DynamicImage> {
         match self {
-            Self::Image(img) => Some(img),
+            Self::Image {img} => Some(img),
             _ => None,
         }
     }

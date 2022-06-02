@@ -14,8 +14,8 @@ use lofty::{
 };
 use anyhow::{
     Result,
-    Context,
 };
+use derivative::Derivative;
 use std::{
     path::PathBuf,
     fmt::Debug,
@@ -66,39 +66,22 @@ pub enum SongMetadata {
 pub enum SongMenuOptions {}
 
 
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub enum SongArt {
-    DynamicImage(DynamicImage),
+    DynamicImage {
+        #[derivative(Debug="ignore")]
+        img: DynamicImage,
+    },
     TaggedFile(PathBuf),
     YTSong(YTSongPath),
     ImageUrl(String),
     None,
 }
-impl Debug for SongArt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::DynamicImage(..) => {
-                write!(f, "SongArt::DynamicImage")
-            }
-            Self::TaggedFile(p) => {
-                write!(f, "{p:#?}")
-            }
-            Self::YTSong(path) => {
-                write!(f, "{path:#?}")
-            }
-            Self::ImageUrl(url) => {
-                write!(f, "{url}")
-            }
-            Self::None => {
-                write!(f, "SongArt::None")
-            }
-        }
-    }
-}
-
 impl SongArt {
     pub fn load(self) -> ContentHandlerAction {
         match self {
-            Self::DynamicImage(img) => {
+            Self::DynamicImage {img} => {
                 ContentHandlerAction::UpdateImage { img: img.into() }
             }
             Self::TaggedFile(path) => {
