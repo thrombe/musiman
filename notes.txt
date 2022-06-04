@@ -96,6 +96,18 @@ async?
     . a few implimentations can know about the yt stuff, so it can me more integrated
 
 . behaviour:
+  . how do menu and edit
+. plan:
+  . global id has a menu varient(with selected index) (as onlt the index for main stuff is stored in ContentProvider)
+    and it fetches the second last element and opens menu on that
+    . can't do multiple layers of menus/edits this way tho.
+  . save context in globalContent and pass in menu/edit funcs. which may replace the context in from the content stack using
+    actions. on going back, match GC, if menu, context.pop
+
+. there needs to be 2 different ids, one that can go in content_stack.stack, and another that can have a menu/edit.
+  it does not make sense to literally anything else on a song that can be done on a provider/notifier and stuff
+
+. behaviour:
   . doing yt actions
 . plan:
   . create a seperate ytaction for each thing that someone else might want to do, and impliment a resolve function for the data

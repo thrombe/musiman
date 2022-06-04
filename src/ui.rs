@@ -35,6 +35,7 @@ use tui::{
         Text,
     },
 };
+use std::borrow::Cow;
 use crossterm::{
     event::{
         self,
@@ -232,7 +233,6 @@ struct PlayerWidget {
 }
 #[derive(Clone)]
 enum RenderState {
-    Log(Vec<String>),
     Normal,
 }
 
@@ -274,23 +274,6 @@ impl PlayerWidget {
                     r
                 );
             }
-            RenderState::Log(logs) => {
-                let messages = List::new(
-                    logs.iter()
-                    .enumerate()
-                    .map(|(i, m)| {
-                        let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
-                        ListItem::new(content).style(Style::default().fg(Color::Cyan))
-                    })
-                    .collect::<Vec<_>>()
-                )
-                .block(Block::default().borders(Borders::ALL).title("Logs"))
-                .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Rgb(200, 100, 0)))
-                // .highlight_symbol("> ")
-                ;
-                let mut list_state = ListState::default();
-                f.render_stateful_widget(messages, r, &mut list_state);
-            }
         }
     }
 
@@ -300,10 +283,6 @@ impl PlayerWidget {
             ch.next_song()?;
         }
         match &mut self.render_state {
-            RenderState::Log(logs) => {
-                logs.clear();
-                logs.append(&mut ch.get_logs().clone().into_iter().rev().collect());
-            }
             RenderState::Normal => {
 
             }
@@ -398,7 +377,7 @@ impl App {
         match self.state {
             AppState::Typing => {
                 let index = self.content_handler.get_selected_index().selected_index();
-                self.browser_widget.options[index] = self.input[..].iter().collect();
+                self.browser_widget.options[index] = self.input[..].iter().collect::<String>();
             }
             _ => (),
         }

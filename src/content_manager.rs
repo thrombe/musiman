@@ -7,9 +7,11 @@ use crate::{
         SongContentType,
     },
     content_providers::{
-        ContentProvider,
-        ContentProviderContentType,
+        self,
+        // ContentProvider,
+        // ContentProviderContentType,
     },
+    content_handler::ContentProvider,
 };
 
 macro_rules! to_from_content_id {
@@ -28,11 +30,10 @@ macro_rules! to_from_content_id {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SongID {
     id: ContentID<Song>,
-    pub t: SongContentType, 
 }
 impl SongID {
     fn from_id(id: ContentID<Song>) -> Self {
-        Self { id, t: Default::default() }
+        Self { id }
     }
 }
 to_from_content_id!(SongID, Song);
@@ -41,13 +42,11 @@ to_from_content_id!(SongID, Song);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ContentProviderID {
     id: ContentID<ContentProvider>,
-    t: ContentProviderContentType,
 }
 impl ContentProviderID {
     fn from_id(id: ContentID<ContentProvider>) -> Self {
         Self {
             id,
-            t: Default::default(),
         }
     }
 }
@@ -70,20 +69,9 @@ impl From<ContentProviderID> for ID {
     }
 }
 
-impl ContentProviderID {
-    pub fn get_content_type(self) -> ContentProviderContentType {
-        self.t
-    }
-
-    pub fn set_content_type(&mut self, new_t: ContentProviderContentType) {
-        self.t = new_t;
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GlobalContent {
     Notifier,
-    Log,
     ID(ID),
 }
 impl<T> From<T> for GlobalContent
@@ -218,12 +206,12 @@ pub struct ContentID<T> {
     generation: u64,
     _phantom: PhantomData<T>,
 }
-impl<T: Clone> Clone for ContentID<T> {
+impl<T> Clone for ContentID<T> {
     fn clone(&self) -> Self {
         Self { index: self.index, generation: self.generation, _phantom: PhantomData }
     }
 }
-impl<T: Clone> Copy for ContentID<T> {}
+impl<T> Copy for ContentID<T> {}
 impl<T> PartialEq for ContentID<T> {
     fn eq(&self, other: &Self) -> bool {
         self.index == other.index && self.generation == other.generation

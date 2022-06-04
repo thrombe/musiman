@@ -14,11 +14,13 @@ use crate::{
         SongArt,
     },
     content_providers::{
-        ContentProvider,
-        ContentProviderContentType,
-        ContentProviderMenuOptions,
-        ContentProviderType,
-        ContentProviderEditables,
+        self,
+        HumanReadable, FriendlyID,
+        // ContentProvider,
+        // ContentProviderContentType,
+        // ContentProviderMenuOptions,
+        // ContentProviderType,
+        // ContentProviderEditables,
     },
     image::{
         ImageHandler,
@@ -54,12 +56,38 @@ use anyhow::{
 use derivative::Derivative;
 use std::{
     thread,
+    borrow::Cow,
     sync::mpsc::{
         self,
         Receiver,
         Sender,
     }, path::PathBuf,
 };
+#[derive(Debug, Clone)]
+// pub struct ContentProvider(Box<dyn content_providers::ContentProvider<MenuOption = dyn HumanReadable>>);
+pub struct ContentProvider(Box<dyn content_providers::ContentProvider>);
+// pub type ContentProvider = Box<dyn content_providers::ContentProvider>;
+impl std::ops::Deref for ContentProvider {
+    type Target = Box<dyn content_providers::ContentProvider>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for ContentProvider {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl From<Box<dyn content_providers::ContentProvider>> for ContentProvider {
+    fn from(o: Box<dyn content_providers::ContentProvider>) -> Self {
+        Self(o)
+    }
+}
+impl ContentProvider {
+    pub fn new(t: Box<dyn content_providers::ContentProvider>) -> Self {
+        Self(t)
+    }
+}
 
 struct ParallelHandle {
     handles: Vec<thread::JoinHandle<Result<()>>>,
@@ -181,39 +209,159 @@ impl<T: Into<ParallelAction>> From<T> for ContentHandlerAction {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum ContentState {
+    Normal,
+    Menu {
+        ctx: StateContext,
+        id: GlobalContent,
+    },
+    Edit {
+       ctx: StateContext,
+       id: GlobalContent,
+    },
+    GlobalMenu(SelectedIndex),
+}
+impl Default for ContentState {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+#[derive(Clone, Debug)]
+pub struct StateContext(Vec<SelectedIndex>);
+impl Default for StateContext {
+    fn default() -> Self {
+        Self(vec![Default::default()])
+    }
+}
+impl StateContext {
+    pub fn pop(&mut self) -> Option<SelectedIndex> {
+        self.0.pop()
+    }
+    pub fn push(&mut self, i: SelectedIndex) {
+        self.0.push(i);
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn last_mut(&mut self) -> &mut SelectedIndex {
+        self.0.last_mut().unwrap()
+    }
+    pub fn last(&self) -> &SelectedIndex {
+        self.0.last().unwrap()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ContentStack {
+    state: ContentState,
+    stack: Vec<GlobalContent>,
+}
+impl ContentStack {
+    pub fn new<T>(main_provider: T) -> Self
+        where T: Into<ID>
+    {
+        Self {
+            state: Default::default(),
+            stack: vec![main_provider.into().into()],
+        }
+    }
+
+    pub fn get_state(&self) -> &ContentState {
+        &self.state
+    }
+
+    pub fn get_state_mut(&mut self) -> &mut ContentState {
+        &mut self.state
+    }
+
+    pub fn set_state(&mut self, state: ContentState) {
+        self.state = state;
+    }
+
+    pub fn open_menu<T>(&mut self, id: T)
+        where T: Into<GlobalContent>
+    {
+        self.state = ContentState::Menu {
+            ctx: Default::default(),
+            id: id.into(),
+        }
+    }
+
+    pub fn open_edit<T>(&mut self, id: T)
+        where T: Into<GlobalContent>
+    {
+        self.state = ContentState::Edit {
+            ctx: Default::default(),
+            id: id.into(),
+        }
+    }
+
+    pub fn open_global_menu(&mut self) {
+        self.state = ContentState::GlobalMenu(Default::default());
+    }
+
+    pub fn set_state_normal(&mut self) {
+        self.state = ContentState::Normal;
+    }
+    
+    pub fn main_provider(&self) -> ContentProviderID {
+        if let GlobalContent::ID(id) = self.stack.first().unwrap() {
+            match id {
+                ID::ContentProvider(id) => return *id,
+                _ => (),
+            }
+        }
+        unreachable!()
+    }
+    
+    pub fn push<T>(&mut self, id: T)
+        where T: Into<GlobalContent>
+    {
+        self.stack.push(id.into());
+    }
+    
+    pub fn pop(&mut self) -> Option<GlobalContent> {
+        dbg!(&self);
+        debug!("popping");
+        match self.state {
+            ContentState::Normal => {
+                if self.stack.len() > 1 {
+                    self.stack.pop()
+                } else {
+                    None
+                }
+            }
+            _ => {
+                self.state = ContentState::Normal;
+                None
+            }
+        }
+    }
+
+    pub fn last(&self) -> GlobalContent {
+        *self.stack.last().unwrap()
+    }
+}
+
 pub struct ContentHandler {
     // TODO: maybe try having just one ContentManager of enum of Song, ContentProvider, etc
     songs: ContentManager<Song, SongID>,
     content_providers: ContentManager<ContentProvider, ContentProviderID>,
     db_handler: DBHandler,
 
-    content_stack: Vec<GlobalContent>,
+    content_stack: ContentStack,
     yanker: Yanker,
     edit_manager: EditManager,
     pub image_handler: ImageHandler,
     pub player: Player,
     notifier: Notifier,
-    logger: Logger,
     
     active_queue: Option<ContentProviderID>, // can also be a bunch of queues? like -> play all artists
     active_song: Option<SongID>,
 
     parallel_handle: ParallelHandle,
     app_action: AppAction,
-}
-
-pub struct Logger {
-    entries: Vec<String>,
-}
-
-
-impl Logger {
-    fn new() -> Self {
-        Self { entries: vec![]}
-    }
-    pub fn log(&mut self, s: &str) {
-        self.entries.push(s.into())
-    }
 }
 
 #[derive(Derivative)]
@@ -236,12 +384,12 @@ pub enum ContentHandlerAction {
     AddCPToCP {
         id: ContentProviderID,
         cp: ContentProvider,
-        new_cp_content_type: ContentProviderContentType,
+        // new_cp_content_type: ContentProviderContentType,
     },
     AddCPToCPAndContentStack {
         id: ContentProviderID,
         cp: ContentProvider,
-        new_cp_content_type: ContentProviderContentType,
+        // new_cp_content_type: ContentProviderContentType,
     },
     PushToContentStack {
         id: GlobalContent,
@@ -295,38 +443,43 @@ impl ContentHandlerAction {
                 action.apply(ch)?;
             }
             Self::LoadContentProvider {songs, content_providers, loader_id} => {
-                let mut loader = ch.get_provider(loader_id).clone();
-                for s in songs {
-                    let ci = ch.alloc_song(s);
-                    loader.songs.push(ci);
-                }
-                for cp in content_providers {
-                    let id = ch.alloc_content_provider(cp);
-                    loader.providers.push(id);
-                }
-                let old_loader = ch.get_provider_mut(loader_id);
-                *old_loader = loader;        
+                let songs = songs.into_iter().map(|s| ch.alloc_song(s)).collect::<Vec<_>>();
+                let content_providers = content_providers.into_iter().map(|cp| ch.alloc_content_provider(cp)).collect::<Vec<_>>();
+                let cp = ch.get_provider_mut(loader_id);
+                songs.into_iter().for_each(|s| cp.add_song(s));
+                content_providers.into_iter().for_each(|c| cp.add_provider(c));
+                // let mut loader = ch.get_provider(loader_id).clone();
+                // for s in songs {
+                //     let ci = ch.alloc_song(s);
+                //     loader.add_song(ci);
+                // }
+                // for cp in content_providers {
+                //     let id = ch.alloc_content_provider(cp);
+                //     loader.add_provider(id);
+                // }
+                // let old_loader = ch.get_provider_mut(loader_id);
+                // *old_loader = loader;        
             }
             Self::ReplaceContentProvider {old_id, cp} => {
                 let p = ch.get_provider_mut(old_id);
                 *p = cp;
                 Self::TryLoadContentProvider { loader_id: old_id }.apply(ch)?;
             }
-            Self::AddCPToCP {id, cp, new_cp_content_type} => {
+            Self::AddCPToCP {id, cp} => {
                 let mut loaded_id = ch.alloc_content_provider(cp);
-                loaded_id.set_content_type(new_cp_content_type);
+                // loaded_id.set_content_type(new_cp_content_type);
                 let loader = ch.get_provider_mut(id);
-                loader.add(loaded_id.into());
+                loader.add_provider(loaded_id);
 
                 Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch)?;
             }
-            Self::AddCPToCPAndContentStack {id, cp, new_cp_content_type} => {
+            Self::AddCPToCPAndContentStack {id, cp} => {
                 let mut loaded_id = ch.alloc_content_provider(cp);
-                loaded_id.set_content_type(new_cp_content_type);
+                // loaded_id.set_content_type(new_cp_content_type);
                 let loader = ch.get_provider_mut(id);
-                loader.add(loaded_id.into());
+                loader.add_provider(loaded_id);
 
-                ch.content_stack.push(loaded_id.into());
+                ch.content_stack.push(loaded_id);
                 ch.register(loaded_id.into());
 
                 Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch)?;
@@ -335,7 +488,7 @@ impl ContentHandlerAction {
             }
             Self::PushToContentStack { id } => {
                 dbg!(id);
-                ch.content_stack.push(id.into());
+                ch.content_stack.push(id);
                 ch.register(id.into());
                 match id {
                     GlobalContent::ID(ID::ContentProvider(id)) => {
@@ -350,10 +503,12 @@ impl ContentHandlerAction {
                 );
             }
             Self::PopContentStack => {
-                if ch.content_stack.len() > 1 {
-                    let id = ch.content_stack.pop().unwrap();
-                    ch.unregister(id.into());
-                    Self::RefreshDisplayContent.apply(ch)?;
+                match ch.content_stack.pop() {
+                    Some(id) => {
+                        ch.unregister(id.into());
+                        Self::RefreshDisplayContent.apply(ch)?;    
+                    }
+                    None => (),
                 }
             }
             Self::Actions(actions) => {
@@ -416,6 +571,12 @@ impl ContentHandlerAction {
 pub enum DisplayContent {
     Names(Vec<String>),
     IDs(Vec<ID>),
+    FriendlyID(Vec<FriendlyID>)
+}
+impl<'a> From<Box<dyn Iterator<Item = FriendlyID> + 'a>> for DisplayContent {
+    fn from(ids: Box<dyn Iterator<Item = FriendlyID> + 'a>) -> Self {
+        Self::FriendlyID(ids.collect())
+    }
 }
 impl DisplayContent {
     fn get(self, ch: &ContentHandler) -> Vec<String> {
@@ -433,13 +594,33 @@ impl DisplayContent {
                     }.to_owned()
                 }).collect()
             }
+            Self::FriendlyID(fids) => {
+                fids
+                .into_iter()
+                .map(|fid| {
+                    match fid {
+                        FriendlyID::String(c) => c,
+                        FriendlyID::ID(id) => {
+                            match id {
+                                ID::Song(id) => {
+                                    ch.get_song(id).get_name()
+                                }
+                                ID::ContentProvider(id) => {
+                                    &ch.get_provider(id).get_name()
+                                }
+                            }.to_owned()
+                        }
+                    }
+                })
+                .collect()
+            }
         }
     }
 }
 
 pub enum MenuOptions {
     Song(SongMenuOptions),
-    ContentProvider(ContentProviderMenuOptions),
+    // ContentProvider(ContentProviderMenuOptions),
 }
 
 impl ContentHandler {
@@ -463,11 +644,12 @@ impl ContentHandler {
                     }
                 }
             }
-            GlobalContent::Log | GlobalContent::Notifier => (),
+            GlobalContent::Notifier => (),
         }
     }
     
     pub fn unregister(&mut self, id: GlobalContent) {
+        dbg!("unregister id", id);
         match id {
             GlobalContent::ID(id) => {
                 match id {
@@ -478,10 +660,10 @@ impl ContentHandler {
                         let cp = self.content_providers.unregister(id);
                         match cp {
                             Some(cp) => {
-                                for s_id in cp.songs {
+                                for &s_id in cp.songs() {
                                     let _ = self.unregister(s_id.into());
                                 }
-                                for cp_id in cp.providers {
+                                for &cp_id in cp.providers() {
                                     let _ = self.unregister(cp_id.into());
                                 }
                             }
@@ -490,7 +672,7 @@ impl ContentHandler {
                     }
                 }
             }
-            GlobalContent::Log | GlobalContent::Notifier => (),
+            GlobalContent::Notifier => (),
         }
     }
 }
@@ -499,18 +681,22 @@ impl ContentHandler {
     pub fn new() -> Result<Self> {
         let dbh = DBHandler::try_load();
         let mut cp = ContentManager::new();
-        let main_ci = cp.alloc(ContentProvider::new_main_provider());
+        let main_id = cp.alloc(
+            ContentProvider(
+                Box::new(
+                    content_providers::MainProvider::default()) as Box<dyn content_providers::ContentProvider>
+                )
+            );
         let ch = Self {
             songs: ContentManager::new(),
             content_providers: cp,
             db_handler: dbh,
-            content_stack: vec![main_ci.into()],
+            content_stack: ContentStack::new(main_id),
             yanker: Yanker::new(),
             edit_manager: EditManager::new(),
             image_handler: Default::default(),
             player: Player::new()?,
             notifier: Notifier::new(),
-            logger: Logger::new(),
             active_queue: None,
             active_song: None,
             parallel_handle: Default::default(),
@@ -532,7 +718,7 @@ impl ContentHandler {
         dbg!(self.player.duration());
         dbg!(self.player.position());
         dbg!(self.player.progress());
-        let &id = self.content_stack.last().unwrap();
+        let id = self.content_stack.last();
         match id {
             GlobalContent::ID(id) => {
                 match id {
@@ -555,32 +741,14 @@ impl ContentHandler {
     }
 
     pub fn enter_selected(&mut self) -> Result<()> {
-        let &id = self.content_stack.last().unwrap();
-        match id {
-            GlobalContent::ID(id) => {
+        let state = self.content_stack.get_state();
+        match state {
+            ContentState::Normal => {
+                let id = self.content_stack.last();
                 match id {
-                    ID::Song(id) => {
-                        match id.t {
-                            SongContentType::Menu => {
-                                let s = self.get_song_mut(id);
-                                let _opts = s.get_menu_options();
-                                // let opt = opts[index]; // TODO: track with edit manager
-                                // let action = s.apply_option(opt);
-                                // action.apply(self)?;
-                                todo!()
-                            }
-                            SongContentType::Edit => {
-                                todo!()
-                            }
-                            SongContentType::Normal => {
-                                panic!("normal song mode should not be in content stack")
-                            }
-                        }
-                    }
-                    ID::ContentProvider(id) => {
-                        let t = id.get_content_type();
-                        match t {
-                            ContentProviderContentType::Normal => {
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::ContentProvider(id) => {
                                 let cp = self.get_provider_mut(id);
                                 let content_id = cp.get_selected();
                                 match content_id {
@@ -593,22 +761,54 @@ impl ContentHandler {
                                     }
                                 }
                             }
-                            ContentProviderContentType::Menu => {
-                                let cp = self.get_provider_mut(id);
-                                let action = cp.apply_selected_option(id);
-                                action.apply(self)?;
-                            }
-                            ContentProviderContentType::Edit(e) => { 
-                                let cp = self.get_provider_mut(id);
-                                let action = cp.choose_selected_editable(id, e);
-                                action.apply(self)?;
+                            ID::Song(id) => {
+                                unreachable!()
                             }
                         }
                     }
+                    GlobalContent::Notifier => {
+                        // do nothing?
+                    }
                 }
             }
-            GlobalContent::Log | GlobalContent::Notifier => {
-                return Ok(())
+            ContentState::Menu {ctx, id} => {
+                match *id {
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::ContentProvider(id) => {
+                                let cp = self.content_providers.get_mut(id).unwrap();
+                                let action = cp.apply_option(ctx, id);
+                                action.apply(self)?;
+                            }
+                            ID::Song(id) => {
+                                todo!()
+                            }
+                        }
+                    }
+                    GlobalContent::Notifier => {
+                        todo!()
+                    }
+                }
+            }
+            ContentState::Edit {ctx, id} => {
+                match id {
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::ContentProvider(id) => {
+                                todo!()
+                            }
+                            ID::Song(id) => {
+                                todo!()
+                            }
+                        }
+                    }
+                    GlobalContent::Notifier => {
+                        todo!()
+                    }
+                }
+            }
+            ContentState::GlobalMenu(i) => {
+                todo!()
             }
         }
         self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
@@ -616,168 +816,220 @@ impl ContentHandler {
     }
 
     pub fn get_content_names(&self) -> Vec<String> {
-        let &id = self.content_stack.last().unwrap();
-        match id {
-            GlobalContent::ID(id) => {
+        let state = self.content_stack.get_state();
+        match state {
+            ContentState::Normal => {
+                let id = self.content_stack.last();
                 match id {
-                    ID::Song(id) => {
-                        let s = self.get_song(id);
-                        s.get_content_names(id.t)
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::ContentProvider(id) => {
+                                let cp = self.get_provider(id);
+                                let dc: DisplayContent = cp.get_friendly_ids().into();
+                                dc.get(self)
+                            }
+                            ID::Song(id) => unreachable!(),
+                        }
                     }
-                    ID::ContentProvider(id) => {
-                        let t = id.get_content_type();
-                        let cp = self.get_provider(id);
-                        let cn = cp.get_content_names(t);
-                        cn.get(self)
-                    }
+                    GlobalContent::Notifier => todo!(),
                 }
             }
-            GlobalContent::Log => {
-                // self.logs.clone()
+            ContentState::Menu {ctx, id} => {
+                match id {
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::Song(id) => todo!(),
+                            ID::ContentProvider(id) => {
+                                let cp = self.get_provider(*id);
+                                let dc: DisplayContent = cp.menu_options(ctx).into();
+                                dc.get(self)
+                            }
+                        }
+                    }
+                    GlobalContent::Notifier => todo!(),
+                }
+            }
+            ContentState::Edit {ctx, id} => {
                 todo!()
             }
-            GlobalContent::Notifier => {
-                // self.notifs.clone()
+            ContentState::GlobalMenu(i) => {
                 todo!()
             }
         }
     }
 
     pub fn get_selected_index(&mut self) -> &mut SelectedIndex {
-        let &id = self.content_stack.last().unwrap();
-        match id {
-            GlobalContent::ID(id) => {
+        let id = self.content_stack.last();
+        let state = self.content_stack.get_state_mut();
+        match state {
+            ContentState::Normal => {
                 match id {
-                    ID::Song(..) => {
-                        // &mut Default::default() // no need to save index for options
-                        todo!()
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::ContentProvider(id) => {
+                                let cp = self.content_providers.get_mut(id).unwrap();
+                                cp.get_selected_index_mut()
+                            }
+                            ID::Song(..) => {
+                                unreachable!()
+                            }
+                        }
                     }
-                    ID::ContentProvider(id) => {
-                        let cp = self.get_provider_mut(id);
-                        let t = id.get_content_type();
-                        cp.get_selected_index(t)
+                    GlobalContent::Notifier => {
+                        todo!()
                     }
                 }
             }
-            GlobalContent::Log | GlobalContent::Notifier => {
-                // &mut Default::default() // no need to save index
-                todo!()
+            ContentState::Edit {ctx, ..} => {
+                ctx.last_mut()
+            }
+            ContentState::Menu {ctx, ..} => {
+                ctx.last_mut()
+            }
+            ContentState::GlobalMenu(i) => {
+                i
             }
         }
     }
 
     pub fn open_menu_for_current(&mut self) -> Result<()> {
-        let &id = self.content_stack.last().unwrap();
-        self.open_menu_for(id)?;
-        Ok(())
-    }
-
-    fn open_menu_for(&mut self, id: GlobalContent) -> Result<()> {
-        let id = match id {
-            GlobalContent::ID(id) => GlobalContent::ID(
-                match id {
-                    ID::Song(id) => ID::Song({
-                        let s = self.get_song(id);
-                        if !s.has_menu() {return Ok(())}
-                        let mut id = id;
-                        id.t = SongContentType::Menu;
-                        id
-                    }),
-                    ID::ContentProvider(mut id) => ID::ContentProvider({
-                        let cp = self.get_provider(id);
-                        if !cp.has_menu() {return Ok(())}
-                        id.set_content_type(ContentProviderContentType::Menu);
-                        id
-                    }),
-                }
-            ),
-            GlobalContent::Log | GlobalContent::Notifier => {
-                return Ok(())
+        let state = self.content_stack.get_state();
+        match state {
+            ContentState::Normal => {
+                self.open_menu_for(self.content_stack.last())?;
             }
-        };
-        
-        ContentHandlerAction::PushToContentStack { id: id.into() }.apply(self)?;
-        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
-        Ok(())
-    }
-
-    pub fn open_edit_for_current(&mut self) -> Result<()> {
-        let &id = self.content_stack.last().unwrap();
-        self.open_edit_for(id)?;
-        Ok(())
-    }
-
-    fn open_edit_for(&mut self, id: GlobalContent) -> Result<()> {
-        let id = match id {
-            GlobalContent::ID(id) => GlobalContent::ID(
-                match id {
-                    ID::Song(..) => {
-                        todo!()
-                    },
-                    ID::ContentProvider(mut id) => ID::ContentProvider({
-                        let cp = self.get_provider(id);
-                        if !cp.has_editables() {return Ok(())}
-                        id.set_content_type(ContentProviderContentType::Edit(ContentProviderEditables::None));
-                        id
-                    }),
-                }
-            ),
-            GlobalContent::Log | GlobalContent::Notifier => {
-                return Ok(())
+            ContentState::Edit { .. } | ContentState::Menu { .. } | ContentState::GlobalMenu(..) => {
+                // do nothing
             }
-        };
-        
-        ContentHandlerAction::PushToContentStack { id: id.into() }.apply(self)?;
-        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
+        }
         Ok(())
     }
     
     pub fn open_menu_for_selected(&mut self) -> Result<()> {
-        let &id = self.content_stack.last().unwrap();
-        dbg!(&self.content_stack);
-        match id {
-            GlobalContent::ID(id) => {
+        let state = self.content_stack.get_state();
+        match state {
+            ContentState::Normal => {
+                let id = self.content_stack.last();
                 match id {
-                    ID::Song(..) => {
-                        // when a menu/something else for this song is already open
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::Song(id) => {
+                                unreachable!()
+                            }
+                            ID::ContentProvider(id) => {
+                                let cp = self.get_provider(id);
+                                let id = cp.get_selected();
+                                self.open_menu_for(id.into())?;
+                            }
+                        }
+                    }
+                    GlobalContent::Notifier => {
                         // do nothing
                     }
-                    ID::ContentProvider(id) => {
-                        let cp = self.get_provider(id);
-                        let id = cp.get_selected();
-                        self.open_menu_for(id.into())?;
-                    }
                 }
-            }
-            GlobalContent::Log | GlobalContent::Notifier => {
-                // no menu
+            },
+            ContentState::Menu { .. } | ContentState::Edit { .. } | ContentState::GlobalMenu(..) => {
+                // do nothing
             }
         }
         Ok(())
     }
 
-    pub fn open_edit_for_selected(&mut self) -> Result<()> {
-        let &id = self.content_stack.last().unwrap();
-        dbg!(&self.content_stack);
+    fn open_menu_for(&mut self, id: GlobalContent) -> Result<()> {
         match id {
             GlobalContent::ID(id) => {
                 match id {
-                    ID::Song(..) => {
-                        todo!();
+                    ID::Song(id) => {
+                        let s = self.get_song(id);
+                        if s.has_menu() {
+                            self.content_stack.open_menu(id);
+                        }
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
-                        let id = cp.get_selected();
-                        self.open_edit_for(id.into())?;
+                        if cp.has_menu() {
+                            self.content_stack.open_menu(id);
+                        }
                     }
                 }
             }
-            GlobalContent::Log | GlobalContent::Notifier => {
-                //no edit
+            GlobalContent::Notifier => {
+                todo!()
+            }
+        }
+        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
+        Ok(())
+    }    
+
+    pub fn open_edit_for_current(&mut self) -> Result<()> {
+        let state = self.content_stack.get_state();
+        match state {
+            ContentState::Normal => {
+                self.open_edit_for(self.content_stack.last())?;
+            }
+            ContentState::Edit { .. } | ContentState::Menu { .. } | ContentState::GlobalMenu(..) => {
+                // do nothing
+            }
+        }
+        Ok(())
+    }    
+
+    pub fn open_edit_for_selected(&mut self) -> Result<()> {
+        let state = self.content_stack.get_state();
+        match state {
+            ContentState::Normal => {
+                let id = self.content_stack.last();
+                match id {
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::Song(id) => {
+                                unreachable!()
+                            }
+                            ID::ContentProvider(id) => {
+                                let cp = self.get_provider(id);
+                                let id = cp.get_selected();
+                                self.open_edit_for(id.into())?;
+                            }
+                        }
+                    }
+                    GlobalContent::Notifier => {
+                        // do nothing
+                    }
+                }
+            },
+            ContentState::Menu { .. } | ContentState::Edit { .. } | ContentState::GlobalMenu(..) => {
+                // do nothing
             }
         }
         Ok(())
     }
+
+    fn open_edit_for(&mut self, id: GlobalContent) -> Result<()> {
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::Song(id) => {
+                        let s = self.get_song(id);
+                        todo!()
+                        // if s.has_editables() {
+                        //     self.content_stack.open_edit(id);
+                        // }
+                    }
+                    ID::ContentProvider(id) => {
+                        let cp = self.get_provider(id);
+                        if cp.has_editables() {
+                            self.content_stack.open_edit(id);
+                        }
+                    }
+                }
+            }
+            GlobalContent::Notifier => {
+                todo!()
+            }
+        }
+        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
+        Ok(())
+    }    
 
     fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
         self.content_providers.get(id).unwrap()
@@ -794,33 +1046,26 @@ impl ContentHandler {
         self.songs.get_mut(content_identifier).unwrap()
     }
 
-    pub fn get_logs(&self) -> &Vec<String> {
-        &self.logger.entries
-    }
-
     pub fn set_queue(&mut self, id: ContentProviderID) {
         self.active_queue = Some(id);
-        let mp_id = match self.content_stack[0] {
-            GlobalContent::ID(ID::ContentProvider(id)) => id,
-            _ => panic!(), // 0th content_provider will always be main_provider
-        };
+        let mp_id = self.content_stack.main_provider();
 
         // TODO: bad code to find queue provider. think of a better soloution
         let mp = self.get_provider(mp_id);
-        for cp_id in mp.providers.clone() {
-            let cp = self.get_provider_mut(cp_id);
-            if cp.cp_type == ContentProviderType::Queues {
-                cp.add(id.into());
-            }
+        for &cp_id in mp.providers().collect::<Vec<_>>() {
+            // let cp = self.get_provider_mut(cp_id);
+            // if cp.cp_type == ContentProviderType::Queues {
+            //     cp.add(id.into());
+            // }
         }
     }
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
-        let song = self.songs.get(id).unwrap();
+        let song = self.get_song(id);
+        let art = song.get_art();
         let path = song.path();
         debug!("playing song {song:#?}");
         self.player.stop().unwrap();
         self.active_song = Some(id);
-        let art = song.get_art();
         ContentHandlerAction::PlaySong {
             song: path,
             art,
@@ -869,10 +1114,84 @@ impl ContentHandler {
     }
 
     pub fn increment_selection(&mut self) {
-        self.increment_selection_on(*self.content_stack.last().unwrap());
+        let state = self.content_stack.get_state_mut();
+        match state {
+            ContentState::Normal => {
+                let id = self.content_stack.last();
+                self.increment_selection_on(id);
+            }
+            ContentState::Edit { ctx, id } => {
+                let i = ctx.last_mut();
+                let num_items = match *id {
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::Song(id) => {
+                                todo!()
+                            }
+                            ID::ContentProvider(id) => {
+                                let cp = self.content_providers.get(id).unwrap();
+                                cp.num_editables()
+                            }
+                        }
+                    }
+                    GlobalContent::Notifier => todo!(),
+                };
+                if i.selected_index()+1 < num_items {
+                    let index = i.selected_index();
+                    i.select(index + 1);
+                }
+            }
+            ContentState::Menu { ctx, id } => {
+                let num_items = match *id {
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::Song(id) => {
+                                todo!()
+                            }
+                            ID::ContentProvider(id) => {
+                                let cp = self.content_providers.get(id).unwrap();
+                                cp.menu_options(ctx).size_hint().0
+                            }
+                        }
+                    }
+                    GlobalContent::Notifier => todo!(),
+                };
+                let i = ctx.last_mut();
+                if i.selected_index()+1 < num_items {
+                    let index = i.selected_index();
+                    i.select(index + 1);
+                }
+            }
+            ContentState::GlobalMenu(i) => {
+                todo!()
+            }
+        }
     }
     pub fn decrement_selection(&mut self) {
-        self.decrement_selection_on(*self.content_stack.last().unwrap());
+        let state = self.content_stack.get_state_mut();
+        match state {
+            ContentState::Normal => {
+                let id = self.content_stack.last();
+                self.decrement_selection_on(id);
+            }
+            ContentState::Edit { ctx, id } => {
+                let i = ctx.last_mut();
+                if i.selected_index() > 0 {
+                    let index = i.selected_index();
+                    i.select(index - 1);
+                }
+            }
+            ContentState::Menu { ctx, id } => {
+                let i = ctx.last_mut();
+                if i.selected_index() > 0 {
+                    let index = i.selected_index();
+                    i.select(index - 1);
+                }
+            }
+            ContentState::GlobalMenu(i) => {
+                todo!()
+            }
+        }
     }
 
     fn increment_selection_on(&mut self, id: GlobalContent) -> bool {
@@ -881,15 +1200,14 @@ impl ContentHandler {
                 match id {
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider_mut(id);
-                        let t = id.get_content_type();
-                        cp.selection_increment(t)
+                        cp.selection_increment()
                     }
-                    ID::Song(..) => {
-                        todo!()
+                    ID::Song(id) => {
+                        unreachable!()
                     }
-                }        
+                }
             }
-            _ => todo!()
+            GlobalContent::Notifier => todo!(),
         }
     }
     fn decrement_selection_on(&mut self, id: GlobalContent) -> bool {
@@ -898,36 +1216,19 @@ impl ContentHandler {
                 match id {
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider_mut(id);
-                        let t = id.get_content_type();
-                        cp.selection_decrement(t)
+                        cp.selection_decrement()
                     }
-                    ID::Song(..) => {
-                        todo!()
+                    ID::Song(id) => {
+                        unreachable!()
                     }
-                }        
+                }
             }
-            _ => todo!()
+            GlobalContent::Notifier => todo!(),
         }
     }
 
     pub fn apply_typed(&mut self, content: String) -> Result<()> {
-        let &id = self.content_stack.last().unwrap();
-        match id {
-            GlobalContent::ID(id) => {
-                match id {
-                    ID::ContentProvider(id) => {
-                        let cp = self.get_provider_mut(id);
-                        let action = cp.apply_typed(id, content);
-                        action.apply(self)?;
-                    }
-                    ID::Song(..) => {
-                        todo!()
-                    }
-                }
-            }
-            _ => panic!(), // should not happen
-        }
-        Ok(())
+        todo!()
     }
 }
 

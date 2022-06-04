@@ -10,6 +10,7 @@ use std::{
     fmt::{
         Debug,
     },
+    borrow::{Cow},
 };
 
 use crate::{
@@ -18,8 +19,9 @@ use crate::{
         Song,
     },
     content_handler::{
+        self,
         DisplayContent,
-        ContentHandlerAction,
+        ContentHandlerAction, StateContext,
     },
     yt_manager::{
         YTAction,
@@ -31,687 +33,368 @@ use crate::{
     },
 };
 
+// pub struct Provider(Box<dyn ContentProvider>);
 
-#[derive(Clone, Debug)]
-pub struct ContentProvider {
-    pub providers: Vec<ContentProviderID>,
-    pub songs: Vec<SongID>,
+pub enum FriendlyID {
+    String(String),
+    ID(ID),
+}
+
+pub trait HumanReadable {
+    
+}
+
+pub trait CPClone {
+    fn cp_clone(&self) -> Box<dyn ContentProvider>;
+}
+
+impl<T> CPClone for T
+    where T: 'static + Clone + Debug + ContentProvider
+{
+    fn cp_clone(&self) -> Box<dyn ContentProvider> {
+        Box::new(self.clone())
+    }
+}
+impl Clone for Box<dyn ContentProvider> {
+    fn clone(&self) -> Self {
+        self.cp_clone()
+    }
+}
+
+pub trait ContentProvider
+    where
+        Self: std::fmt::Debug + Send + Sync + CPClone,
+{
+    fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
+        Box::new([].into_iter())
+    }
+    
+    fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
+        Box::new([].into_iter())
+    }
+
+    fn ids<'a>(&'a self) -> Box<dyn Iterator<Item = ID> + 'a> {
+        Box::new(
+            self.providers()
+            .map(Clone::clone)
+            .map(Into::into)
+            .chain(
+                self.songs()
+                .map(Clone::clone)
+                .map(Into::into)
+            )
+        )
+    }
+    
+    fn get_friendly_ids<'a>(&'a self) -> Box<dyn Iterator<Item = FriendlyID> + 'a> {
+        Box::new(
+            self
+            .ids()
+            .map(FriendlyID::ID)
+        )
+    }
+
+    fn menu_options<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
+        Box::new([].into_iter())
+    }
+
+    fn has_menu(&self) -> bool {
+        let (min, max) = self.menu_options(&StateContext::default()).size_hint();
+        // an iterator has exactly 0 elements iff it has atleast 0 and atmost 0 elements
+        !(min > 0 && max.is_some() && max.unwrap() == 0)
+    }
+
+    fn load(&self, id: ContentProviderID) -> ContentHandlerAction {
+        None.into()
+    }
+
+    fn get_size(&self) -> usize {
+        self.ids().size_hint().0
+    }
+
+    fn add_song(&mut self, id: SongID);
+    fn add_provider(&mut self, id: ContentProviderID);
+    fn get_name(&self) -> &str;
+    fn get_selected_index_mut(&mut self) -> &mut SelectedIndex;
+    fn get_selected_index(&self) -> &SelectedIndex;
+    fn get_selected(&self) -> ID {
+        self
+        .ids()
+        .skip(
+            self
+            .get_selected_index()
+            .selected_index()
+        )
+        .next()
+        .unwrap() // should never fail (unless the indices are not managed properly ig)
+        .to_owned()
+    }
+    fn selection_increment(&mut self) -> bool {
+        let num_items = self.get_size();
+        let i = self.get_selected_index_mut();
+        if i.selected_index() < num_items-1 {
+            i.select(i.selected_index()+1);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn selection_decrement(&mut self) -> bool {
+        let i = self.get_selected_index_mut();
+        if i.selected_index() > 0 {
+            i.select(i.selected_index()-1);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn get_editables(&self) -> Box<dyn Iterator<Item = FriendlyID>> {
+        Box::new([].into_iter())
+    }
+    
+    fn has_editables(&self) -> bool {
+        // implimentation is super similar to Self::has_menu
+    
+        let (min, max) = self.get_editables().size_hint();
+        // an iterator has exactly 0 elements iff it has atleast 0 and atmost 0 elements
+        !(min > 0 && max.is_some() && max.unwrap() == 0)
+    }
+
+    fn num_editables(&self) -> usize {
+        self.get_editables().size_hint().0
+    }
+
+    fn apply_typed(&mut self, _: ContentProviderID, _: String) -> ContentHandlerAction {
+        // BAD: eh?? really this?
+        None.into()
+    }
+
+    fn apply_option(&mut self, ctx: &StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+        None.into()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FileExplorer {
+    songs: Vec<SongID>,
+    providers: Vec<ContentProviderID>,
     name: String,
-    pub cp_type: ContentProviderType,
-    selected: HashMap<ContentProviderContentType, SelectedIndex>,
+    selected: SelectedIndex,
+    path: String,
     loaded: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ContentProviderContentType {
-    Menu,
-    Normal,
-    Edit(ContentProviderEditables),
-}
-impl From<ContentProviderEditables> for ContentProviderContentType {
-    fn from(e: ContentProviderEditables) -> Self {
-        Self::Edit(e)
-    }
-}
-impl Default for ContentProviderContentType {
+impl Default for FileExplorer {
     fn default() -> Self {
-        Self::Normal
+        Self {
+            songs: Default::default(),
+            providers: Default::default(),
+            name: "".into(),
+            selected: Default::default(),
+            path: "".into(),
+            loaded: false,
+        }
     }
 }
 
-impl ContentProvider {
-    pub fn new(name: String, t: ContentProviderType, loaded: bool) -> Self {
+impl FileExplorer {
+    fn new(name: &str, path: &str) -> Self {
+        Self {
+            name: name.to_owned() + path.rsplit_terminator("/").next().unwrap(),
+            path: path.into(),
+            ..Default::default()
+        }
+    }
+}
+enum FileExplorerMenuOption {
+    Reset,
+}
+impl Into<FriendlyID> for FileExplorerMenuOption {
+    fn into(self) -> FriendlyID {
+        match self {
+            Self::Reset => FriendlyID::String(String::from("reset"))
+        }
+    }
+}
+
+// simple implimentations can be yeeted away in a macro
+impl<'b> ContentProvider for FileExplorer {
+    fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
+        Box::new(self.songs.iter())
+    }
+
+    fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
+        Box::new(self.providers.iter())
+    }
+
+    fn menu_options<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
+        Box::new([
+            FileExplorerMenuOption::Reset.into(),
+        ].into_iter())
+    }
+
+    fn add_song(&mut self, id: SongID) {
+        self.songs.push(id);
+    }
+
+    fn add_provider(&mut self, id: ContentProviderID) {
+        self.providers.push(id);
+    }
+
+    fn get_name(&self) -> &str {
+        let a = self.name.as_ref();
+        a
+    }
+
+    fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
+        &mut self.selected
+    }
+    fn get_selected_index(&self) -> &SelectedIndex {
+        &self.selected
+    }
+
+    fn load(&self, id: ContentProviderID) -> ContentHandlerAction {
+        let mut s = vec![];
+        let mut sp = vec![];
+        std::fs::read_dir(&self.path)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .for_each(|e| {
+            if e.is_dir() {
+                let dir = e.to_str().unwrap().to_owned();
+                sp.push(FileExplorer::new("", &dir).into());
+            } else if e.is_file() {
+                let file = e.to_str().unwrap().to_owned();
+                if file.ends_with(".m4a") {
+                    match Song::from_file(file).ok() {
+                        Some(song) => s.push(song),
+                        None => (),
+                    }
+                }
+            }
+        });
+        ContentHandlerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id}
+    }
+}
+
+
+
+#[derive(Debug, Clone)]
+pub struct MainProvider {
+    providers: Vec<ContentProviderID>,
+    name: Cow<'static, str>,
+    selected: SelectedIndex,
+}
+
+impl Default for MainProvider {
+    fn default() -> Self {
         Self {
             providers: Default::default(),
-            songs: Default::default(),
-            name,
-            cp_type: t,
+            name: Cow::from("main"),
             selected: Default::default(),
-            loaded,
         }
-    }
-
-    pub fn get_content_names(&self, t: ContentProviderContentType) -> DisplayContent {
-        match t {
-            ContentProviderContentType::Menu => {
-                match self.cp_type {
-                    _ => {
-                        DisplayContent::Names( // TODO: maybe GetNames should have different types like GetNames::MenuOptions and stuff. else there is code repetition
-                            self.get_menu_options()
-                            .into_iter()
-                            .map(|o| {
-                                o.to_string()
-                                .replace("_", " ")
-                                .to_lowercase()
-                            })
-                            .collect()
-                        )
-                    }
-                }
-            }
-            ContentProviderContentType::Normal => {
-                match self.cp_type {
-                    ContentProviderType::Queues => {
-                        DisplayContent::IDs(
-                            self.providers
-                            .iter().cloned()
-                            .map(Into::into)
-                            .rev()
-                            .collect()
-                        )
-                    }
-                    _ => {
-                        DisplayContent::IDs(
-                            self.providers
-                            .iter().cloned()
-                            .map(Into::into)
-                            .chain(
-                                self.songs
-                                .iter().cloned()
-                                .map(Into::into)
-                            )
-                            .collect()
-                        )
-                    }
-                }
-            }
-            ContentProviderContentType::Edit(i) => {
-                match &self.cp_type {
-                    ContentProviderType::YTExplorer { search_type, search_term } => {
-                        match i {
-                            ContentProviderEditables::None => {
-                                DisplayContent::Names(
-                                    vec![
-                                        ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TYPE)
-                                        .to_string()
-                                        .replace("_", " ")
-                                        .to_lowercase()
-                                        + &format!(": {search_type:#?}"),
-                                        ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TERM)
-                                        .to_string()
-                                        .replace("_", " ")
-                                        .to_lowercase()
-                                        + ": " + search_term,
-                                    ]
-                                )
-                            }
-                            ContentProviderEditables::YTExplorer(e) => {
-                                match e {
-                                    YTExplorerEditables::SEARCH_TERM => {
-                                        DisplayContent::Names(
-                                            vec![
-                                                ContentProviderEditables::YTExplorer(YTExplorerEditables::SEARCH_TYPE)
-                                                .to_string()
-                                                .replace("_", " ")
-                                                .to_lowercase()
-                                                + &format!(": {search_type:#?}"),
-                                                search_term.into(),
-                                            ]
-                                        )
-                                    }
-                                    YTExplorerEditables::SEARCH_TYPE => {
-                                        DisplayContent::Names(
-                                            self.get_editables(i)
-                                            .into_iter()
-                                            .map(|o| {
-                                                o.to_string()
-                                                .replace("_", " ")
-                                                .to_lowercase()
-                                            })
-                                            .collect()
-                                        )
-                                    }
-                                }
-                            }
-                            _ => { // BAD: i can be not related to YTExplorer and no compile errors
-                                DisplayContent::Names(
-                                    self.get_editables(i)
-                                    .into_iter()
-                                    .map(|o| {
-                                        o.to_string()
-                                        .replace("_", " ")
-                                        .to_lowercase()
-                                    })
-                                    .collect()
-                                )    
-                            }
-                        }
-                    }
-                    _ => {
-                        DisplayContent::Names(
-                            self.get_editables(i)
-                            .into_iter()
-                            .map(|o| {
-                                o.to_string()
-                                .replace("_", " ")
-                                .to_lowercase()
-                            })
-                            .collect()
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn has_menu(&self) -> bool {
-        match self.cp_type {
-            ContentProviderType::MainProvider => true,
-            _ => todo!(),
-        }
-    }
-
-    pub fn has_editables(&self) -> bool {
-        dbg!(&self);
-        match self.cp_type {
-            ContentProviderType::YTExplorer {..} => true,
-            _ => todo!(),
-        }
-    }
-
-    pub fn apply_selected_option(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
-        let t = self_id.get_content_type();
-        let index = self.get_raw_selected_index(t);
-        let opts = self.get_menu_options();
-        let opt = opts[index];
-        match opt {
-            ContentProviderMenuOptions::Main(o) => {
-                match o {
-                    MainContentProviderMenuOptions::ADD_FILE_EXPLORER => {
-                        vec![
-                            ContentHandlerAction::PopContentStack,
-                            ContentHandlerAction::AddCPToCPAndContentStack {
-                                id: self_id,
-                                cp: Self::new_file_explorer(
-                                    "/home/issac/daata/phon-data/.musi/IsBac/".to_owned(),
-                                    "File Explorer: ".to_owned()
-                                ),
-                                new_cp_content_type: ContentProviderContentType::Normal,
-                            },
-                        ].into()
-                    }
-                    MainContentProviderMenuOptions::ADD_QUEUE_PROVIDER => {
-                        vec![
-                            ContentHandlerAction::PopContentStack,
-                            ContentHandlerAction::AddCPToCPAndContentStack {
-                                id: self_id,
-                                cp: Self::new_queue_provider(),
-                                new_cp_content_type: ContentProviderContentType::Normal,
-                            },
-                        ].into()
-                    }
-                    MainContentProviderMenuOptions::ADD_YT_EXPLORER => {
-                        vec![
-                            ContentHandlerAction::PopContentStack,
-                            ContentHandlerAction::AddCPToCPAndContentStack {
-                                id: self_id,
-                                cp: Self::new_yt_explorer(),
-                                new_cp_content_type: ContentProviderContentType::Normal,
-                            },
-                        ].into()
-                    }
-                    _ => todo!()
-                }
-            }
-        }
-    }
-
-    pub fn choose_selected_editable(&mut self, self_id: ContentProviderID, e: ContentProviderEditables) -> ContentHandlerAction {
-        dbg!(e);
-        let index = self.get_raw_selected_index(e.into());
-        let editables = self.get_editables(e);
-        match editables[index] {
-            ContentProviderEditables::None => {
-                panic!("nothing to choose")
-            }
-            ContentProviderEditables::YTExplorer(e) => {
-                let mut id = self_id;
-                id.set_content_type(ContentProviderContentType::Edit(e.into()));
-                match e {
-                    YTExplorerEditables::SEARCH_TYPE => {
-                        ContentHandlerAction::PushToContentStack { id: id.into() }
-                    }
-                    YTExplorerEditables::SEARCH_TERM => {
-                        self.set_selected_index(id.get_content_type(), index);
-                        match &mut self.cp_type {
-                            ContentProviderType::YTExplorer { search_term , ..} => {
-                                vec![
-                                    ContentHandlerAction::PushToContentStack { id: id.into() }, // TODO: check if i called back() after coming out of typing mode
-                                    ContentHandlerAction::EnableTyping { content: search_term.clone()},
-                                ].into()
-                            }
-                            _ => panic!(),
-                        }
-                    }
-                }
-            }
-            ContentProviderEditables::YTSearchType(e) => {
-                match &mut self.cp_type {
-                    ContentProviderType::YTExplorer { search_type, .. } => {
-                        *search_type = e;
-                        ContentHandlerAction::PopContentStack
-                    }
-                    _ => panic!("bad path"),
-                }
-            }
-        }
-    }
-
-    // BAD: wow. this looks aweful
-    pub fn apply_typed(&mut self, self_id: ContentProviderID, content: String) -> ContentHandlerAction {
-        let t = self_id.get_content_type();
-        match t {
-            ContentProviderContentType::Edit(e) => {
-                match e {
-                    ContentProviderEditables::YTExplorer(e) => {
-                        match e {
-                            YTExplorerEditables::SEARCH_TERM => {
-                                match &mut self.cp_type {
-                                    ContentProviderType::YTExplorer { search_term, search_type } => {
-                                        *search_term = content;
-                                        let mut id = self_id;
-                                        // self.loaded = false;
-                                        id.set_content_type(ContentProviderContentType::Normal);
-                                        self.songs.clear();
-                                        self.providers.clear();
-                                        return vec![
-                                            ContentHandlerAction::PopContentStack, // typing
-                                            ContentHandlerAction::PopContentStack, // edit
-                                            match search_type {
-                                                YTSearchType::Album => {
-                                                    YTAction::AlbumSearch {
-                                                        term: search_term.clone(),
-                                                        loader: id,
-                                                    }.into()
-                                                }
-                                                YTSearchType::Playlist => {
-                                                    todo!()
-                                                }
-                                                YTSearchType::Song => {
-                                                    YTAction::SongSearch {
-                                                        term: search_term.clone(),
-                                                        loader: id,
-                                                    }.into()
-                                                }
-                                                YTSearchType::Video => {
-                                                    YTAction::VideoSearch {
-                                                        term: search_term.clone(),
-                                                        loader: id,
-                                                    }.into()
-                                                }
-                                            }
-                                        ].into();
-                                    }
-                                    _ => (),
-                                }
-                            }
-                            _ => (),
-                        }
-                    }
-                    _ => (),
-                }
-            }
-            _ => (),
-        }
-        panic!(); // should not happen
-    }
-
-    pub fn new_main_provider() -> Self {
-        Self {
-            providers: vec![],
-            songs: vec![],
-            name: "Main Provider".to_owned(),
-            cp_type: ContentProviderType::MainProvider,
-            selected: Default::default(),
-            loaded: true
-        }
-    }
-
-    pub fn new_file_explorer(path: String, pre_name: String) -> Self {
-        Self {
-            providers: vec![],
-            songs: vec![],
-            name: pre_name + path.rsplit_terminator("/").next().unwrap(),
-            cp_type: ContentProviderType::FileExplorer {path},
-            selected: Default::default(),
-            loaded: false,
-        }
-    }
-
-    pub fn new_queue_provider() -> Self {
-        Self {
-            providers: vec![],
-            songs: vec![],
-            name: "Queues".into(),
-            selected: Default::default(),
-            loaded: true,
-            cp_type: ContentProviderType::Queues,
-        }
-    }
-
-    pub fn new_yt_explorer() -> Self {
-        Self {
-            providers: vec![],
-            songs: vec![],
-            name: "youtube".into(),
-            cp_type: ContentProviderType::YTExplorer {
-                search_term: "".into(),
-                search_type: YTSearchType::Album,
-            },
-            selected: Default::default(),
-            loaded: false,
-        }
-    }
-
-    /// can load from various sources like yt/local storage while being able to add stuff to s/sp/spp
-    pub fn load(&mut self, id: ContentProviderID) -> ContentHandlerAction {
-        if self.loaded {return ContentHandlerAction::None}
-        self.loaded = true;
-        match &mut self.cp_type {
-            ContentProviderType::FileExplorer {path} => {
-                let mut s = vec![];
-                let mut sp = vec![];
-
-                std::fs::read_dir(&path)
-                .unwrap()
-                .filter_map(|e| e.ok())
-                .map(|e| e.path())
-                .for_each(|e| {
-                    if e.is_dir() {
-                        let dir = e.to_str().unwrap().to_owned();
-                        sp.push(ContentProvider::new_file_explorer(dir, "".to_owned()));
-                    } else if e.is_file() {
-                        let file = e.to_str().unwrap().to_owned();
-                        if file.ends_with(".m4a") {
-                            match Song::from_file(file).ok() {
-                                Some(song) => s.push(song),
-                                None => (),
-                            }
-                        }
-                    }
-                });
-
-                ContentHandlerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id}
-            }
-            ContentProviderType::YTExplorer { .. } => {
-                let mut id = id;
-                id.set_content_type(ContentProviderContentType::Edit(ContentProviderEditables::None));
-                vec![
-                    ContentHandlerAction::PushToContentStack { id: id.into() },
-                ].into()
-            }
-            ContentProviderType::YTAlbum {browse_id} => {
-                vec![
-                    YTAction::GetAlbumPlaylistId {
-                        browse_id: browse_id.clone(),
-                        loader: id,
-                    }.into(),
-                ].into()
-            }
-            ContentProviderType::YTAudioPlaylist { playlist_id }  | ContentProviderType::YTPlaylist { playlist_id }=> {
-                vec![
-                    YTAction::GetPlaylist {
-                        playlist_id: playlist_id.to_owned(),
-                        loader: id,
-                    }.into()
-                ].into()
-            }
-            _ => panic!()
-        }
-    }
-
-    pub fn get_menu_options(&self) -> Vec<ContentProviderMenuOptions> {
-        match self.cp_type {
-            ContentProviderType::MainProvider => {
-                [
-                    MainContentProviderMenuOptions::ADD_ARTIST_PROVIDER,
-                    MainContentProviderMenuOptions::ADD_PLAYLIST_PROVIDER,
-                    MainContentProviderMenuOptions::ADD_QUEUE_PROVIDER,
-                    MainContentProviderMenuOptions::ADD_FILE_EXPLORER,
-                    MainContentProviderMenuOptions::ADD_YT_EXPLORER,
-                ].into_iter()
-                .map(ContentProviderMenuOptions::Main)
-                .collect()
-            }
-            _ => todo!()
-        }
-    }
-
-    pub fn get_editables(&self, e: ContentProviderEditables) -> Vec<ContentProviderEditables> {
-        match e {
-            ContentProviderEditables::None => {
-                match self.cp_type {
-                    ContentProviderType::YTExplorer{..} => {
-                        [
-                            YTExplorerEditables::SEARCH_TYPE,
-                            YTExplorerEditables::SEARCH_TERM,
-                        ].into_iter()
-                        .map(Into::into)
-                        .collect()
-                    }
-                    _ => todo!()
-                }                        
-            }
-            ContentProviderEditables::YTExplorer(e) => { // BAD: if self.cp_type is not related to yt_explorer, no errors. this should not compile
-                match e {
-                    YTExplorerEditables::SEARCH_TYPE => {
-                        return [
-                            YTSearchType::Album,
-                            YTSearchType::Song,
-                            YTSearchType::Playlist,
-                            YTSearchType::Video,
-                        ].into_iter()
-                        .map(Into::into)
-                        .collect()
-                    }
-                    YTExplorerEditables::SEARCH_TERM => panic!("should never happen"),
-                }
-            }
-            _ => todo!(),
-        }
-    }
-
-    pub fn get_selected_index(&mut self, t: ContentProviderContentType) -> &mut SelectedIndex {
-        if !self.selected.contains_key(&t) {
-            let i = SelectedIndex::new();
-            self.selected.insert(t, i);
-        }
-        self.selected.get_mut(&t).unwrap()
-    }
-
-    pub fn selection_increment(&mut self, t: ContentProviderContentType) -> bool {
-        let i = self.get_raw_selected_index(t);
-        if i < self.get_size(t)-1 {
-            self.set_selected_index(t, i+1);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn selection_decrement(&mut self, t: ContentProviderContentType) -> bool {
-        let i = self.get_raw_selected_index(t);
-        if i > 0 {
-            self.set_selected_index(t, i-1);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// ensure that index is within limits
-    fn set_selected_index(&mut self, t: ContentProviderContentType, index: usize) {
-        let i = self.get_selected_index(t);
-        i.select(index);
-    }
-
-    fn get_raw_selected_index(&self, t: ContentProviderContentType) -> usize {
-        let i = if !self.selected.contains_key(&t) {
-            SelectedIndex::new().selected_index()
-        } else {
-            self.selected.get(&t).unwrap().selected_index()
-        };
-        i
-    }
-
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    // /// panics if out of bounds
-    // pub fn swap(&mut self, a: usize, b:  usize) {
-    //     self.content.swap(a, b)
-    // }
-    pub fn add(&mut self, id: ID) {
-        match id {
-            ID::Song(id) => {
-                self.songs.push(id)
-            }
-            ID::ContentProvider(id) => {
-                self.providers.push(id)
-            }
-        }
-    }
-    /// panics if out of bounds
-    pub fn get_selected(&self) -> ID {
-        let index = self.get_raw_selected_index(ContentProviderContentType::Normal);
-        let providers = self.providers.len();
-        let songs = self.songs.len();
-        if index < providers {
-                self.providers[index].into()
-        } else if index < songs+providers {
-                self.songs[index-providers].into()
-        } else {
-            panic!()
-        }
-    }
-    pub fn get_size(&self, t: ContentProviderContentType) -> usize {
-        match t {
-            ContentProviderContentType::Normal => {
-                self.providers.len() + self.songs.len()
-            }
-            ContentProviderContentType::Menu => {
-                self.get_menu_options().len()
-            }
-            ContentProviderContentType::Edit(e) => {
-                self.get_editables(e).len()
-            }
-        }
-    }
-    // /// panics if out of bounds
-    // pub fn remove_using_index(&mut self, index: usize) -> ID {
-    //     self.content.remove(index)
-    // }
-    // /// panic if not in here
-    // pub fn remove(&mut self, id: ID) {
-    //     let i = self.content.iter().position(|&e| e == id).unwrap();
-    //     self.content.remove(i);
-    // }
-}
-
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ContentProviderMenuOptions {
-    Main(MainContentProviderMenuOptions),
-}
-impl ToString for ContentProviderMenuOptions {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Main(o) => {
-                format!("{o:#?}")
-            }
-        }        
     }
 }
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MainContentProviderMenuOptions {
+enum MainProviderMenuOption {
     ADD_ARTIST_PROVIDER,
     ADD_PLAYLIST_PROVIDER,
     ADD_QUEUE_PROVIDER,
     ADD_FILE_EXPLORER,
     ADD_YT_EXPLORER,
 }
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
-pub enum ContentProviderEditables {
-    YTExplorer(YTExplorerEditables),
-    YTSearchType(YTSearchType),
-    None,
-}
-impl ToString for ContentProviderEditables {
-    fn to_string(&self) -> String {
-        match self {
-            Self::YTExplorer(o) => {
-                format!("{o:#?}")
-            }
-            Self::YTSearchType(o) => {
-                format!("{o:#?}")
-            }
-            Self::None => {
-                "none".into()
-            }
-        }        
+impl Into<FriendlyID> for MainProviderMenuOption {
+    fn into(self) -> FriendlyID {
+        FriendlyID::String(
+            String::from(
+                format!("{self:#?}")
+                .replace("_", " ")
+                .to_lowercase()
+            )
+        )
+        // match self {
+        //     Self::ADD_ARTIST_PROVIDER => FriendlyID::Cow(Cow::from(stringify!(Self::ADD_ARTIST_PROVIDER))),
+        //     Self::ADD_PLAYLIST_PROVIDER => todo!(),
+        //     Self::ADD_QUEUE_PROVIDER => todo!(),
+        //     Self::ADD_FILE_EXPLORER => todo!(),
+        //     Self::ADD_YT_EXPLORER => todo!(),
+        // }
     }
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum YTExplorerEditables {
-    SEARCH_TYPE,
-    SEARCH_TERM,
-}
-impl Into<ContentProviderEditables> for YTExplorerEditables {
-    fn into(self) -> ContentProviderEditables {
-        ContentProviderEditables::YTExplorer(self)
+impl ContentProvider for MainProvider {
+    fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
+        Box::new(self.providers.iter())
+    }
+
+    fn menu_options<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
+        Box::new(self.menu(ctx).map(Into::into))
+    }
+
+    fn add_song(&mut self, id: SongID) {
+        unreachable!()
+        // BAD: eh?
+    }
+
+    fn add_provider(&mut self, id: ContentProviderID) {
+        self.providers.push(id);
+    }
+
+    fn get_name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
+        &mut self.selected
+    }
+    fn get_selected_index(&self) -> &SelectedIndex {
+        &self.selected
+    }
+    fn apply_option(&mut self, ctx: &StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+        let option = self.menu(ctx).skip(ctx.last().selected_index()).next().unwrap();
+        match option {
+            MainProviderMenuOption::ADD_ARTIST_PROVIDER => todo!(),
+            MainProviderMenuOption::ADD_PLAYLIST_PROVIDER => todo!(),
+            MainProviderMenuOption::ADD_QUEUE_PROVIDER => todo!(),
+            MainProviderMenuOption::ADD_FILE_EXPLORER => {
+                vec![
+                    ContentHandlerAction::PopContentStack,
+                    ContentHandlerAction::AddCPToCPAndContentStack {
+                        id: self_id,
+                        cp: FileExplorer::new(
+                            "File Explorer: ",
+                            "/home/issac/daata/phon-data/.musi/IsBac/",
+                        ).into(),
+                        // new_cp_content_type: ContentProviderContentType::Normal,
+                    },
+                ].into()
+            }
+            MainProviderMenuOption::ADD_YT_EXPLORER => todo!(),
+        }
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
-pub enum YTSearchType {
-    Album,
-    Song,
-    Video,
-    Playlist,
-}
-impl Into<ContentProviderEditables> for YTSearchType {
-    fn into(self) -> ContentProviderEditables {
-        ContentProviderEditables::YTSearchType(self)
+impl MainProvider {
+    fn menu(&self, ctx: &StateContext) -> Box<dyn Iterator<Item = MainProviderMenuOption>> {
+        Box::new([
+            MainProviderMenuOption::ADD_ARTIST_PROVIDER,
+            MainProviderMenuOption::ADD_PLAYLIST_PROVIDER,
+            MainProviderMenuOption::ADD_FILE_EXPLORER,
+            MainProviderMenuOption::ADD_YT_EXPLORER,
+            MainProviderMenuOption::ADD_QUEUE_PROVIDER,
+        ].into_iter())
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ContentProviderType {
-    YTPlaylist {
-        playlist_id: String,
-    },
-    YTAudioPlaylist {
-        playlist_id: String,
-    },
-    LocalPlaylist,
-    Queue,
-    YTArtist,
-    LocalArtist,
-    YTAlbum {
-        browse_id: String,
-    },
-    
-    Playlists,
-    Queues,
-    Artists,
-    Albums, //??
-    FileExplorer {
-        path: String,
-    },
-    YTExplorer {
-        search_type: YTSearchType,
-        search_term: String,
-    },
-    
-    MainProvider,
-    Seperator,
-    Loading, // load the content manager in another thread and use this as placeholder and apply it when ready
-    Borked,
+impl<T> From<T> for content_handler::ContentProvider
+    where T: ContentProvider + 'static
+{
+    fn from(t: T) -> Self {
+        content_handler::ContentProvider::new(Box::new(t) as Box<dyn ContentProvider>)
+    }
 }
-
