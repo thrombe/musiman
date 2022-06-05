@@ -10,7 +10,15 @@ use crate::{
         },
         providers::{
             FriendlyID,
-            traits::ContentProvider,
+            traits::{
+                impliment_content_provider,
+                ContentProvider,
+                Provider,
+                Editable,
+                SongProvider,
+                CPProvider,
+                Loadable,
+            },
         },
     },
     app::app::SelectedIndex,
@@ -72,13 +80,7 @@ impl YTExplorer {
     }
 }
 
-impl ContentProvider for YTExplorer {
-    fn add_song(&mut self, id: SongID) {
-        self.songs.push(id);
-    }
-    fn add_provider(&mut self, id: ContentProviderID) {
-        self.providers.push(id);
-    }
+impl Provider for YTExplorer {
     fn get_name(&self) -> &str {
         &self.name
     }
@@ -88,14 +90,27 @@ impl ContentProvider for YTExplorer {
     fn get_selected_index(&self) -> &SelectedIndex {
         &self.selected
     }
+
+}
+impl SongProvider for YTExplorer {
+    fn add_song(&mut self, id: SongID) {
+        self.songs.push(id);
+    }
     fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
         Box::new(self.songs.iter())
+    }
+
+}
+impl CPProvider for YTExplorer {
+    fn add_provider(&mut self, id: ContentProviderID) {
+        self.providers.push(id);
     }
     fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
         Box::new(self.providers.iter())
     }
 
-
+}
+impl Editable for YTExplorer {
     fn get_editables<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID> + 'a> {
         Box::new(self.editables(ctx).map(|e| {
             match e {
@@ -113,7 +128,8 @@ impl ContentProvider for YTExplorer {
             }
         }))
     }
-    fn select_editable(&mut self, ctx: &mut StateContext, self_if: ContentProviderID) -> ContentHandlerAction {
+
+    fn select_editable(&mut self, ctx: &mut StateContext, _: ContentProviderID) -> ContentHandlerAction {
         let i = ctx.last().selected_index();
         let opt = self.editables(ctx).skip(i).next().unwrap();
         match opt {
@@ -143,14 +159,20 @@ impl ContentProvider for YTExplorer {
             }
         }
     }
+}
 
+impl Loadable for YTExplorer {
     fn is_loaded(&self) -> bool {
         self.loaded
     }
 
-    fn load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
+    fn load(&mut self, _: ContentProviderID) -> ContentHandlerAction {
         ContentHandlerAction::OpenEditForCurrent
     }
+}
+
+impl ContentProvider for YTExplorer {
+    impliment_content_provider!(YTExplorer, Provider, Loadable, Editable, SongProvider, CPProvider);
 
     fn apply_typed(&mut self, self_id: ContentProviderID, content: String) -> ContentHandlerAction {
         self.loaded = true;

@@ -4,12 +4,17 @@ use std::borrow::Cow;
 use crate::{
     content::{
         action::ContentHandlerAction,
-        manager::SongID,
         stack::StateContext,
         manager::ContentProviderID,
         providers::{
             FriendlyID,
-            traits::ContentProvider,
+            traits::{
+                impliment_content_provider,
+                ContentProvider,
+                CPProvider,
+                Menu,
+                Provider,
+            },
             file_explorer::FileExplorer,
             yt_explorer::YTExplorer,
         },
@@ -56,38 +61,20 @@ impl Into<FriendlyID> for MainProviderMenuOption {
     }
 }
 
-impl ContentProvider for MainProvider {
-    fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
-        Box::new(self.providers.iter())
-    }
-
-    fn menu_options<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
-        Box::new(self.menu(ctx).map(Into::into))
-    }
-
-    fn add_song(&mut self, id: SongID) {
-        unreachable!()
-        // BAD: eh?
-    }
-
+impl CPProvider for MainProvider {
     fn add_provider(&mut self, id: ContentProviderID) {
         self.providers.push(id);
     }
+    fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
+        Box::new(self.providers.iter())
+    }
+}
 
-    fn get_name(&self) -> &str {
-        self.name.as_ref()
+impl Menu for MainProvider {
+    fn menu_options<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
+        Box::new(self.menu(ctx).map(Into::into))
     }
-
-    fn is_loaded(&self) -> bool {
-        true
-    }
-
-    fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
-        &mut self.selected
-    }
-    fn get_selected_index(&self) -> &SelectedIndex {
-        &self.selected
-    }
+    
     fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
         let option = self.menu(ctx).skip(ctx.last().selected_index()).next().unwrap();
         match option {
@@ -120,7 +107,24 @@ impl ContentProvider for MainProvider {
     }
 }
 
+impl Provider for MainProvider {
+    fn get_name(&self) -> &str {
+        self.name.as_ref()
+    }
+    fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
+        &mut self.selected
+    }
+    fn get_selected_index(&self) -> &SelectedIndex {
+        &self.selected
+    }    
+}
+
+impl ContentProvider for MainProvider {
+    impliment_content_provider!(MainProvider, Provider, Menu, CPProvider);
+}
+
 impl MainProvider {
+    // TODO: fix
     fn menu(&self, ctx: &StateContext) -> Box<dyn Iterator<Item = MainProviderMenuOption>> {
         Box::new([
             MainProviderMenuOption::ADD_ARTIST_PROVIDER,

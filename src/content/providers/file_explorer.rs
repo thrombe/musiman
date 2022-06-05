@@ -3,15 +3,20 @@
 use crate::{
     content::{
         song::Song,
-        stack::StateContext,
         action::ContentHandlerAction,
         manager::{
             SongID,
             ContentProviderID,
         },
         providers::{
-            FriendlyID,
-            traits::ContentProvider,
+            traits::{
+                impliment_content_provider,
+                ContentProvider,
+                Loadable,
+                Provider,
+                SongProvider,
+                CPProvider,
+            },
         },
     },
     app::app::SelectedIndex,
@@ -50,53 +55,42 @@ impl FileExplorer {
         }
     }
 }
-enum FileExplorerMenuOption {
-    Reset,
-}
-impl Into<FriendlyID> for FileExplorerMenuOption {
-    fn into(self) -> FriendlyID {
-        match self {
-            Self::Reset => FriendlyID::String(String::from("reset"))
-        }
-    }
-}
 
-// simple implimentations can be yeeted away in a macro
-impl<'b> ContentProvider for FileExplorer {
-    fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
-        Box::new(self.songs.iter())
-    }
-
-    fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
-        Box::new(self.providers.iter())
-    }
-
-    fn menu_options<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
-        Box::new([
-            FileExplorerMenuOption::Reset.into(),
-        ].into_iter())
-    }
-
-    fn add_song(&mut self, id: SongID) {
-        self.songs.push(id);
-    }
-
-    fn add_provider(&mut self, id: ContentProviderID) {
-        self.providers.push(id);
-    }
-
+impl Provider for FileExplorer {
     fn get_name(&self) -> &str {
-        let a = self.name.as_ref();
-        a
+        &self.name
     }
 
     fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
         &mut self.selected
     }
+
     fn get_selected_index(&self) -> &SelectedIndex {
         &self.selected
     }
+}
 
+impl SongProvider for FileExplorer {
+    fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
+        Box::new(self.songs.iter())
+    }
+
+    fn add_song(&mut self, id: SongID) {
+        self.songs.push(id);
+    }
+}
+
+impl CPProvider for FileExplorer {
+    fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
+        Box::new(self.providers.iter())
+    }
+
+    fn add_provider(&mut self, id: ContentProviderID) {
+        self.providers.push(id);
+    }    
+}
+
+impl Loadable for FileExplorer {
     fn is_loaded(&self) -> bool {
         self.loaded
     }
@@ -125,4 +119,8 @@ impl<'b> ContentProvider for FileExplorer {
         });
         ContentHandlerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id}
     }
+}
+
+impl ContentProvider for FileExplorer {
+    impliment_content_provider!(FileExplorer, Provider, SongProvider, CPProvider, Loadable);
 }
