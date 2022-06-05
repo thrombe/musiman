@@ -326,8 +326,10 @@ impl App {
                             self.input_cursor_pos += 1;
                         }
                         KeyCode::Backspace => {
-                            self.input_cursor_pos -= 1;
-                            self.input.remove(self.input_cursor_pos);
+                            if self.input_cursor_pos > 0 {
+                                self.input_cursor_pos -= 1;
+                                self.input.remove(self.input_cursor_pos);
+                            }
                         }
                         KeyCode::Left => {
                             match key.modifiers { // these are bitfields, not enum variants
