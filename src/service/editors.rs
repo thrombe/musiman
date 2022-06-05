@@ -1,9 +1,9 @@
 
 use crate::{
-    content_manager::{
-        ContentProviderID,
-        SongID,
+    content::manager::{
         ID,
+        SongID,
+        ContentProviderID,
     },
 };
 

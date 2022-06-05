@@ -6,21 +6,6 @@ use crate::{
     error,
 };
 
-use crate::{
-    content_handler::{
-        ContentHandlerAction,
-    },
-    content_manager::ContentProviderID,
-    content_providers::{
-        ContentProvider,
-        // ContentProviderType,
-    },
-    song::{
-        Song,
-        SongMetadata,
-    },
-};
-
 use pyo3::{
     Python,
     types::{
@@ -45,6 +30,17 @@ use std::{
             Sender,
         },
     }
+};
+
+use crate::{
+    content::{
+        song::{
+            Song,
+            SongMetadata,
+        },
+        action::ContentHandlerAction,
+        manager::ContentProviderID,
+    },
 };
 
 struct PyHandel {

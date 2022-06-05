@@ -3,6 +3,7 @@
 use crate::{
     dbg,
     debug,
+    error,
 };
 
 use tui::{
@@ -35,7 +36,6 @@ use tui::{
         Text,
     },
 };
-use std::borrow::Cow;
 use crossterm::{
     event::{
         self,
@@ -49,88 +49,12 @@ use crossterm::{
 use anyhow::Result;
 
 use crate::{
-    content_handler::{
-        ContentHandler,
-        ContentHandlerAction,
+    content::{
+        handler::ContentHandler,
+        action::ContentHandlerAction,
     },
 };
 
-
-#[derive(Debug)]
-pub enum AppAction {
-    None,
-    Actions {
-        actions: Vec<AppAction>,
-    },
-    EnableTyping {
-        content: String,
-    },
-    UpdateDisplayContent {
-        content: Vec<String>,
-    }
-}
-impl Default for AppAction {
-    fn default() -> Self {
-        Self::None
-    }
-}
-impl Into<AppAction> for Vec<AppAction> {
-    fn into(self) -> AppAction {
-        AppAction::Actions {
-            actions: self,
-        }
-    }
-}
-impl AppAction {
-    pub fn queue(&mut self, action: Self) {
-        match self {
-            Self::Actions {actions} => {
-                match action {
-                    AppAction::Actions { actions: more_actions } => {
-                        actions.extend(more_actions)
-                    }
-                    AppAction::None => (),
-                    a => {
-                        actions.push(a);
-                    }
-                }
-            }
-            Self::None => {
-                *self = action;
-            }
-            _ => {
-                let a = std::mem::replace(self, vec![].into());
-                self.queue(a);
-                self.queue(action);
-            }
-        }
-    }
-
-    fn dbg_log(&self) {
-        if let Self::None = self {return;}
-        dbg!(&self);
-    }
-
-    fn apply(self, app: &mut App) {
-        match self {
-            Self::None => (),
-            Self::Actions {actions} => {
-                for action in actions {
-                    action.apply(app);
-                }
-            }
-            Self::EnableTyping {mut content} => {
-                app.state = AppState::Typing;
-                // app.input = content.chars().collect();
-                app.input = content.drain(..).collect();
-                app.input_cursor_pos = app.input.len();
-            }
-            Self::UpdateDisplayContent {content} => {
-                app.browser_widget.options = content;
-            }
-        }
-    }
-}
 
 /// wrapping ListState to make sure not to call select(None) and to eliminate the use of unwrap() on selected_index()
 /// currently, theres no way to access/suggest the offset
@@ -170,8 +94,8 @@ impl SelectedIndex {
 }
 
 #[derive(Default)]
-struct BrowserWidget {
-    options: Vec<String>,
+pub struct BrowserWidget {
+    pub options: Vec<String>,
 }
 
 impl BrowserWidget {
@@ -318,7 +242,7 @@ impl StatusBar {
 
 
 #[derive(Clone, Copy)]
-enum AppState {
+pub enum AppState {
     Browser,
     Help,
     Quit,
@@ -327,14 +251,14 @@ enum AppState {
 
 pub struct App {
     /// Current value of the input box
-    input: Vec<char>,
-    input_cursor_pos: usize,
-    state: AppState,
+    pub input: Vec<char>,
+    pub input_cursor_pos: usize,
+    pub state: AppState,
 
     // updates status bar depending on the situation
     status_bar: StatusBar,
     // handles all ui things from the browser widget side
-    browser_widget: BrowserWidget,
+    pub browser_widget: BrowserWidget,
     // handles all ui from the player widget side
     player_widget: PlayerWidget,
 

@@ -2,16 +2,10 @@
 use std::marker::PhantomData;
 
 use crate::{
-    song::{
-        Song,
-        SongContentType,
+    content::{
+        providers::ContentProvider,
+        song::Song,
     },
-    content_providers::{
-        self,
-        // ContentProvider,
-        // ContentProviderContentType,
-    },
-    content_handler::ContentProvider,
 };
 
 macro_rules! to_from_content_id {
