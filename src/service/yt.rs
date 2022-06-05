@@ -40,6 +40,10 @@ use crate::{
         },
         action::ContentHandlerAction,
         manager::ContentProviderID,
+        providers::{
+            ContentProvider,
+            ytalbum::YTAlbum,
+        },
     },
 };
 
@@ -327,15 +331,15 @@ impl YTAction {
                 // debug!("{res}");
                 let albums = serde_json::from_str::<Vec<YTMusicSearchAlbum>>(&res);
                 // dbg!(&albums);
-                // let content_providers = albums?.into_iter().map(Into::into).collect();
+                let content_providers = albums?.into_iter().map(Into::into).collect();
                 // dbg!(&content_providers);
                 vec![
-                    // ContentHandlerAction::LoadContentProvider {
-                    //     songs: Default::default(),
-                    //     content_providers,
-                    //     loader_id: *loader,
-                    // },
-                    // ContentHandlerAction::RefreshDisplayContent,
+                    ContentHandlerAction::LoadContentProvider {
+                        songs: Default::default(),
+                        content_providers,
+                        loader_id: *loader,
+                    },
+                    ContentHandlerAction::RefreshDisplayContent,
                 ].into()
             }
             Self::VideoSearch {loader, ..} => {
@@ -374,11 +378,11 @@ impl YTAction {
                 let res = pyd.extract::<String>(py)?;
                 // debug!("{res}");
                 let ytm_album = serde_json::from_str::<YTMusicAlbum>(&res)?;
-                // ContentHandlerAction::ReplaceContentProvider {
-                //     old_id: *loader,
-                //     cp: ytm_album.into(),
-                // }
-                None.into()
+                ContentHandlerAction::ReplaceContentProvider {
+                    old_id: *loader,
+                    cp: ytm_album.into(),
+                }
+                // None.into()
             }
             Self::GetPlaylist {loader, ..} => {
                 let res = pyd.extract::<String>(py)?;
@@ -412,25 +416,15 @@ struct YTMusicSearchArtist {
     name: Option<String>,
     id: Option<String>,
 }
-// impl Into<ContentProvider> for YTMusicSearchAlbum {
-//     fn into(self) -> ContentProvider {
-//         let loaded = self.browse_id.is_none();
-//         let t = if self.browse_id.is_some() {
-//             ContentProviderType::YTAlbum {
-//                 browse_id: self.browse_id.unwrap(),
-//             }
-//         } else {
-//             error!("borked data: {self:#?}");
-//             ContentProviderType::Borked
-//         };
-
-//         ContentProvider::new(
-//             self.title.unwrap().into(),
-//             t,
-//             loaded,
-//         )
-//     }
-// }
+impl Into<ContentProvider> for YTMusicSearchAlbum {
+    fn into(self) -> ContentProvider {
+        if self.title.is_some() && self.browse_id.is_some() {
+            YTAlbum::new_browse_id(self.title.unwrap(), self.browse_id.unwrap()).into()
+        } else {
+            panic!() // BAD: create a "borked" provider instead of panicing
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all(deserialize = "camelCase"))]
@@ -441,30 +435,18 @@ struct YTMusicAlbum {
     playlist_id: Option<String>,
     // tracks from here are not as useful as the ones from the playlist_id
 }
-// impl Into<ContentProvider> for YTMusicAlbum {
-//     fn into(self) -> ContentProvider {
-//         let mut loaded = false;
-//         let t = if self.audio_playlist_id.is_some() {
-//             ContentProviderType::YTAudioPlaylist {
-//                 playlist_id: self.audio_playlist_id.unwrap(),
-//             }
-//         } else if self.playlist_id.is_some() {
-//             ContentProviderType::YTPlaylist {
-//                 playlist_id: self.playlist_id.unwrap(),
-//             }
-//         } else {
-//             error!("borked data: {self:#?}");
-//             loaded = true;
-//             ContentProviderType::Borked
-//         };
-
-//         ContentProvider::new(
-//             self.title.unwrap().into(),
-//             t,
-//             loaded,
-//         )
-//     }
-// }
+impl Into<ContentProvider> for YTMusicAlbum {
+    fn into(self) -> ContentProvider {
+        if self.title.is_some() && (self.audio_playlist_id.is_some() || self.playlist_id.is_some()) {
+            YTAlbum::new_playlist_id(
+                self.title.unwrap(),
+                if self.audio_playlist_id.is_some() {self.audio_playlist_id.unwrap()} else {self.playlist_id.unwrap()}
+            ).into()
+        } else {
+            panic!() // BAD: create a "borked" provider instead of panicing
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all(deserialize = "camelCase"))]

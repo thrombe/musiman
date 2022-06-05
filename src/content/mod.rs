@@ -1,6 +1,6 @@
 
 pub mod song;
-mod providers;
+pub mod providers;
 
 
 mod display;
