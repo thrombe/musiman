@@ -22,7 +22,7 @@ macro_rules! dbg {
             tmp => {
                 // log::debug!("[{}:{}] {} = {:#?}", file!(), line!(), stringify!($val), &tmp);
                 log::debug!("{} = {:#?}", stringify!($val), &tmp);
-                tmp
+                // tmp
             }
         }
     };

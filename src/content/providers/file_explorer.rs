@@ -97,7 +97,12 @@ impl<'b> ContentProvider for FileExplorer {
         &self.selected
     }
 
-    fn load(&self, id: ContentProviderID) -> ContentHandlerAction {
+    fn is_loaded(&self) -> bool {
+        self.loaded
+    }
+
+    fn load(&mut self, id: ContentProviderID) -> ContentHandlerAction {
+        self.loaded = true;
         let mut s = vec![];
         let mut sp = vec![];
         std::fs::read_dir(&self.path)

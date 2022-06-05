@@ -68,7 +68,7 @@ impl ContentHandlerAction {
             Self::None => (),
             Self::TryLoadContentProvider {loader_id} => {
                 let loaded = ch.get_provider_mut(loader_id);
-                let action = loaded.load(loader_id);
+                let action = loaded.maybe_load(loader_id);
                 action.apply(ch)?;
             }
             Self::LoadContentProvider {songs, content_providers, loader_id} => {
@@ -135,10 +135,10 @@ impl ContentHandlerAction {
                 match ch.content_stack.pop() {
                     Some(id) => {
                         ch.unregister(id.into());
-                        Self::RefreshDisplayContent.apply(ch)?;    
                     }
                     None => (),
                 }
+                Self::RefreshDisplayContent.apply(ch)?;    
             }
             Self::Actions(actions) => {
                 for action in actions {
@@ -185,6 +185,9 @@ impl ContentHandlerAction {
             }
             Self::PlaySongURI {uri} => {
                 ch.player.play(uri)?;
+            }
+            Self::OpenEditForCurrent => {
+                ch.open_edit_for_current()?;
             }
         }
         Ok(())
@@ -369,6 +372,7 @@ pub enum ContentHandlerAction {
     PlaySongURI {
         uri: String,
     },
+    OpenEditForCurrent,
     None,
 }
 

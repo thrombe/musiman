@@ -11,6 +11,7 @@ use crate::{
             FriendlyID,
             traits::ContentProvider,
             file_explorer::FileExplorer,
+            yt_explorer::YTExplorer,
         },
     },
     app::app::SelectedIndex,
@@ -77,13 +78,17 @@ impl ContentProvider for MainProvider {
         self.name.as_ref()
     }
 
+    fn is_loaded(&self) -> bool {
+        true
+    }
+
     fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
         &mut self.selected
     }
     fn get_selected_index(&self) -> &SelectedIndex {
         &self.selected
     }
-    fn apply_option(&mut self, ctx: &StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+    fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
         let option = self.menu(ctx).skip(ctx.last().selected_index()).next().unwrap();
         match option {
             MainProviderMenuOption::ADD_ARTIST_PROVIDER => todo!(),
@@ -102,7 +107,15 @@ impl ContentProvider for MainProvider {
                     },
                 ].into()
             }
-            MainProviderMenuOption::ADD_YT_EXPLORER => todo!(),
+            MainProviderMenuOption::ADD_YT_EXPLORER => {
+                vec![
+                    ContentHandlerAction::PopContentStack,
+                    ContentHandlerAction::AddCPToCPAndContentStack {
+                        id: self_id,
+                        cp: YTExplorer::new().into(),
+                    },
+                ].into()
+            }
         }
     }
 }

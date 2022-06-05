@@ -152,7 +152,7 @@ impl ContentHandler {
     }
 
     pub fn debug_current(&mut self) {
-        // dbg!(&self.content_providers);
+        dbg!(&self.content_providers);
         dbg!(&self.content_stack);
         dbg!(&self.player);
         dbg!(self.player.is_finished());
@@ -182,7 +182,7 @@ impl ContentHandler {
     }
 
     pub fn enter_selected(&mut self) -> Result<()> {
-        let state = self.content_stack.get_state();
+        let state = self.content_stack.get_state_mut();
         match state {
             ContentState::Normal => {
                 let id = self.content_stack.last();
@@ -232,11 +232,13 @@ impl ContentHandler {
                 }
             }
             ContentState::Edit {ctx, id} => {
-                match id {
+                match *id {
                     GlobalContent::ID(id) => {
                         match id {
                             ID::ContentProvider(id) => {
-                                todo!()
+                                let cp = self.content_providers.get_mut(id).unwrap();
+                                let action = cp.select_editable(ctx, id);
+                                action.apply(self)?;
                             }
                             ID::Song(id) => {
                                 todo!()
@@ -291,7 +293,19 @@ impl ContentHandler {
                 }
             }
             ContentState::Edit {ctx, id} => {
-                todo!()
+                match id {
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::Song(id) => todo!(),
+                            ID::ContentProvider(id) => {
+                                let cp = self.get_provider(*id);
+                                let dc: DisplayContent = cp.get_editables(ctx).into();
+                                dc.get(self)
+                            }
+                        }
+                    }
+                    GlobalContent::Notifier => todo!(),
+                }
             }
             ContentState::GlobalMenu(i) => {
                 todo!()
@@ -445,7 +459,7 @@ impl ContentHandler {
         Ok(())
     }
 
-    fn open_edit_for(&mut self, id: GlobalContent) -> Result<()> {
+    pub fn open_edit_for(&mut self, id: GlobalContent) -> Result<()> {
         match id {
             GlobalContent::ID(id) => {
                 match id {
@@ -562,7 +576,6 @@ impl ContentHandler {
                 self.increment_selection_on(id);
             }
             ContentState::Edit { ctx, id } => {
-                let i = ctx.last_mut();
                 let num_items = match *id {
                     GlobalContent::ID(id) => {
                         match id {
@@ -570,13 +583,14 @@ impl ContentHandler {
                                 todo!()
                             }
                             ID::ContentProvider(id) => {
-                                let cp = self.content_providers.get(id).unwrap();
-                                cp.num_editables()
+                                let cp = self.content_providers.get_mut(id).unwrap();
+                                cp.num_editables(ctx)
                             }
                         }
                     }
                     GlobalContent::Notifier => todo!(),
                 };
+                let i = ctx.last_mut();
                 if i.selected_index()+1 < num_items {
                     let index = i.selected_index();
                     i.select(index + 1);
@@ -669,7 +683,19 @@ impl ContentHandler {
     }
 
     pub fn apply_typed(&mut self, content: String) -> Result<()> {
-        todo!()
+        let id = self.content_stack.last();
+        match id {
+            GlobalContent::ID(id) => {
+                match id {
+                    ID::ContentProvider(id) => {
+                        let cp = self.get_provider_mut(id);
+                        cp.apply_typed(id, content).apply(self)
+                    }
+                    ID::Song(id) => todo!(),
+                }
+            }
+            GlobalContent::Notifier => todo!(),
+        }
     }
 }
 

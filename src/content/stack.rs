@@ -57,6 +57,9 @@ impl StateContext {
     pub fn last(&self) -> &SelectedIndex {
         self.0.last().unwrap()
     }
+    pub fn get(&self, index: usize) -> Option<&SelectedIndex> {
+        self.0.get(index)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -131,11 +134,20 @@ impl ContentStack {
     pub fn pop(&mut self) -> Option<GlobalContent> {
         dbg!(&self);
         debug!("popping");
-        match self.state {
+        match &mut self.state {
             ContentState::Normal => {
                 if self.stack.len() > 1 {
                     self.stack.pop()
                 } else {
+                    None
+                }
+            }
+            ContentState::Edit { ctx, .. } | ContentState::Menu { ctx, .. } => {
+                if ctx.len() > 1 {
+                    ctx.pop();
+                    None
+                } else {
+                    self.state = ContentState::Normal;
                     None
                 }
             }

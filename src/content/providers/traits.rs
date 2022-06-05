@@ -75,7 +75,7 @@ pub trait ContentProvider
         )
     }
 
-    fn menu_options<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
+    fn menu_options(&self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
         Box::new([].into_iter())
     }
 
@@ -85,9 +85,19 @@ pub trait ContentProvider
         !(min > 0 && max.is_some() && max.unwrap() == 0)
     }
 
-    fn load(&self, id: ContentProviderID) -> ContentHandlerAction {
+    fn maybe_load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
+        if self.is_loaded() {
+            ContentHandlerAction::None
+        } else {
+            self.load(self_id)
+        }
+    }
+
+    fn load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
         None.into()
     }
+
+    fn is_loaded(&self) -> bool;
 
     fn get_size(&self) -> usize {
         self.ids().size_hint().0
@@ -131,20 +141,20 @@ pub trait ContentProvider
         }
     }
 
-    fn get_editables(&self) -> Box<dyn Iterator<Item = FriendlyID>> {
+    fn get_editables<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID> + 'a> {
         Box::new([].into_iter())
     }
     
     fn has_editables(&self) -> bool {
         // implimentation is super similar to Self::has_menu
     
-        let (min, max) = self.get_editables().size_hint();
+        let (min, max) = self.get_editables(&Default::default()).size_hint();
         // an iterator has exactly 0 elements iff it has atleast 0 and atmost 0 elements
         !(min > 0 && max.is_some() && max.unwrap() == 0)
     }
 
-    fn num_editables(&self) -> usize {
-        self.get_editables().size_hint().0
+    fn num_editables(&self, ctx: &StateContext) -> usize {
+        self.get_editables(ctx).size_hint().0
     }
 
     fn apply_typed(&mut self, _: ContentProviderID, _: String) -> ContentHandlerAction {
@@ -152,7 +162,11 @@ pub trait ContentProvider
         None.into()
     }
 
-    fn apply_option(&mut self, ctx: &StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+    fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+        None.into()
+    }
+
+    fn select_editable(&mut self, ctx: &mut StateContext, self_if: ContentProviderID) -> ContentHandlerAction {
         None.into()
     }
 }

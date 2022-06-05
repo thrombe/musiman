@@ -2,6 +2,7 @@
 mod traits;
 pub mod main_provider;
 pub mod file_explorer;
+pub mod yt_explorer;
 
 
 use crate::content::manager::ID;
