@@ -18,6 +18,37 @@
     /. when dropping something, call unregister() on all its related ids
     /. if counter zero while unregistering, call the unregister() for all its related ids
 
+/. behaviour:
+  /. have a lot of different kinds of content providers
+/. plan:
+  /. each a seperate struct with trait implimentation for ContentProvider
+    /. can use macros for boilerplate methods
+    \. maybe downcast trait objects if needed (maybe downcasting crates? (any?))
+    . a few implimentations can know about the yt stuff, so it can me more integrated
+
+/. behaviour:
+  /. how do menu and edit
+/. plan:
+  \. global id has a menu varient(with selected index) (as onlt the index for main stuff is stored in ContentProvider)
+    and it fetches the second last element and opens menu on that
+    . can't do multiple layers of menus/edits this way tho.
+  /. save context in globalContent and pass in menu/edit funcs. which may replace the context in from the content stack using
+    actions. on going back, match GC, if menu, context.pop
+
+\async?
+  \. not worth doing in this project as the tokio::fs stuff is built with std::fs in another thread (atleast the part i saw)
+    so would be simpler to just manage a seperate thread
+    . but things might get simpler
+  \. and the ytdl/ytmusic stuff isnt async any way
+
+\. behaviour:
+  \. show images on terminal
+\. plan:
+  \. terminal window size/terminal xy => get the terminal block width to heighy ratio ??
+  \. maybe get the terminal font and check the height to width ratio of it?
+  /. what does sixel say for the sizes?
+  \. try printing blocks and checking dimension https://en.m.wikipedia.org/wiki/Block_Elements
+
 . behaviour:
   . save state easily
   . load state easily
@@ -59,24 +90,10 @@
     . maybe add a type that handles the ui here and try not to leak stuff outside it.
     . also use enums to let the ui part handle both formatted and unformatted types
 
-async?
-  \. not worth doing in this project as the tokio::fs stuff is built with std::fs in another thread (atleast the part i saw)
-    so would be simpler to just manage a seperate thread
-    . but things might get simpler
-  \. and the ytdl/ytmusic stuff isnt async any way
-
 . behaviour:
   . multiline items (like songs with name, artist on different lines)
 . plan:
   . ?
-
-\. behaviour:
-  \. show images on terminal
-\. plan:
-  \. terminal window size/terminal xy => get the terminal block width to heighy ratio ??
-  \. maybe get the terminal font and check the height to width ratio of it?
-  /. what does sixel say for the sizes?
-  \. try printing blocks and checking dimension https://en.m.wikipedia.org/wiki/Block_Elements
 
 . behaviour:
   . fire actions from ContentProviders and receive the results back
@@ -86,26 +103,6 @@ async?
   . same can be applied for EnableEditing
   . callback can be enum like Callback::OnContentProvider {f: FOnce(cp: &mut ContentProvider, data: ?), id: ContentProviderID}
     . execute using Callback::apply(self, ch: &Contenthandler) -> Action
-
-. behaviour:
-  . have a lot of different kinds of content providers
-. plan:
-  . each a seperate struct with trait implimentation for ContentProvider
-    . can use macros for boilerplate methods
-    . maybe downcast trait objects if needed (maybe downcasting crates? (any?))
-    . a few implimentations can know about the yt stuff, so it can me more integrated
-
-. behaviour:
-  . how do menu and edit
-. plan:
-  . global id has a menu varient(with selected index) (as onlt the index for main stuff is stored in ContentProvider)
-    and it fetches the second last element and opens menu on that
-    . can't do multiple layers of menus/edits this way tho.
-  . save context in globalContent and pass in menu/edit funcs. which may replace the context in from the content stack using
-    actions. on going back, match GC, if menu, context.pop
-
-. there needs to be 2 different ids, one that can go in content_stack.stack, and another that can have a menu/edit.
-  it does not make sense to literally anything else on a song that can be done on a provider/notifier and stuff
 
 . behaviour:
   . doing yt actions
@@ -128,7 +125,30 @@ async?
     . a few implimentations can know about the yt stuff. others do not need to
 
 
-. maybe do some message passing achitecture
+
+
+todo:
+  . less complexity in ContentHandler code
+plan:
+  . there needs to be 2 different ids, one that can go in content_stack.stack, and another that can have a menu/edit.
+    it does not make sense to literally anything else on a song that can be done on a provider/notifier and stuff
+
+todo:
+  . move logic to providers from actions
+plan:
+  . use callback funcs to generate actions
+  . move the yt parsing logic to the providers
+    . even the python code should come from providers
+
+. behaviour:
+  . work without any setup
+. plan:
+  . ytmusicapi has a non-signin thing. see if it can be used
+
+
+
+
+
 
 . plan
   . import relevent notes from thrombe/musimanager
