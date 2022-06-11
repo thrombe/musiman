@@ -1,10 +1,19 @@
 
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+    error,
+};
+
+
 use anyhow::Result;
 use ansi_colours::ansi256_from_rgb;
 use image::{
     DynamicImage,
     GenericImageView,
     Rgba,
+    imageops::FilterType,
 };
 use termcolor::{
     Color,
@@ -43,10 +52,12 @@ impl Block {
         adjust_offset(&mut buff, &Config { x: 0, ..*config })?;
         
         // resize the image so that it fits in the constraints, if any
-        let img = super::resize(img, config.width, config.height);
+        let (w, h) = get_size_block(img, config.width, config.height);
+
+        let img = img.resize_exact(w, h, FilterType::Triangle);
         let (width, height) = img.dimensions();
         
-        let mut row_color_buffer: Vec<ColorSpec> = vec![ColorSpec::new(); width as usize];
+        let mut row_color_buffer = vec![ColorSpec::new(); width as usize];
         let img_buffer = img.to_rgba8();
         
         for (curr_row, img_row) in img_buffer.enumerate_rows() {
@@ -61,11 +72,7 @@ impl Block {
             for pixel in img_row {
                 // choose the half block's color
                 let color = if is_pixel_transparent(pixel) {
-                    if config.transparent {
-                        None
-                    } else {
-                        Some(get_transparency_color(curr_row, pixel.0, config.truecolor))
-                    }
+                    None
                 } else {
                     Some(get_color_from_pixel(pixel, config.truecolor))
                 };
@@ -158,20 +165,6 @@ fn is_pixel_transparent(pixel: (u32, u32, &Rgba<u8>)) -> bool {
     pixel.2[3] == 0
 }
 
-fn get_transparency_color(row: u32, col: u32, truecolor: bool) -> Color {
-    //imitate the transparent chess board pattern
-    let rgb = if row % 2 == col % 2 {
-        CHECKERBOARD_BACKGROUND_DARK
-    } else {
-        CHECKERBOARD_BACKGROUND_LIGHT
-    };
-    if truecolor {
-        Color::Rgb(rgb.0, rgb.1, rgb.2)
-    } else {
-        Color::Ansi256(ansi256_from_rgb(rgb))
-    }
-}
-
 fn get_color_from_pixel(pixel: (u32, u32, &Rgba<u8>), truecolor: bool) -> Color {
     let (_x, _y, data) = pixel;
     let rgb = (data[0], data[1], data[2]);
@@ -181,3 +174,69 @@ fn get_color_from_pixel(pixel: (u32, u32, &Rgba<u8>), truecolor: bool) -> Color 
         Color::Ansi256(ansi256_from_rgb(rgb))
     }
 }
+
+fn get_size_block(img: &DynamicImage, width: Option<u32>, height: Option<u32>) -> (u32, u32) {
+    let (img_width_pix, img_height_pix) = img.dimensions();
+
+    let (scr_width_chars, scr_height_chars) = {
+        let rc = termion::terminal_size().unwrap();
+        (rc.0 as u32, rc.1 as u32)
+    };
+
+    let (char_width, char_height) = {
+        let (scr_width, scr_height) = termion::terminal_size_pixels().unwrap();
+
+        // terminal size in pixels can be a little bigger than the space where chars are printed.
+        // so floor is needed
+        let (mut char_width, mut char_height) = (
+            (scr_width as f32/scr_width_chars as f32) as u32,
+            (scr_height as f32/scr_height_chars as f32) as u32
+        );
+        if scr_width == 0 && scr_height == 0 {
+            char_width = 12;
+            char_height = 24;
+        }
+        (char_width, char_height)
+    };
+
+    let (_scr_width_pix, _scr_height_pix) = {
+        (
+            scr_width_chars*char_width,
+            scr_height_chars*char_height
+        )
+    };
+
+    let (bound_width_chars, bound_height_chars) = {
+        (
+            width.unwrap_or(scr_width_chars),
+            height.unwrap_or(scr_height_chars)
+        )
+    };
+
+    let (bound_width_pix, bound_height_pix) = {
+        (
+            bound_width_chars*char_width,
+            bound_height_chars*char_height
+        )
+    };
+
+    let img_ratio = img_height_pix as f32/img_width_pix as f32;
+    let bound_ratio = bound_height_pix as f32/bound_width_pix as f32;
+
+    let (new_width_pix, new_height_pix);
+
+    if img_ratio > bound_ratio { // if image is skinnier than bound box
+        new_height_pix = bound_height_pix;
+        new_width_pix = img_width_pix*bound_height_pix/img_height_pix;
+    } else {
+        new_width_pix = bound_width_pix;
+        new_height_pix = img_height_pix*bound_width_pix/img_width_pix;
+    }
+    
+    
+    (
+        new_width_pix/char_width,
+        2*new_height_pix/char_height,
+    )
+}
+
