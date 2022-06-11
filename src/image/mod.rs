@@ -172,13 +172,13 @@ impl ProcessedImage {
         }
     }
 
-    pub fn print(&mut self, stdout: &mut Stdout, config: &Config) -> Result<()> {
+    pub fn print(&mut self, stdout: &mut Stdout) -> Result<()> {
         match self {
             Self::Block {img, ..} => {
                 img.print(stdout)?;
             }
             Self::Sixel {img, ..} => {
-                img.print(stdout, config.x, config.y).unwrap();
+                img.print(stdout)?;
             }
             Self::None => (),
         }
@@ -270,7 +270,7 @@ impl ImageHandler {
         }
 
         self.prepare_image();
-        self.processed_image.print(&mut stdout, &self.config)?;
+        self.processed_image.print(&mut stdout)?;
 
         if self.config.restore_cursor {
             execute!(&mut stdout, RestorePosition)?;

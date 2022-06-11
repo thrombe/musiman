@@ -84,6 +84,8 @@ extern "C" fn write_fn(data: *mut c_char, len: c_int, userdata: *mut c_void) -> 
 
 pub struct Sixel {
     output: Vec<u8>,
+    x: u16,
+    y: u16,
 }
 
 #[cfg(not(feature = "sixel"))]
@@ -119,6 +121,8 @@ impl Sixel {
 
         Ok(Self {
             output,
+            x: config.x,
+            y: config.y,
         })
     }
 
@@ -183,8 +187,8 @@ impl Sixel {
         }
     }
 
-    pub fn print(&self, stdout: &mut Stdout, x_off: u16, y_off: u16) -> Result<()> {
-        adjust_offset(stdout, x_off, y_off)?;
+    pub fn print(&self, stdout: &mut Stdout) -> Result<()> {
+        adjust_offset(stdout, self.x, self.y)?;
         write!(stdout, "{}", std::str::from_utf8(&self.output)?)?;
         Ok(())
     }

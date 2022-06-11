@@ -153,8 +153,16 @@ plan:
   . ytmusicapi has a non-signin thing. see if it can be used, else disable it
   . add a default printer and a builder that chooses a backend that is valid for the terminal
 
-
-
+. behaviour:
+  . better way to choose and do image printing
+. plan:
+  . a enum that chooses the printer that impliments a printer trait
+    . disadvantages:
+      . have to maintain 2 different sets of enums/structs whatever
+      . harder to disable stuff with cfg features
+  \. have a fake enum that that impliments printer or something and that just replaces itself with a actual printer when its methods are called
+    \. disadvantages:
+      \. same as the above method
 
 
 
