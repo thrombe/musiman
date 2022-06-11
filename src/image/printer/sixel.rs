@@ -34,6 +34,7 @@ use std::{
     slice
 };
 
+#[cfg(feature = "sixel")]
 #[allow(unused_imports)]
 use sixel_sys::{
     sixel_output_new,
@@ -85,6 +86,18 @@ pub struct Sixel {
     output: Vec<u8>,
 }
 
+#[cfg(not(feature = "sixel"))]
+impl Sixel {
+    pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
+        unreachable!()
+    }
+    
+    pub fn print(&self, stdout: &mut Stdout, config: &Config) -> Result<()> {
+        unreachable!()
+    }
+}
+
+#[cfg(feature = "sixel")]
 impl Sixel {
     pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
         let (w, mut h) = get_size_pix(img, config.width, config.height);

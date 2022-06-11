@@ -19,7 +19,6 @@ lofty = "0.6.3"
 tui = "0.18"
 crossterm = "0.23"
 unicode-width = "0.1.9"
-sixel-sys = "0.3.1"
 termion = "1.5.6"
 image = "0.24"
 console = { version = "0.15", default-features = false }
@@ -48,3 +47,17 @@ features = [
     "anyhow",
     # "auto-initialize",
     ]
+
+[dependencies.sixel-sys]
+version = "0.3.1"
+optional = true
+
+
+[features]
+sixel = ["sixel-sys"]
+default = ["sixel"]
+
+
+[profile.release]
+incremental = true
+

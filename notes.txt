@@ -124,7 +124,14 @@
   . if trait ContentProvider
     . a few implimentations can know about the yt stuff. others do not need to
 
-
+. behaviour:
+  . no lag cuz of printing image
+. plan:
+  . print image only if something resized, something updated in the player block
+    . size changes
+    . image changes
+    . redraw requested
+  . print from another thread
 
 
 todo:
@@ -143,7 +150,8 @@ plan:
 . behaviour:
   . work without any setup
 . plan:
-  . ytmusicapi has a non-signin thing. see if it can be used
+  . ytmusicapi has a non-signin thing. see if it can be used, else disable it
+  . add a default printer and a builder that chooses a backend that is valid for the terminal
 
 
 
