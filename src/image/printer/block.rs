@@ -49,7 +49,7 @@ impl Block {
     pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
         let mut buff = Buffer::ansi();
         // adjust with x=0 and handle horizontal offset entirely below
-        adjust_offset(&mut buff, &Config { x: 0, ..*config })?;
+        adjust_offset(&mut buff, 0, config.y)?;
         
         // resize the image so that it fits in the constraints, if any
         let (w, h) = get_size_block(img, config.width, config.height);

@@ -178,7 +178,7 @@ impl ProcessedImage {
                 img.print(stdout)?;
             }
             Self::Sixel {img, ..} => {
-                img.print(stdout, config).unwrap();
+                img.print(stdout, config.x, config.y).unwrap();
             }
             Self::None => (),
         }
@@ -198,8 +198,6 @@ impl Default for ImageHandler {
     fn default() -> Self {
         Self {
             config: Config {
-                transparent: false,
-                absolute_offset: true,
                 x: 0,
                 y: 0,
                 restore_cursor: true,
@@ -209,7 +207,7 @@ impl Default for ImageHandler {
                 use_sixel: true,
                 alignment: Default::default(),
             },
-            printer: Printer::Sixel,
+            printer: Printer::Block,
             processed_image: Default::default(),
             unprocessed_image: Default::default(),
             dimensions_changed: false,
@@ -218,7 +216,7 @@ impl Default for ImageHandler {
 }
 
 impl ImageHandler {
-    pub fn set_offset(&mut self, x: u16, y: i16) {
+    pub fn set_offset(&mut self, x: u16, y: u16) {
         self.config.x = x;
         self.config.y = y;
     }

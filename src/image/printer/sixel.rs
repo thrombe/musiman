@@ -88,11 +88,11 @@ pub struct Sixel {
 
 #[cfg(not(feature = "sixel"))]
 impl Sixel {
-    pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
+    pub fn new(_: &DynamicImage, _: &Config) -> Result<Self> {
         unreachable!()
     }
     
-    pub fn print(&self, stdout: &mut Stdout, config: &Config) -> Result<()> {
+    pub fn print(&self, _: &mut Stdout, _: &Config) -> Result<()> {
         unreachable!()
     }
 }
@@ -183,8 +183,8 @@ impl Sixel {
         }
     }
 
-    pub fn print(&self, stdout: &mut Stdout, config: &Config) -> Result<()> {
-        adjust_offset(stdout, config)?;
+    pub fn print(&self, stdout: &mut Stdout, x_off: u16, y_off: u16) -> Result<()> {
+        adjust_offset(stdout, x_off, y_off)?;
         write!(stdout, "{}", std::str::from_utf8(&self.output)?)?;
         Ok(())
     }

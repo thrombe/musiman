@@ -3,17 +3,10 @@ use crate::image::utils;
 
 /// Configuration struct to customize printing behaviour.
 pub struct Config {
-    /// Enable true transparency instead of checkerboard background.
-    /// Available only for the block printer. Defaults to false.
-    pub transparent: bool,
-    /// Make the x and y offset be relative to the top left terminal corner.
-    /// If false, the y offset is relative to the cursor's position.
-    /// Defaults to true.
-    pub absolute_offset: bool,
-    /// X offset. Defaults to 0.
+    /// X offset
     pub x: u16,
-    /// Y offset. Can be negative only when `absolute_offset` is `false`. Defaults to 0.
-    pub y: i16,
+    /// Y offset
+    pub y: u16,
     /// Take a note of cursor position before printing and restore it when finished.
     /// Defaults to false.
     pub restore_cursor: bool,
@@ -29,7 +22,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct ImageAlignment {
+pub struct ImageAlignment { // TODO: actually impliment this
     horizontal: HorizontalAlignment,
     vertical: VerticalAlignment,
 }
@@ -60,8 +53,6 @@ pub enum VerticalAlignment {
 impl std::default::Default for Config {
     fn default() -> Self {
         Self {
-            transparent: false,
-            absolute_offset: true,
             x: 0,
             y: 0,
             restore_cursor: false,
