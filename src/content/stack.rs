@@ -10,8 +10,8 @@ use crate::{
 use crate::{
     content::manager::{
         GlobalContent,
-        ID,
         ContentProviderID,
+        GlobalProvider,
     },
     app::app::SelectedIndex,
 };
@@ -65,11 +65,11 @@ impl StateContext {
 #[derive(Clone, Debug)]
 pub struct ContentStack {
     state: ContentState,
-    stack: Vec<GlobalContent>,
+    stack: Vec<GlobalProvider>,
 }
 impl ContentStack {
     pub fn new<T>(main_provider: T) -> Self
-        where T: Into<ID>
+        where T: Into<ContentProviderID>
     {
         Self {
             state: Default::default(),
@@ -116,22 +116,19 @@ impl ContentStack {
     }
     
     pub fn main_provider(&self) -> ContentProviderID {
-        if let GlobalContent::ID(id) = self.stack.first().unwrap() {
-            match id {
-                ID::ContentProvider(id) => return *id,
-                _ => (),
-            }
+        if let GlobalProvider::ContentProvider(id) = self.stack.first().unwrap() {
+            return *id;
         }
         unreachable!()
     }
     
     pub fn push<T>(&mut self, id: T)
-        where T: Into<GlobalContent>
+        where T: Into<GlobalProvider>
     {
         self.stack.push(id.into());
     }
     
-    pub fn pop(&mut self) -> Option<GlobalContent> {
+    pub fn pop(&mut self) -> Option<GlobalProvider> {
         dbg!(&self);
         debug!("popping");
         match &mut self.state {
@@ -158,7 +155,7 @@ impl ContentStack {
         }
     }
 
-    pub fn last(&self) -> GlobalContent {
+    pub fn last(&self) -> GlobalProvider {
         *self.stack.last().unwrap()
     }
 }

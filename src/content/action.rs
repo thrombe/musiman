@@ -28,9 +28,8 @@ use crate::{
         providers::ContentProvider,
         handler::ContentHandler,
         manager::{
-            GlobalContent,
-            ID,
             ContentProviderID,
+            GlobalProvider,
         },
         song::{
             Song,
@@ -72,22 +71,23 @@ impl ContentHandlerAction {
                 action.apply(ch)?;
             }
             Self::LoadContentProvider {songs, content_providers, loader_id} => {
-                let songs = songs.into_iter().map(|s| ch.alloc_song(s)).collect::<Vec<_>>();
-                let content_providers = content_providers.into_iter().map(|cp| ch.alloc_content_provider(cp)).collect::<Vec<_>>();
+                let songs = songs
+                .into_iter()
+                .map(|s| ch.alloc_song(s))
+                .collect::<Vec<_>>();
+                
+                let content_providers = content_providers
+                .into_iter()
+                .map(|cp| ch.alloc_content_provider(cp))
+                .collect::<Vec<_>>();
+                
                 let cp = ch.get_provider_mut(loader_id);
-                songs.into_iter().for_each(|s| cp.add_song(s));
-                content_providers.into_iter().for_each(|c| cp.add_provider(c));
-                // let mut loader = ch.get_provider(loader_id).clone();
-                // for s in songs {
-                //     let ci = ch.alloc_song(s);
-                //     loader.add_song(ci);
-                // }
-                // for cp in content_providers {
-                //     let id = ch.alloc_content_provider(cp);
-                //     loader.add_provider(id);
-                // }
-                // let old_loader = ch.get_provider_mut(loader_id);
-                // *old_loader = loader;        
+                songs
+                .into_iter()
+                .for_each(|s| cp.add_song(s));
+                content_providers
+                .into_iter()
+                .for_each(|c| cp.add_provider(c));
             }
             Self::ReplaceContentProvider {old_id, cp} => {
                 let p = ch.get_provider_mut(old_id);
@@ -95,16 +95,14 @@ impl ContentHandlerAction {
                 Self::TryLoadContentProvider { loader_id: old_id }.apply(ch)?;
             }
             Self::AddCPToCP {id, cp} => {
-                let mut loaded_id = ch.alloc_content_provider(cp);
-                // loaded_id.set_content_type(new_cp_content_type);
+                let loaded_id = ch.alloc_content_provider(cp);
                 let loader = ch.get_provider_mut(id);
                 loader.add_provider(loaded_id);
 
                 Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch)?;
             }
             Self::AddCPToCPAndContentStack {id, cp} => {
-                let mut loaded_id = ch.alloc_content_provider(cp);
-                // loaded_id.set_content_type(new_cp_content_type);
+                let loaded_id = ch.alloc_content_provider(cp);
                 let loader = ch.get_provider_mut(id);
                 loader.add_provider(loaded_id);
 
@@ -120,7 +118,7 @@ impl ContentHandlerAction {
                 ch.content_stack.push(id);
                 ch.register(id.into());
                 match id {
-                    GlobalContent::ID(ID::ContentProvider(id)) => {
+                    GlobalProvider::ContentProvider(id) => {
                         Self::TryLoadContentProvider { loader_id: id }.apply(ch)?;
                     }
                     _ => (),
@@ -356,7 +354,7 @@ pub enum ContentHandlerAction {
         // new_cp_content_type: ContentProviderContentType,
     },
     PushToContentStack {
-        id: GlobalContent,
+        id: GlobalProvider,
     },
     EnableTyping {
         content: String,

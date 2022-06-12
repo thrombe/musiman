@@ -69,6 +69,12 @@
     /. redraw requested
   \. print from another thread
 
+/todo:
+  /. less complexity in ContentHandler code
+/plan:
+  /. there needs to be 2 different ids, one that can go in content_stack.stack, and another that can have a menu/edit.
+    it does not make sense to do literally anything else on a song that can be done on a provider/notifier and stuff
+
 . behaviour:
   . save state easily
   . load state easily
@@ -144,13 +150,6 @@
   . if trait ContentProvider
     . a few implimentations can know about the yt stuff. others do not need to
 
-
-todo:
-  . less complexity in ContentHandler code
-plan:
-  . there needs to be 2 different ids, one that can go in content_stack.stack, and another that can have a menu/edit.
-    it does not make sense to literally anything else on a song that can be done on a provider/notifier and stuff
-
 todo:
   . move logic to providers from actions
 plan:
@@ -162,7 +161,7 @@ plan:
   . work without any setup
 . plan:
   . ytmusicapi has a non-signin thing. see if it can be used, else disable it
-  . add a default printer and a builder that chooses a backend that is valid for the terminal
+  /. add a default printer and a builder that chooses a backend that is valid for the terminal
 
 todo:
   . better error handling

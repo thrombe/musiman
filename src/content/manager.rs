@@ -75,6 +75,27 @@ where T: Into<ID>
         Self::ID(id.into())
     }
 }
+impl From<GlobalProvider> for GlobalContent {
+    fn from(o: GlobalProvider) -> Self {
+        match o {
+            GlobalProvider::Notifier => Self::Notifier,
+            GlobalProvider::ContentProvider(id) => Self::ID(id.into()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GlobalProvider {
+    Notifier,
+    ContentProvider(ContentProviderID),
+}
+impl<T> From<T> for GlobalProvider
+where T: Into<ContentProviderID>
+{
+    fn from(id: T) -> Self {
+        Self::ContentProvider(id.into())
+    }
+}
 
 
 #[derive(Debug)]
