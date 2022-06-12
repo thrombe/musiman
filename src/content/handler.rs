@@ -78,6 +78,22 @@ impl ContentHandler {
         self.content_providers.alloc(cp)
     }
 
+    /// clones the provider and registers everything in it
+    pub fn clone_content_provider(&mut self, id: ContentProviderID) -> ContentProviderID {
+        let cp = self.get_provider(id).cp_clone();
+        cp.ids().for_each(|id| {
+            match id {
+                ID::Song(id) => {
+                    self.songs.register(id);
+                }
+                ID::ContentProvider(id) => {
+                    self.content_providers.register(id);
+                }
+            }
+        });
+        self.alloc_content_provider(cp.into())
+    }
+
     pub fn register(&mut self, id: GlobalContent) {
         match id {
             GlobalContent::ID(id) => {
@@ -453,8 +469,8 @@ impl ContentHandler {
     pub fn get_song(&self, id: SongID) -> &Song {
         self.songs.get(id).unwrap()
     }
-    pub fn get_song_mut(&mut self, content_identifier: SongID) -> &mut Song {
-        self.songs.get_mut(content_identifier).unwrap()
+    pub fn get_song_mut(&mut self, id: SongID) -> &mut Song {
+        self.songs.get_mut(id).unwrap()
     }
 
     pub fn set_queue(&mut self, id: ContentProviderID) {
@@ -619,19 +635,6 @@ impl ContentHandler {
             GlobalProvider::ContentProvider(id) => {
                 let cp = self.get_provider_mut(id);
                 cp.selection_decrement()
-            }
-            GlobalProvider::Notifier => todo!(),
-        }
-    }
-
-    // FIX: songs need edit too
-    // FIX: this wont work if edit is opened on selected item (content_stack.last won't be the same as the one in Edit{id})
-    pub fn apply_typed(&mut self, content: String) -> Result<()> {
-        let id = self.content_stack.last();
-        match id {
-            GlobalProvider::ContentProvider(id) => {
-                let cp = self.get_provider_mut(id);
-                cp.apply_typed(id, content).apply(self)
             }
             GlobalProvider::Notifier => todo!(),
         }

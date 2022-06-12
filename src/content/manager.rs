@@ -111,7 +111,6 @@ pub struct ContentManager<T, P> {
 
 impl<T, P> ContentManager<T, P>
     where
-        T: Clone,
         P: From<ContentID<T>> + Into<ContentID<T>>
 {
     pub fn new() -> Self {

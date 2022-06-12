@@ -9,10 +9,9 @@ pub mod ytalbum;
 use crate::content::manager::ID;
 
 
-#[derive(Debug, Clone)]
-// pub struct ContentProvider(Box<dyn content_providers::ContentProvider<MenuOption = dyn HumanReadable>>);
+/// don't impliment clone on this. instead use ContentHnadler.clone_content_provider
+#[derive(Debug)]
 pub struct ContentProvider(Box<dyn traits::ContentProvider>);
-// pub type ContentProvider = Box<dyn content_providers::ContentProvider>;
 impl std::ops::Deref for ContentProvider {
     type Target = Box<dyn traits::ContentProvider>;
     fn deref(&self) -> &Self::Target {
