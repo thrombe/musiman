@@ -78,6 +78,7 @@ impl Loadable for YTAlbum {
                 ].into()
             }
             YTAlbumID::PlaylistID(id) => {
+                self.loaded = true;
                 vec![
                     YTAction::GetPlaylist {
                         playlist_id: id.to_owned(),
