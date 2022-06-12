@@ -600,7 +600,7 @@ pub struct YTActionEntry {
 pub struct YTManager {
     sender: Sender<YTAction>,
     receiver: Receiver<ContentHandlerAction>,
-    thread: JoinHandle<Result<()>>, // FIX: a crash in this thread silently kills the thread without communication
+    thread: JoinHandle<Result<()>>, // FIX: communicate the crash in this thread to the user
 }
 
 impl YTManager {
@@ -618,6 +618,20 @@ impl YTManager {
     }
 
     pub fn poll(&mut self) -> ContentHandlerAction {
+        if self.thread.is_finished() {
+            let (a_sender, a_receiver) = mpsc::channel();
+            let (yt_sender, yt_receiver) = mpsc::channel();
+            self.receiver = a_receiver;
+            self.sender = yt_sender;
+            let thread = std::mem::replace(&mut self.thread, Self::init_thread(a_sender, yt_receiver));
+            let res = thread.join().unwrap();
+            match res {
+                Ok(_) => (),
+                Err(err) => {
+                    error!("{err}");
+                }
+            }
+        }
         match self.receiver.try_recv().ok() {
             Some(a) => {
                 dbg!("action received");
@@ -629,7 +643,7 @@ impl YTManager {
 
     pub fn run(&mut self, action: YTAction) -> Result<()> {
         dbg!(&action);
-        self.sender.send(action).ok().context("")
+        self.sender.send(action).ok().context("send error")
     }
 
     fn init_thread(sender: Sender<ContentHandlerAction>, receiver: Receiver<YTAction>) -> JoinHandle<Result<()>> {
