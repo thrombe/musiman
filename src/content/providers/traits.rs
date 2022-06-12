@@ -6,7 +6,10 @@ use crate::{
     error,
 };
 
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    any::Any,
+};
 
 use crate::{
     content::{
@@ -59,7 +62,7 @@ impl<T> From<T> for super::ContentProvider
 // the macro must be called on all the traits, else those implimentations will not be used
 pub trait ContentProvider
     where
-        Self: std::fmt::Debug + Send + Sync + CPClone,
+        Self: std::fmt::Debug + Send + Sync + CPClone + Any,
 {
     fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
         Box::new([].into_iter())
@@ -176,13 +179,10 @@ pub trait ContentProvider
             .map(FriendlyID::ID)
         )
     }
-
-
-    // TODO: traitless??
-    fn apply_typed(&mut self, _: ContentProviderID, _: String) -> ContentHandlerAction {
-        // BAD: eh?? really this?
-        None.into()
-    }
+    
+    // for downcasting (the macro has implimentation for this)
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 
@@ -321,6 +321,13 @@ macro_rules! _impliment_content_provider {
         $(
             impliment_content_provider!($t, $e);
         )+
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
     };
 }
 
