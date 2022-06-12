@@ -16,7 +16,7 @@ use crate::{
         },
     },
     app::app::SelectedIndex,
-    service::yt::YTAction,
+    service::python::action::YTAction,
 };
 
 #[derive(Debug, Clone)]

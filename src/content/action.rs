@@ -39,8 +39,10 @@ use crate::{
         },
     },
     app::action::AppAction,
-    service::yt::YTAction,
-    service::yt::YTManager,
+    service::python::{
+        action::YTAction,
+        manager::YTManager,
+    },
     image::UnprocessedImage,
 };
 

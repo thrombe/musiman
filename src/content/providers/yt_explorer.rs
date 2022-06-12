@@ -23,7 +23,7 @@ use crate::{
         },
     },
     app::app::SelectedIndex,
-    service::yt::YTAction,
+    service::python::action::YTAction,
 };
 
 #[derive(Debug, Clone)]
@@ -218,18 +218,6 @@ enum Editables {
     Main(YTEEditables),
     SType(YTSearchType),
 }
-// impl Into<FriendlyID> for Editables {
-//     fn into(self) -> FriendlyID {
-//         match self {
-//             Self::Main(e) => {
-//                 e.into()
-//             }
-//             Self::SType(e) => {
-//                 e.into()
-//             }
-//         }
-//     }
-// }
 impl From<YTEEditables> for Editables {
     fn from(e: YTEEditables) -> Self {
         Self::Main(e)
@@ -276,15 +264,6 @@ enum YTEEditables {
     SEARCH_TERM,
     SEARCH_TYPE,
 }
-// impl Into<FriendlyID> for YTEEditables {
-//     fn into(self) -> FriendlyID {
-//         FriendlyID::String(
-//             format!("{self:#?}")
-//             .replace("_", " ")
-//             .to_lowercase()
-//         )
-//     }
-// }
 impl ToString for YTEEditables {
     fn to_string(&self) -> String {
         format!("{self:#?}")
