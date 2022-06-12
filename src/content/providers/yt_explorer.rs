@@ -23,7 +23,7 @@ use crate::{
         },
     },
     app::app::SelectedIndex,
-    service::python::action::YTAction,
+    service::python::action::PyAction,
 };
 
 #[derive(Debug, Clone)]
@@ -152,7 +152,7 @@ impl Editable for YTExplorer {
                                 ContentHandlerAction::PopContentStack, // edit
                                 match cp.search_type {
                                     YTSearchType::Album => {
-                                        YTAction::AlbumSearch {
+                                        PyAction::AlbumSearch {
                                             term: cp.search_term.clone(),
                                             loader: self_id,
                                         }.into()
@@ -161,13 +161,13 @@ impl Editable for YTExplorer {
                                         todo!()
                                     }
                                     YTSearchType::Song => {
-                                        YTAction::SongSearch {
+                                        PyAction::SongSearch {
                                             term: cp.search_term.clone(),
                                             loader: self_id,
                                         }.into()
                                     }
                                     YTSearchType::Video => {
-                                        YTAction::VideoSearch {
+                                        PyAction::VideoSearch {
                                             term: cp.search_term.clone(),
                                             loader: self_id,
                                         }.into()

@@ -16,7 +16,7 @@ use crate::{
         },
     },
     app::app::SelectedIndex,
-    service::python::action::YTAction,
+    service::python::action::PyAction,
 };
 
 #[derive(Debug, Clone)]
@@ -71,7 +71,7 @@ impl Loadable for YTAlbum {
         match &self.id {
             YTAlbumID::BrowseID(id) => {
                 vec![
-                    YTAction::GetAlbumPlaylistId {
+                    PyAction::GetAlbumPlaylistId {
                         browse_id: id.clone(),
                         loader: self_id,
                     }.into(),
@@ -80,7 +80,7 @@ impl Loadable for YTAlbum {
             YTAlbumID::PlaylistID(id) => {
                 self.loaded = true;
                 vec![
-                    YTAction::GetPlaylist {
+                    PyAction::GetPlaylist {
                         playlist_id: id.to_owned(),
                         loader: self_id,
                     }.into()

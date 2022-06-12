@@ -40,8 +40,8 @@ use crate::{
     },
     app::action::AppAction,
     service::python::{
-        action::YTAction,
-        manager::YTManager,
+        action::PyAction,
+        manager::PyManager,
     },
     image::UnprocessedImage,
 };
@@ -172,7 +172,7 @@ impl ContentHandlerAction {
                         ch.player.play(song.to_string())?;
                     }
                     SongPath::YTPath(p) => {
-                        let action: Self = YTAction::GetSong {
+                        let action: Self = PyAction::GetSong {
                             url: p.to_string(),
                             callback: Box::new(move |uri: String, thumbnail: String| -> ContentHandlerAction {
                                 vec![
@@ -213,13 +213,13 @@ pub struct ParallelHandle {
     handles: Vec<thread::JoinHandle<Result<()>>>,
     receiver: Receiver<ContentHandlerAction>,
     sender: Sender<ContentHandlerAction>,
-    yt_man: YTManager,
+    yt_man: PyManager,
 }
 impl Default for ParallelHandle {
     fn default() -> Self {
         let (sender, receiver) = mpsc::channel();
         Self {
-            yt_man: YTManager::new().unwrap(),
+            yt_man: PyManager::new().unwrap(),
             handles: Default::default(),
             receiver,
             sender,
@@ -311,9 +311,9 @@ impl RustParallelAction {
 #[derive(Debug)]
 pub enum ParallelAction {
     Rust(RustParallelAction),
-    Python(YTAction),
+    Python(PyAction),
 }
-impl Into<ParallelAction> for YTAction {
+impl Into<ParallelAction> for PyAction {
     fn into(self) -> ParallelAction {
         ParallelAction::Python(self)
     }

@@ -18,14 +18,14 @@ use anyhow::{Result};
 pub mod manager;
 pub mod action;
 
-pub struct PyHandel {
+pub struct PyHandle {
     pub ytdl: Py<PyAny>,
     pub ytmusic: Py<PyAny>,
     pub thread: Py<PyAny>,
     pub json: Py<PyAny>,
     pub time: Py<PyAny>,
 }
-impl PyHandel {
+impl PyHandle {
     fn new(py: Python) -> Result<Self> {
         let headers_path = "/home/issac/0Git/musimanager/db/headers_auth.json";
         let ytmusic = py
@@ -77,7 +77,7 @@ impl PyHandel {
 }
 
 /// assumes all lines have consistent exclusive spaces/tabs
-pub fn fix_python_indentation(code: &str) -> String {
+pub fn fix_code_indentation(code: &str) -> String {
     let line = match code.lines().find(|line| !line.trim().is_empty()) {
         Some(line) => line,
         None => return "".to_owned(),
@@ -95,6 +95,6 @@ pub fn fix_python_indentation(code: &str) -> String {
     .collect()
 }
 
-pub fn append_python_code(a: String, b: String) -> String {
+pub fn append_code(a: String, b: String) -> String {
     a.lines().chain(b.lines()).collect::<Vec<_>>().join("\n")
 }

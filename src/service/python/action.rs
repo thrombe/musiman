@@ -25,9 +25,9 @@ use crate::{
     },
     service::{
         python::{
-            fix_python_indentation,
-            append_python_code,
-            PyHandel,
+            fix_code_indentation,
+            append_code,
+            PyHandle,
         },
         yt::{
             ytdl::*,
@@ -37,12 +37,10 @@ use crate::{
 };
 
 
-// BAD: rename tp Py***
-
 // pyo3 cant do python in multiple rust threads at a time. so gotta make sure only one is active at a time
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub enum YTAction { // TODO: use cow for strings in actions?
+pub enum PyAction { // TODO: use cow for strings in actions?
     GetSong {
         url: String,
         #[derivative(Debug="ignore")]
@@ -71,8 +69,8 @@ pub enum YTAction { // TODO: use cow for strings in actions?
         loader: ContentProviderID,
     },
 }
-impl YTAction {
-    pub fn run(&mut self, py: Python, pyd: &Py<PyAny>, pyh: &mut PyHandel) -> Result<()> {
+impl PyAction {
+    pub fn run(&mut self, py: Python, pyd: &Py<PyAny>, pyh: &mut PyHandle) -> Result<()> {
         dbg!("running ytaction", &self);
         let globals = [
             ("res", &*pyd),
@@ -172,7 +170,7 @@ impl YTAction {
                 ")
             }
         };
-        let try_catch = fix_python_indentation("
+        let try_catch = fix_code_indentation("
             def try_catch(f):
                 try:
                     res['data'] = f()
@@ -184,14 +182,14 @@ impl YTAction {
             handle.start()
             #try_catch(get_data)
         ");
-        let code = fix_python_indentation(&code);
-        let code = append_python_code(code, try_catch);
+        let code = fix_code_indentation(&code);
+        let code = append_code(code, try_catch);
         debug!("{code}");
         py.run(&code, Some(globals), None)?;
         Ok(())
     }
 
-    pub fn resolve(&mut self, py: Python, pyd: &Py<PyAny>, _pyh: &mut PyHandel) -> Result<ContentHandlerAction> {
+    pub fn resolve(&mut self, py: Python, pyd: &Py<PyAny>, _pyh: &mut PyHandle) -> Result<ContentHandlerAction> {
         dbg!("resolving YTAction", &self);
         let globals = [("res", pyd)].into_py_dict(py);
         let pyd = py.eval("res['data']", Some(globals), None)?.extract::<Py<PyAny>>()?;

@@ -33,27 +33,25 @@ use crate::{
         action::ContentHandlerAction,
     },
     service::python::{
-        action::YTAction,
-        PyHandel,
+        action::PyAction,
+        PyHandle,
     },
 };
 
 
-// BAD: RENAME THESE TO -> Py****
-
-pub struct YTActionEntry {
-    action: YTAction,
+pub struct PyActionEntry {
+    action: PyAction,
     pyd: Py<PyAny>,
 }
 
 #[derive(Debug)]
-pub struct YTManager {
-    sender: Sender<YTAction>,
+pub struct PyManager {
+    sender: Sender<PyAction>,
     receiver: Receiver<ContentHandlerAction>,
     thread: JoinHandle<Result<()>>, // FIX: communicate the crash in this thread to the user
 }
 
-impl YTManager {
+impl PyManager {
     pub fn new() -> Result<Self> {
         let (a_sender, a_receiver) = mpsc::channel();
         let (yt_sender, yt_receiver) = mpsc::channel();
@@ -91,18 +89,18 @@ impl YTManager {
         }
     }
 
-    pub fn run(&mut self, action: YTAction) -> Result<()> {
+    pub fn run(&mut self, action: PyAction) -> Result<()> {
         dbg!(&action);
         self.sender.send(action).ok().context("send error")
     }
 
-    fn init_thread(sender: Sender<ContentHandlerAction>, receiver: Receiver<YTAction>) -> JoinHandle<Result<()>> {
+    fn init_thread(sender: Sender<ContentHandlerAction>, receiver: Receiver<PyAction>) -> JoinHandle<Result<()>> {
         let thread = thread::spawn(move || -> Result<()> {
             pyo3::prepare_freethreaded_python();
             let p = pyo3::Python::acquire_gil(); 
             let py = p.python();
 
-            let pyh = &mut PyHandel::new(py)?;
+            let pyh = &mut PyHandle::new(py)?;
             let mut actions = vec![];
 
             loop {
@@ -114,7 +112,7 @@ impl YTManager {
                         // the memory location does not change. res = data changes the memory location something something
                         // but res['data'] = data does what i want
                         let pyd = py.eval("{'data': None, 'found': False, 'error': None}", None, None)?.extract()?;
-                        let entry = YTActionEntry {action: a, pyd };
+                        let entry = PyActionEntry {action: a, pyd };
                         actions.push(entry);
                         let a = actions.last_mut().unwrap();
                         a.action.run(py, &a.pyd, pyh)?;
