@@ -30,6 +30,7 @@ use crate::{
         manager::{
             ContentProviderID,
             GlobalProvider,
+            ID,
         },
         song::{
             Song,
@@ -124,9 +125,9 @@ impl ContentHandlerAction {
                     _ => (),
                 }
             }
-            Self::EnableTyping { content } => {
+            Self::EnableTyping { content, callback, loader } => {
                 ch.app_action.queue(
-                    AppAction::EnableTyping {content}
+                    AppAction::EnableTyping {content, callback, loader}
                 );
             }
             Self::PopContentStack => {
@@ -358,6 +359,9 @@ pub enum ContentHandlerAction {
     },
     EnableTyping {
         content: String,
+        #[derivative(Debug="ignore")]
+        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentHandlerAction + 'static + Send + Sync>,
+        loader: ID,
     },
     PopContentStack,
     Actions(Vec<Self>),

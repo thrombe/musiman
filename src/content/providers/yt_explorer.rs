@@ -9,6 +9,7 @@ use crate::{
             ContentProviderID,
         },
         providers::{
+            self,
             FriendlyID,
             traits::{
                 impliment_content_provider,
@@ -129,7 +130,7 @@ impl Editable for YTExplorer {
         }))
     }
 
-    fn select_editable(&mut self, ctx: &mut StateContext, _: ContentProviderID) -> ContentHandlerAction {
+    fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
         let i = ctx.last().selected_index();
         let opt = self.editables(ctx).skip(i).next().unwrap();
         match opt {
@@ -139,9 +140,46 @@ impl Editable for YTExplorer {
                         let mut index = SelectedIndex::default();
                         index.select(i);
                         ctx.push(index);
+                        let callback = move |me: &mut providers::ContentProvider, content: String| -> ContentHandlerAction {
+                            let cp = me.as_any_mut().downcast_mut::<Self>().unwrap();
+                            cp.loaded = true;
+                            cp.search_term = content;
+                            cp.songs.clear();
+                            cp.providers.clear();
+                            cp.selected.select(0);
+                            return vec![
+                                ContentHandlerAction::PopContentStack, // typing
+                                ContentHandlerAction::PopContentStack, // edit
+                                match cp.search_type {
+                                    YTSearchType::Album => {
+                                        YTAction::AlbumSearch {
+                                            term: cp.search_term.clone(),
+                                            loader: self_id,
+                                        }.into()
+                                    }
+                                    YTSearchType::Playlist => {
+                                        todo!()
+                                    }
+                                    YTSearchType::Song => {
+                                        YTAction::SongSearch {
+                                            term: cp.search_term.clone(),
+                                            loader: self_id,
+                                        }.into()
+                                    }
+                                    YTSearchType::Video => {
+                                        YTAction::VideoSearch {
+                                            term: cp.search_term.clone(),
+                                            loader: self_id,
+                                        }.into()
+                                    }
+                                }
+                            ].into();
+                        };
                         vec![
                             ContentHandlerAction::EnableTyping {
                                 content: self.search_term.clone(),
+                                callback: Box::new(callback),
+                                loader: self_id.into(),
                             },
                         ].into()
                     }
@@ -173,40 +211,6 @@ impl Loadable for YTExplorer {
 
 impl ContentProvider for YTExplorer {
     impliment_content_provider!(YTExplorer, Provider, Loadable, Editable, SongProvider, CPProvider);
-
-    fn apply_typed(&mut self, self_id: ContentProviderID, content: String) -> ContentHandlerAction {
-        self.loaded = true;
-        self.search_term = content;
-        self.songs.clear();
-        self.providers.clear();
-        return vec![
-            ContentHandlerAction::PopContentStack, // typing
-            ContentHandlerAction::PopContentStack, // edit
-            match self.search_type {
-                YTSearchType::Album => {
-                    YTAction::AlbumSearch {
-                        term: self.search_term.clone(),
-                        loader: self_id,
-                    }.into()
-                }
-                YTSearchType::Playlist => {
-                    todo!()
-                }
-                YTSearchType::Song => {
-                    YTAction::SongSearch {
-                        term: self.search_term.clone(),
-                        loader: self_id,
-                    }.into()
-                }
-                YTSearchType::Video => {
-                    YTAction::VideoSearch {
-                        term: self.search_term.clone(),
-                        loader: self_id,
-                    }.into()
-                }
-            }
-        ].into();
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug,)]

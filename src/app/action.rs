@@ -6,14 +6,23 @@ use crate::{
     error,
 };
 
+use derivative::Derivative;
+use anyhow::Result;
+
 use crate::{
     app::app::{
         App,
         AppState,
     },
+    content::{
+        providers::ContentProvider,
+        action::ContentHandlerAction,
+        manager::ID,
+    },
 };
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub enum AppAction {
     None,
     Actions {
@@ -21,11 +30,19 @@ pub enum AppAction {
     },
     EnableTyping {
         content: String,
+        #[derivative(Debug="ignore")]
+        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentHandlerAction + 'static + Send + Sync>,
+        loader: ID,
     },
     UpdateDisplayContent {
         content: Vec<String>,
     },
     Redraw,
+    ApplyTyped {
+        #[derivative(Debug="ignore")]
+        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentHandlerAction + 'static + Send + Sync>,
+        loader: ID,        
+    }
 }
 impl Default for AppAction {
     fn default() -> Self {
@@ -69,20 +86,34 @@ impl AppAction {
         dbg!(&self);
     }
 
-    pub fn apply(self, app: &mut App) {
+    pub fn apply(self, app: &mut App) -> Result<()> {
         self.dbg_log();
         match self {
             Self::None => (),
             Self::Actions {actions} => {
                 for action in actions {
-                    action.apply(app);
+                    action.apply(app)?;
                 }
             }
-            Self::EnableTyping {mut content} => {
+            Self::EnableTyping {mut content, callback, loader} => {
                 app.state = AppState::Typing;
                 // app.input = content.chars().collect();
                 app.input = content.drain(..).collect();
                 app.input_cursor_pos = app.input.len();
+                app.typing_callback = AppAction::ApplyTyped { callback, loader }
+            }
+            Self::ApplyTyped {callback, loader} => {
+                match loader {
+                    ID::ContentProvider(id) => {
+                        let cp = app.content_handler.get_provider_mut(id);
+                        let action = callback(cp, app.input[..].iter().collect());
+                        action.apply(&mut app.content_handler)?;
+                    }
+                    ID::Song(id) => {
+                        let s = app.content_handler.get_song_mut(id);
+                        todo!() // FIX: this is not supported rn!!
+                    }
+                }
             }
             Self::UpdateDisplayContent {content} => {
                 app.browser_widget.options = content;
@@ -91,5 +122,6 @@ impl AppAction {
                 app.redraw_needed = true;
             }
         }
+        Ok(())
     }
 }

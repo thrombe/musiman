@@ -53,6 +53,7 @@ use crate::{
         handler::ContentHandler,
         action::ContentHandlerAction,
     },
+    app::action::AppAction,
 };
 
 
@@ -253,6 +254,7 @@ pub struct App {
     /// Current value of the input box
     pub input: Vec<char>,
     pub input_cursor_pos: usize,
+    pub typing_callback: AppAction,
     pub state: AppState,
 
     // updates status bar depending on the situation
@@ -262,7 +264,7 @@ pub struct App {
     // handles all ui from the player widget side
     player_widget: PlayerWidget,
 
-    content_handler: ContentHandler,
+    pub content_handler: ContentHandler,
     pub redraw_needed: bool,
 }
 
@@ -272,6 +274,7 @@ impl App {
             input: Default::default(),
             input_cursor_pos: 0,
             state: AppState::Browser,
+            typing_callback: AppAction::None,
 
             status_bar: StatusBar {},
             browser_widget: BrowserWidget::new(),
@@ -367,7 +370,8 @@ impl App {
                                 self.input_cursor_pos = self.input.len();
                             }
                             KeyCode::Enter => {
-                                self.content_handler.apply_typed(self.input[..].iter().collect())?;
+                                let action = std::mem::replace(&mut self.typing_callback, AppAction::None);
+                                action.apply(self)?;
                                 self.state = AppState::Browser;
                             }
                             _ => event_handled = false,
