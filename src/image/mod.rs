@@ -7,25 +7,22 @@ use crate::{
 
 mod printer;
 mod config;
-mod utils;
 
 use anyhow::Result;
 use image::{DynamicImage, GenericImageView};
 use reqwest;
 
-use self::{
+use crate::image::{
     config::Config,
     printer::{
         Printer,
-        Block,
-        Sixel,
+        PrinterChooser,
     },
 };
 
 use derivative::Derivative;
 use std::{
     path::PathBuf,
-    io::Stdout,
 };
 
 #[derive(Derivative)]
@@ -110,85 +107,9 @@ impl UnprocessedImage {
     }
 }
 
-pub enum ProcessedImage {
-    None,
-    Block {
-        img: Block,
-        width: u32,
-        height: u32,
-    },
-    Sixel {
-        img: Sixel,
-        width: u32,
-        height: u32,
-    },
-}
-impl Default for ProcessedImage {
-    fn default() -> Self {
-        Self::None
-    }
-}
-impl From<Option<ProcessedImage>> for ProcessedImage {
-    fn from(o: Option<ProcessedImage>) -> Self {
-        match o {
-            Some(e) => e,
-            None => Self::None,
-        }
-    }
-}
-
-impl ProcessedImage {
-    pub fn needs_processing(&self, config: &Config) -> bool {
-        let (width, height) = match self {
-            Self::Block {width, height, ..} => {
-                (width, height)
-            }
-            Self::Sixel { width, height , ..} => {
-                (width, height)
-            }
-            Self::None => return true,
-        };
-        !(*width == config.width.unwrap() && *height == config.height.unwrap())
-    }
-
-    pub fn process(&mut self, image: &DynamicImage, config: &Config, printer: &Printer) {
-        match printer {
-            Printer::Block => {
-                let block = Block::new(image, config).unwrap();
-                *self = Self::Block {
-                    img: block,
-                    width: config.width.unwrap(),
-                    height: config.height.unwrap(),
-                };
-            }
-            Printer::Sixel => {
-                let out = Sixel::new(image, config).unwrap();
-                *self = Self::Sixel {
-                    img: out,
-                    width: config.width.unwrap(),
-                    height: config.height.unwrap(),
-                }
-            }
-        }
-    }
-
-    pub fn print(&mut self, stdout: &mut Stdout) -> Result<()> {
-        match self {
-            Self::Block {img, ..} => {
-                img.print(stdout)?;
-            }
-            Self::Sixel {img, ..} => {
-                img.print(stdout)?;
-            }
-            Self::None => (),
-        }
-        Ok(())
-    }
-}
-
+#[derive(Debug)]
 pub struct ImageHandler {
     config: Config,
-    processed_image: ProcessedImage,
     printer: Printer,
     unprocessed_image: UnprocessedImage,
     dimensions_changed: bool,
@@ -203,12 +124,10 @@ impl Default for ImageHandler {
                 restore_cursor: true,
                 width: None,
                 height: None,
-                truecolor: utils::truecolor_available(),
-                use_sixel: true,
+                printer_chooser: PrinterChooser::Default,
                 alignment: Default::default(),
             },
-            printer: Printer::Block,
-            processed_image: Default::default(),
+            printer: Default::default(),
             unprocessed_image: Default::default(),
             dimensions_changed: false,
         }
@@ -222,11 +141,8 @@ impl ImageHandler {
     }
 
     pub fn set_size(&mut self, width: Option<u32>, height: Option<u32>) {
-        if width != self.config.width || height != self.config.height {
-            self.dimensions_changed = true;
-            self.config.width = width;
-            self.config.height = height;
-        }
+        self.config.width = width;
+        self.config.height = height;
     }
 
     pub fn set_image<T>(&mut self, img: T)
@@ -234,29 +150,32 @@ impl ImageHandler {
             T: Into<UnprocessedImage>
     {
         self.unprocessed_image = img.into();
-        self.processed_image = None.into();
+        self.dimensions_changed();
     }
 
-    fn prepare_image(&mut self) {
-        self.unprocessed_image.prepare_image().unwrap();
-        if self.processed_image.needs_processing(&self.config) {
+    pub fn clear_image(&mut self) {
+        self.printer = Default::default();
+    }
+
+    fn prepare_image(&mut self) -> bool {
+        if self.dimensions_changed {
             match self.unprocessed_image.get_image() {
                 Some(img) => {
-                    self.processed_image.process(img, &self.config, &self.printer);
+                    self.printer.new_from_img(img, &self.config).unwrap();
+                    self.dimensions_changed = false;
+                    return true;
                 }
                 None => (),
             }
         }
+        false
+    }
+
+    pub fn dimensions_changed(&mut self) {
+        self.dimensions_changed = true;
     }
 
     pub fn maybe_print(&mut self) -> Result<()> {
-        // dbg!("maybe printing");
-        // if self.dimensions_changed { // TODO:
-
-        // } else {
-
-        // }
-
         use crossterm::{
             execute,
             cursor::{
@@ -269,8 +188,10 @@ impl ImageHandler {
             execute!(&mut stdout, SavePosition)?;
         }
 
-        self.prepare_image();
-        self.processed_image.print(&mut stdout)?;
+        if self.prepare_image() {
+            dbg!("image printed");
+            self.printer.print(&mut stdout)?;
+        }
 
         if self.config.restore_cursor {
             execute!(&mut stdout, RestorePosition)?;

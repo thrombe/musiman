@@ -49,6 +49,26 @@
   /. what does sixel say for the sizes?
   \. try printing blocks and checking dimension https://en.m.wikipedia.org/wiki/Block_Elements
 
+/. behaviour:
+  /. better way to choose and do image printing
+/. plan:
+  /. a enum that chooses the printer that impliments a printer trait
+    /. disadvantages:
+      /. have to maintain 2 different sets of enums/structs whatever
+      /. harder to disable stuff with cfg features
+  \. have a fake enum that that impliments printer or something and that just replaces itself with a actual printer when its methods are called
+    \. disadvantages:
+      \. same as the above method
+
+/. behaviour:
+  /. no lag cuz of printing image
+/. plan:
+  /. print image only if something resized, something updated in the player block
+    /. size changes
+    /. image changes
+    /. redraw requested
+  \. print from another thread
+
 . behaviour:
   . save state easily
   . load state easily
@@ -124,15 +144,6 @@
   . if trait ContentProvider
     . a few implimentations can know about the yt stuff. others do not need to
 
-. behaviour:
-  . no lag cuz of printing image
-. plan:
-  . print image only if something resized, something updated in the player block
-    . size changes
-    . image changes
-    . redraw requested
-  . print from another thread
-
 
 todo:
   . less complexity in ContentHandler code
@@ -153,17 +164,11 @@ plan:
   . ytmusicapi has a non-signin thing. see if it can be used, else disable it
   . add a default printer and a builder that chooses a backend that is valid for the terminal
 
-. behaviour:
-  . better way to choose and do image printing
-. plan:
-  . a enum that chooses the printer that impliments a printer trait
-    . disadvantages:
-      . have to maintain 2 different sets of enums/structs whatever
-      . harder to disable stuff with cfg features
-  \. have a fake enum that that impliments printer or something and that just replaces itself with a actual printer when its methods are called
-    \. disadvantages:
-      \. same as the above method
-
+todo:
+  . better error handling
+plan:
+  . use enums for error handling + see what errors should/should not panic/unwrap
+  . maybe have a channel to send these errors on, and notify the users about some of these errors
 
 
 . plan

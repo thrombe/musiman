@@ -15,6 +15,7 @@ use std::io::{
 };
 use termion;
 use anyhow::Result;
+use derivative::Derivative;
 
 use crate::image::{
     printer::{
@@ -34,7 +35,6 @@ use std::{
     slice
 };
 
-#[cfg(feature = "sixel")]
 #[allow(unused_imports)]
 use sixel_sys::{
     sixel_output_new,
@@ -82,24 +82,21 @@ extern "C" fn write_fn(data: *mut c_char, len: c_int, userdata: *mut c_void) -> 
     }
 }
 
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct Sixel {
+    #[derivative(Debug="ignore")]
     output: Vec<u8>,
     x: u16,
     y: u16,
 }
 
-#[cfg(not(feature = "sixel"))]
-impl Sixel {
-    pub fn new(_: &DynamicImage, _: &Config) -> Result<Self> {
-        unreachable!()
-    }
-    
-    pub fn print(&self, _: &mut Stdout, _: &Config) -> Result<()> {
-        unreachable!()
+impl crate::image::printer::traits::Printer for Sixel {
+    fn print(&self, stdout: &mut Stdout) -> Result<()> {
+        Self::print(&self, stdout)
     }
 }
 
-#[cfg(feature = "sixel")]
 impl Sixel {
     pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
         let (w, mut h) = get_size_pix(img, config.width, config.height);

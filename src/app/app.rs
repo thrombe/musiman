@@ -263,6 +263,7 @@ pub struct App {
     player_widget: PlayerWidget,
 
     content_handler: ContentHandler,
+    pub redraw_needed: bool,
 }
 
 impl App {
@@ -277,6 +278,7 @@ impl App {
             player_widget: PlayerWidget::new(),
 
             content_handler: ContentHandler::load()?,
+            redraw_needed: false,
         };
         Ok(a)
     }
@@ -286,6 +288,11 @@ impl App {
         loop {
             self.handle_events()?;
             self.update()?;
+            if self.redraw_needed {
+                self.redraw_needed = false;
+                dbg!("resized");
+                terminal.resize(terminal.size()?)?;
+            }
             terminal.draw(|f| self.render(f).unwrap())?;
 
             if let AppState::Quit = self.state {
@@ -312,82 +319,88 @@ impl App {
         if !event::poll(std::time::Duration::from_millis(500))? { // read does not block as poll returned true
             return Ok(())
         }
-        if let Event::Key(key) = event::read()? {
-            let event_handled = match self.state {
-                AppState::Typing => {
-                    let mut event_handled = true;
-                    match key.code {
-                        KeyCode::Esc => {
-                            self.state = AppState::Browser; // TODO: should this be a stack too?
-                            ContentHandlerAction::PopContentStack.apply(&mut self.content_handler)?;
-                        }
-                        KeyCode::Char(c) => {
-                            self.input.insert(self.input_cursor_pos, c);
-                            self.input_cursor_pos += 1;
-                        }
-                        KeyCode::Backspace => {
-                            if self.input_cursor_pos > 0 {
-                                self.input_cursor_pos -= 1;
-                                self.input.remove(self.input_cursor_pos);
+        match event::read()? {
+            Event::Key(key) => {
+                let event_handled = match self.state {
+                    AppState::Typing => {
+                        let mut event_handled = true;
+                        match key.code {
+                            KeyCode::Esc => {
+                                self.state = AppState::Browser; // TODO: should this be a stack too?
+                                ContentHandlerAction::PopContentStack.apply(&mut self.content_handler)?;
                             }
-                        }
-                        KeyCode::Left => {
-                            match key.modifiers { // these are bitfields, not enum variants
-                                KeyModifiers::NONE => {
-                                    if self.input_cursor_pos > 0 {
-                                        self.input_cursor_pos -= 1;
-                                    }
+                            KeyCode::Char(c) => {
+                                self.input.insert(self.input_cursor_pos, c);
+                                self.input_cursor_pos += 1;
+                            }
+                            KeyCode::Backspace => {
+                                if self.input_cursor_pos > 0 {
+                                    self.input_cursor_pos -= 1;
+                                    self.input.remove(self.input_cursor_pos);
                                 }
-                                // KeyModifiers::CONTROL | KeyModifiers::SHIFT => {}
-                                _ => event_handled = false,
                             }
-                        }
-                        KeyCode::Right => {
-                            match key.modifiers {
-                                KeyModifiers::NONE => {
-                                    if self.input_cursor_pos < self.input.len() {
-                                        self.input_cursor_pos += 1;
+                            KeyCode::Left => {
+                                match key.modifiers { // these are bitfields, not enum variants
+                                    KeyModifiers::NONE => {
+                                        if self.input_cursor_pos > 0 {
+                                            self.input_cursor_pos -= 1;
+                                        }
                                     }
+                                    // KeyModifiers::CONTROL | KeyModifiers::SHIFT => {}
+                                    _ => event_handled = false,
                                 }
-                                _ => event_handled = false,
                             }
+                            KeyCode::Right => {
+                                match key.modifiers {
+                                    KeyModifiers::NONE => {
+                                        if self.input_cursor_pos < self.input.len() {
+                                            self.input_cursor_pos += 1;
+                                        }
+                                    }
+                                    _ => event_handled = false,
+                                }
+                            }
+                            KeyCode::Home => {
+                                self.input_cursor_pos = 0;
+                            }
+                            KeyCode::End => {
+                                self.input_cursor_pos = self.input.len();
+                            }
+                            KeyCode::Enter => {
+                                self.content_handler.apply_typed(self.input[..].iter().collect())?;
+                                self.state = AppState::Browser;
+                            }
+                            _ => event_handled = false,
                         }
-                        KeyCode::Home => {
-                            self.input_cursor_pos = 0;
+                        event_handled
+                    },
+                    _ => {
+                        let mut event_handled = false;
+                        if !event_handled {
+                            event_handled = self.browser_widget.handle_events(key, &mut self.content_handler)?;
+                            // if event_handled {
+                            //     self.browser_widget.update(&mut self.content_handler);
+                            // }
                         }
-                        KeyCode::End => {
-                            self.input_cursor_pos = self.input.len();
+                        if !event_handled {event_handled = self.player_widget.handle_events(key, &mut self.content_handler)?;}
+                        event_handled
+                    },
+                };
+                if event_handled {return Ok(())}
+            
+                match self.state {
+                    _ => match key.code {
+                        KeyCode::Char('q') => {
+                            self.state = AppState::Quit;
                         }
-                        KeyCode::Enter => {
-                            self.content_handler.apply_typed(self.input[..].iter().collect())?;
-                            self.state = AppState::Browser;
-                        }
-                        _ => event_handled = false,
+                        _ => ()
                     }
-                    event_handled
-                },
-                _ => {
-                    let mut event_handled = false;
-                    if !event_handled {
-                        event_handled = self.browser_widget.handle_events(key, &mut self.content_handler)?;
-                        // if event_handled {
-                        //     self.browser_widget.update(&mut self.content_handler);
-                        // }
-                    }
-                    if !event_handled {event_handled = self.player_widget.handle_events(key, &mut self.content_handler)?;}
-                    event_handled
-                },
-            };
-            if event_handled {return Ok(())}
-        
-            match self.state {
-                _ => match key.code {
-                    KeyCode::Char('q') => {
-                        self.state = AppState::Quit;
-                    }
-                    _ => ()
-                }
+                }    
             }
+            Event::Resize(_, _) => {
+                self.content_handler.image_handler.dimensions_changed();
+            }
+            Event::Mouse(_) => (),
         }
         Ok(())
     }

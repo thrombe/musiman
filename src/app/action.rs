@@ -1,4 +1,11 @@
 
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+    error,
+};
+
 use crate::{
     app::app::{
         App,
@@ -17,7 +24,8 @@ pub enum AppAction {
     },
     UpdateDisplayContent {
         content: Vec<String>,
-    }
+    },
+    Redraw,
 }
 impl Default for AppAction {
     fn default() -> Self {
@@ -62,6 +70,7 @@ impl AppAction {
     }
 
     pub fn apply(self, app: &mut App) {
+        self.dbg_log();
         match self {
             Self::None => (),
             Self::Actions {actions} => {
@@ -77,6 +86,9 @@ impl AppAction {
             }
             Self::UpdateDisplayContent {content} => {
                 app.browser_widget.options = content;
+            }
+            Self::Redraw => {
+                app.redraw_needed = true;
             }
         }
     }

@@ -15,6 +15,7 @@ use image::{
     Rgba,
     imageops::FilterType,
 };
+use derivative::Derivative;
 use termcolor::{
     Color,
     ColorSpec,
@@ -25,10 +26,13 @@ use crossterm::{
     cursor::MoveRight,
     execute,
 };
-use std::io::{
-    Write,
-    BufWriter,
-    Stdout,
+use std::{
+    io::{
+        Write,
+        BufWriter,
+        Stdout,
+    },
+    env,
 };
 use crate::image::{
     printer::adjust_offset,
@@ -41,12 +45,21 @@ const LOWER_HALF_BLOCK: &str = "\u{2584}";
 const CHECKERBOARD_BACKGROUND_LIGHT: (u8, u8, u8) = (153, 153, 153);
 const CHECKERBOARD_BACKGROUND_DARK: (u8, u8, u8) = (102, 102, 102);
 
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct Block {
+    #[derivative(Debug="ignore")]
     img: Buffer,
 }
 
+impl crate::image::printer::traits::Printer for Block {
+    fn print(&self, stdout: &mut Stdout) -> Result<()> {
+        Self::print(&self, stdout)
+    }
+}
+
 impl Block {
-    pub fn new(img: &DynamicImage, config: &Config) -> Result<Self> {
+    pub fn new(img: &DynamicImage, config: &Config, truecolor: bool) -> Result<Self> {
         let mut buff = Buffer::ansi();
         // adjust with x=0 and handle horizontal offset entirely below
         adjust_offset(&mut buff, 0, config.y)?;
@@ -74,7 +87,7 @@ impl Block {
                 let color = if is_pixel_transparent(pixel) {
                     None
                 } else {
-                    Some(get_color_from_pixel(pixel, config.truecolor))
+                    Some(get_color_from_pixel(pixel, truecolor))
                 };
                 
                 // Even rows modify the background, odd rows the foreground
@@ -238,5 +251,14 @@ fn get_size_block(img: &DynamicImage, width: Option<u32>, height: Option<u32>) -
         new_width_pix/char_width,
         2*new_height_pix/char_height,
     )
+}
+
+
+pub fn truecolor_available() -> bool {
+    if let Ok(value) = env::var("COLORTERM") {
+        value.contains("truecolor") || value.contains("24bit")
+    } else {
+        false
+    }
 }
 

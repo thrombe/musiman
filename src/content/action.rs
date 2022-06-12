@@ -154,7 +154,12 @@ impl ContentHandlerAction {
             Self::UpdateImage {img} => {
                 ch.image_handler.set_image(img);
             }
+            Self::ClearImage => {
+                ch.image_handler.clear_image();
+                ch.app_action.queue(AppAction::Redraw);
+            }
             Self::PlaySong {song, art} => {
+                Self::ClearImage.apply(ch)?;
                 let art = if let SongArt::YTSong(p) = art {
                     Some(p)
                 } else {
@@ -364,6 +369,7 @@ pub enum ContentHandlerAction {
     UpdateImage{
         img: UnprocessedImage,
     },
+    ClearImage,
     RefreshDisplayContent,
     PlaySong {
         song: SongPath,

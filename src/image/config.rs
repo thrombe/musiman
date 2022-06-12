@@ -1,7 +1,6 @@
 
-use crate::image::utils;
-
 /// Configuration struct to customize printing behaviour.
+#[derive(Debug)]
 pub struct Config {
     /// X offset
     pub x: u16,
@@ -14,10 +13,7 @@ pub struct Config {
     pub width: Option<u32>,
     /// Optional image height. Defaults to None.
     pub height: Option<u32>,
-    /// Use truecolor if the terminal supports it. Defaults to true.
-    pub truecolor: bool,
-    /// Use Sixel protocol if the terminal supports it. Defaults to true.
-    pub use_sixel: bool,
+    pub printer_chooser: crate::image::printer::PrinterChooser,
     pub alignment: ImageAlignment,
 }
 
@@ -58,8 +54,7 @@ impl std::default::Default for Config {
             restore_cursor: false,
             width: None,
             height: None,
-            truecolor: utils::truecolor_available(),
-            use_sixel: true,
+            printer_chooser: Default::default(),
             alignment: Default::default(),
         }
     }
