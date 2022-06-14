@@ -6,34 +6,34 @@ use anyhow::Result;
 
 use crate::{
     content::{
-        handler::ContentHandler,
+        manager::ContentManager,
     },
 };
 
 pub mod wrapper {
     use crate::content::{
-        action::ContentHandlerAction,
-        handler::ContentHandler,
+        action::ContentManagerAction,
+        manager::ContentManager,
     };
     use anyhow::Result;
 
     #[derive(Debug)]
-    pub struct ContentHandlerCallback(Box<dyn super::ContentHandlerCallback>);
-    impl ContentHandlerCallback {
-        pub fn new(callback: Box<dyn super::ContentHandlerCallback>) -> Self {
+    pub struct ContentManagerCallback(Box<dyn super::ContentManagerCallback>);
+    impl ContentManagerCallback {
+        pub fn new(callback: Box<dyn super::ContentManagerCallback>) -> Self {
             Self(callback)
         }
-        pub fn call(self, ch: &mut ContentHandler) -> Result<()> {
+        pub fn call(self, ch: &mut ContentManager) -> Result<()> {
             self.0.call(ch)
         }
     }
-    impl Into<ContentHandlerAction> for ContentHandlerCallback {
-        fn into(self) -> ContentHandlerAction {
-            ContentHandlerAction::Callback { callback: self }
+    impl Into<ContentManagerAction> for ContentManagerCallback {
+        fn into(self) -> ContentManagerAction {
+            ContentManagerAction::Callback { callback: self }
         }
     }
-    // impl Deref for ContentHandlerCallback {
-    //     type Target = Box<dyn super::ContentHandlerCallback>;
+    // impl Deref for ContentManagerCallback {
+    //     type Target = Box<dyn super::ContentManagerCallback>;
     //     fn deref(&self) -> &Self::Target {
     //         &self.0
     //     }
@@ -41,16 +41,16 @@ pub mod wrapper {
 }
 
 // why something else like Actions?
-// callbacks can be implimented by anyone (so it dosent pollute the ContentHandlerActions), and are generally
+// callbacks can be implimented by anyone (so it dosent pollute the ContentManagerActions), and are generally
 // made to do io stuff but not blocking in main thread
-pub trait ContentHandlerCallback: Send + Sync + Debug {
-    fn call(self: Box<Self>, ch: &mut ContentHandler) -> Result<()>;
+pub trait ContentManagerCallback: Send + Sync + Debug {
+    fn call(self: Box<Self>, ch: &mut ContentManager) -> Result<()>;
 }
 
-impl<T> From<T> for wrapper::ContentHandlerCallback
-    where T: ContentHandlerCallback + 'static
+impl<T> From<T> for wrapper::ContentManagerCallback
+    where T: ContentManagerCallback + 'static
 {
     fn from(callback: T) -> Self {
-        wrapper::ContentHandlerCallback::new(Box::new(callback))
+        wrapper::ContentManagerCallback::new(Box::new(callback))
     }
 }

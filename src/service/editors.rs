@@ -1,6 +1,6 @@
 
 use crate::{
-    content::manager::{
+    content::register::{
         ID,
         SongID,
         ContentProviderID,

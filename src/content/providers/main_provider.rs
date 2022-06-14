@@ -3,9 +3,9 @@ use std::borrow::Cow;
 
 use crate::{
     content::{
-        action::ContentHandlerAction,
+        action::ContentManagerAction,
         stack::StateContext,
-        manager::ContentProviderID,
+        register::ContentProviderID,
         providers::{
             FriendlyID,
             traits::{
@@ -75,7 +75,7 @@ impl Menu for MainProvider {
         Box::new(self.menu(ctx).map(Into::into))
     }
     
-    fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+    fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
         let option = self.menu(ctx).skip(ctx.last().selected_index()).next().unwrap();
         match option {
             MainProviderMenuOption::ADD_ARTIST_PROVIDER => todo!(),
@@ -83,8 +83,8 @@ impl Menu for MainProvider {
             MainProviderMenuOption::ADD_QUEUE_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_FILE_EXPLORER => {
                 vec![
-                    ContentHandlerAction::PopContentStack,
-                    ContentHandlerAction::AddCPToCPAndContentStack {
+                    ContentManagerAction::PopContentStack,
+                    ContentManagerAction::AddCPToCPAndContentStack {
                         id: self_id,
                         cp: FileExplorer::new(
                             "File Explorer: ",
@@ -96,8 +96,8 @@ impl Menu for MainProvider {
             }
             MainProviderMenuOption::ADD_YT_EXPLORER => {
                 vec![
-                    ContentHandlerAction::PopContentStack,
-                    ContentHandlerAction::AddCPToCPAndContentStack {
+                    ContentManagerAction::PopContentStack,
+                    ContentManagerAction::AddCPToCPAndContentStack {
                         id: self_id,
                         cp: YTExplorer::new().into(),
                     },

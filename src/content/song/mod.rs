@@ -31,7 +31,7 @@ use serde::{
 
 use crate::{
     content::action::{
-        ContentHandlerAction,
+        ContentManagerAction,
         RustParallelAction,
     },
 };
@@ -83,10 +83,10 @@ pub enum SongArt {
     None,
 }
 impl SongArt {
-    pub fn load(self) -> ContentHandlerAction {
+    pub fn load(self) -> ContentManagerAction {
         match self {
             Self::DynamicImage {img} => {
-                ContentHandlerAction::UpdateImage { img: img.into() }
+                ContentManagerAction::UpdateImage { img: img.into() }
             }
             Self::TaggedFile(path) => {
                 RustParallelAction::ProcessAndUpdateImageFromSongPath { path }.into()
@@ -170,7 +170,7 @@ impl Song {
         vec![]
     }
     
-    pub fn apply_option(&mut self, opt: SongMenuOptions) -> ContentHandlerAction {
+    pub fn apply_option(&mut self, opt: SongMenuOptions) -> ContentManagerAction {
         match opt {
 
         }

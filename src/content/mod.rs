@@ -5,8 +5,8 @@ pub mod providers;
 
 mod display;
 pub mod action;
-pub mod handler;
 pub mod manager;
+pub mod register;
 pub mod callback;
 mod stack;
 

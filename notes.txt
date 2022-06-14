@@ -7,10 +7,10 @@
     . items can have a weak<()>
     . this would still need a pass through whole vec of items to find out who should be removed
   \. keep an Arc<ActionChannel> in ids
-    . ActionChannel will impliment a drop method that will send a message to ContentHandler to delete the item.
+    . ActionChannel will impliment a drop method that will send a message to ContentManager to delete the item.
     . disadvantage is a whole lot of Arc overhead
   \. instead of the Arc<ActionChannel>, impliment Clone and Drop on ActionChannel such that they send a message to
-    ContentHandler to add/remove 1 from counter and remove element if counter is zero
+    ContentManager to add/remove 1 from counter and remove element if counter is zero
     \. remove the Copy trait from ids
     \. disadvantage is that there will be a lot of add/remove messages
   /. Register ids
@@ -70,7 +70,7 @@
   \. print from another thread
 
 /todo:
-  /. less complexity in ContentHandler code
+  /. less complexity in ContentManager code
 /plan:
   /. there needs to be 2 different ids, one that can go in content_stack.stack, and another that can have a menu/edit.
     it does not make sense to do literally anything else on a song that can be done on a provider/notifier and stuff
@@ -112,7 +112,7 @@
       wrapper{texts: Vec<wrapper{text, format_type: highlighted}>, overallformat_type: numbered}
     . maybe repurpose GetNames for this
   \. use the tui-rs stuff directly and send in the formatted text directly
-    . this means ui is also done in ContentHandler
+    . this means ui is also done in ContentManager
     . maybe add a type that handles the ui here and try not to leak stuff outside it.
     . also use enums to let the ui part handle both formatted and unformatted types
 
@@ -128,7 +128,7 @@
     may return another action
   . same can be applied for EnableEditing
   . callback can be enum like Callback::OnContentProvider {f: FOnce(cp: &mut ContentProvider, data: ?), id: ContentProviderID}
-    . execute using Callback::apply(self, ch: &Contenthandler) -> Action
+    . execute using Callback::apply(self, ch: &ContentManager) -> Action
 
 . behaviour:
   . doing yt actions

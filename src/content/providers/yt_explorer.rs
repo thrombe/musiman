@@ -11,8 +11,8 @@ use anyhow::Result;
 use crate::{
     content::{
         stack::StateContext,
-        action::ContentHandlerAction,
-        manager::{
+        action::ContentManagerAction,
+        register::{
             SongID,
             ContentProviderID,
         },
@@ -102,7 +102,7 @@ impl YTExplorer {
         }
     }
 
-    fn get_search_action(&self, self_id: ContentProviderID) -> ContentHandlerAction {
+    fn get_search_action(&self, self_id: ContentProviderID) -> ContentManagerAction {
         // TODO: more search actions
         // https://ytmusicapi.readthedocs.io/en/latest/reference.html#ytmusicapi.YTMusic.search
         let code = PyCodeBuilder::new()
@@ -132,21 +132,21 @@ impl YTExplorer {
         )
         .set_dbg_status(false)
         .build().unwrap();
-        let callback: Box<dyn Fn(String) -> Result<ContentHandlerAction> + Send + Sync> = match self.search_type {
+        let callback: Box<dyn Fn(String) -> Result<ContentManagerAction> + Send + Sync> = match self.search_type {
             YTSearchType::Albums => {
-                Box::new(move |res: String| -> Result<ContentHandlerAction> {
+                Box::new(move |res: String| -> Result<ContentManagerAction> {
                     // debug!("{res}");
                     let albums = serde_json::from_str::<Vec<YTMusicSearchAlbum>>(&res);
                     // dbg!(&albums);
                     let content_providers = albums?.into_iter().map(Into::into).collect();
                     // dbg!(&content_providers);
                     let action = vec![
-                        ContentHandlerAction::LoadContentProvider {
+                        ContentManagerAction::LoadContentProvider {
                             songs: Default::default(),
                             content_providers,
                             loader_id: self_id,
                         },
-                        ContentHandlerAction::RefreshDisplayContent,
+                        ContentManagerAction::RefreshDisplayContent,
                     ].into();
                     Ok(action)
                 })
@@ -155,34 +155,34 @@ impl YTExplorer {
                 todo!()
             }
             YTSearchType::Songs => {
-                Box::new(move |res: String| -> Result<ContentHandlerAction> {
+                Box::new(move |res: String| -> Result<ContentManagerAction> {
                     // debug!("{res}");
                     let songs = serde_json::from_str::<Vec<YTMusicSearchSong>>(&res)?;
                     // dbg!(&songs);
                     let songs = songs.into_iter().map(Into::into).collect();
                     let action = vec![
-                        ContentHandlerAction::LoadContentProvider {
+                        ContentManagerAction::LoadContentProvider {
                             songs,
                             content_providers: Default::default(),
                             loader_id: self_id,
                         },
-                        ContentHandlerAction::RefreshDisplayContent,
+                        ContentManagerAction::RefreshDisplayContent,
                     ].into();
                     Ok(action)
                 })
             }
             YTSearchType::Videos => {
-                Box::new(move |res: String| -> Result<ContentHandlerAction> {
+                Box::new(move |res: String| -> Result<ContentManagerAction> {
                     // debug!("{res}");
                     let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
                     let songs = videos.into_iter().map(Into::into).collect();
                     let action = vec![
-                        ContentHandlerAction::LoadContentProvider {
+                        ContentManagerAction::LoadContentProvider {
                             songs,
                             content_providers: Default::default(),
                             loader_id: self_id,
                         },
-                        ContentHandlerAction::RefreshDisplayContent,
+                        ContentManagerAction::RefreshDisplayContent,
                     ].into();
                     Ok(action)
                 })
@@ -245,7 +245,7 @@ impl Editable for YTExplorer {
         }))
     }
 
-    fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+    fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
         let i = ctx.last().selected_index();
         let opt = self.editables(ctx).skip(i).next().unwrap();
         match opt {
@@ -255,7 +255,7 @@ impl Editable for YTExplorer {
                         let mut index = SelectedIndex::default();
                         index.select(i);
                         ctx.push(index);
-                        let callback = move |me: &mut providers::ContentProvider, content: String| -> ContentHandlerAction {
+                        let callback = move |me: &mut providers::ContentProvider, content: String| -> ContentManagerAction {
                             let cp = me.as_any_mut().downcast_mut::<Self>().unwrap();
                             cp.loaded = true;
                             cp.search_term = content;
@@ -263,13 +263,13 @@ impl Editable for YTExplorer {
                             cp.providers.clear();
                             cp.selected.select(0);
                             return vec![
-                                ContentHandlerAction::PopContentStack, // typing
-                                ContentHandlerAction::PopContentStack, // edit
+                                ContentManagerAction::PopContentStack, // typing
+                                ContentManagerAction::PopContentStack, // edit
                                 cp.get_search_action(self_id)
                             ].into();
                         };
                         vec![
-                            ContentHandlerAction::EnableTyping {
+                            ContentManagerAction::EnableTyping {
                                 content: self.search_term.clone(),
                                 callback: Box::new(callback),
                                 loader: self_id.into(),
@@ -280,13 +280,13 @@ impl Editable for YTExplorer {
                         let mut index = SelectedIndex::default();
                         index.select(i);
                         ctx.push(index);
-                        ContentHandlerAction::None
+                        ContentManagerAction::None
                     }
                 }
             }
             Editables::SType(e) => {
                 self.search_type = e;
-                ContentHandlerAction::PopContentStack
+                ContentManagerAction::PopContentStack
             }
         }
     }
@@ -297,8 +297,8 @@ impl Loadable for YTExplorer {
         self.loaded
     }
 
-    fn load(&mut self, _: ContentProviderID) -> ContentHandlerAction {
-        ContentHandlerAction::OpenEditForCurrent
+    fn load(&mut self, _: ContentProviderID) -> ContentManagerAction {
+        ContentManagerAction::OpenEditForCurrent
     }
 }
 

@@ -16,8 +16,8 @@ use crate::{
     },
     content::{
         providers::ContentProvider,
-        action::ContentHandlerAction,
-        manager::ID,
+        action::ContentManagerAction,
+        register::ID,
     },
 };
 
@@ -31,7 +31,7 @@ pub enum AppAction {
     EnableTyping {
         content: String,
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentHandlerAction + 'static + Send + Sync>,
+        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentManagerAction + 'static + Send + Sync>,
         loader: ID,
     },
     UpdateDisplayContent {
@@ -40,7 +40,7 @@ pub enum AppAction {
     Redraw,
     ApplyTyped {
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentHandlerAction + 'static + Send + Sync>,
+        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentManagerAction + 'static + Send + Sync>,
         loader: ID,        
     }
 }
@@ -105,12 +105,12 @@ impl AppAction {
             Self::ApplyTyped {callback, loader} => {
                 match loader {
                     ID::ContentProvider(id) => {
-                        let cp = app.content_handler.get_provider_mut(id);
+                        let cp = app.content_manager.get_provider_mut(id);
                         let action = callback(cp, app.input[..].iter().collect());
-                        action.apply(&mut app.content_handler)?;
+                        action.apply(&mut app.content_manager)?;
                     }
                     ID::Song(id) => {
-                        let s = app.content_handler.get_song_mut(id);
+                        let s = app.content_manager.get_song_mut(id);
                         todo!() // FIX: this is not supported rn!!
                     }
                 }

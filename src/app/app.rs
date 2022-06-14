@@ -50,8 +50,8 @@ use anyhow::Result;
 
 use crate::{
     content::{
-        handler::ContentHandler,
-        action::ContentHandlerAction,
+        manager::ContentManager,
+        action::ContentManagerAction,
     },
     app::action::AppAction,
 };
@@ -104,7 +104,7 @@ impl BrowserWidget {
         Self::default()
     }
 
-    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> Result<bool> {
+    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentManager) -> Result<bool> {
         match key.code {
             KeyCode::Char('d') => {
                 ch.debug_current();
@@ -128,7 +128,7 @@ impl BrowserWidget {
                 ch.enter_selected()?;
             }
             KeyCode::Left => {
-                ContentHandlerAction::PopContentStack.apply(ch)?;
+                ContentManagerAction::PopContentStack.apply(ch)?;
             }
             _ => return Ok(false),
         }
@@ -168,7 +168,7 @@ impl PlayerWidget {
         }
     }
 
-    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentHandler) -> Result<bool> {
+    fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentManager) -> Result<bool> {
         match key.code {
             KeyCode::Char('p') => {
                 ch.toggle_song_pause();
@@ -202,7 +202,7 @@ impl PlayerWidget {
         }
     }
 
-    fn update(&mut self, ch: &mut ContentHandler) -> Result<()> {
+    fn update(&mut self, ch: &mut ContentManager) -> Result<()> {
         ch.poll_action()?;
         if ch.player.is_finished()? {
             ch.next_song()?;
@@ -264,7 +264,7 @@ pub struct App {
     // handles all ui from the player widget side
     player_widget: PlayerWidget,
 
-    pub content_handler: ContentHandler,
+    pub content_manager: ContentManager,
     pub redraw_needed: bool,
 }
 
@@ -280,7 +280,7 @@ impl App {
             browser_widget: BrowserWidget::new(),
             player_widget: PlayerWidget::new(),
 
-            content_handler: ContentHandler::load()?,
+            content_manager: ContentManager::load()?,
             redraw_needed: false,
         };
         Ok(a)
@@ -305,12 +305,12 @@ impl App {
     }
 
     fn update(&mut self) -> Result<()> {
-        self.player_widget.update(&mut self.content_handler)?;
-        let action = self.content_handler.get_app_action();
+        self.player_widget.update(&mut self.content_manager)?;
+        let action = self.content_manager.get_app_action();
         action.apply(self)?;
         match self.state {
             AppState::Typing => {
-                let index = self.content_handler.get_selected_index().selected_index();
+                let index = self.content_manager.get_selected_index().selected_index();
                 self.browser_widget.options[index] = self.input[..].iter().collect::<String>();
             }
             _ => (),
@@ -330,7 +330,7 @@ impl App {
                         match key.code {
                             KeyCode::Esc => {
                                 self.state = AppState::Browser; // TODO: should this be a stack too?
-                                ContentHandlerAction::PopContentStack.apply(&mut self.content_handler)?;
+                                ContentManagerAction::PopContentStack.apply(&mut self.content_manager)?;
                             }
                             KeyCode::Char(c) => {
                                 self.input.insert(self.input_cursor_pos, c);
@@ -381,12 +381,12 @@ impl App {
                     _ => {
                         let mut event_handled = false;
                         if !event_handled {
-                            event_handled = self.browser_widget.handle_events(key, &mut self.content_handler)?;
+                            event_handled = self.browser_widget.handle_events(key, &mut self.content_manager)?;
                             // if event_handled {
-                            //     self.browser_widget.update(&mut self.content_handler);
+                            //     self.browser_widget.update(&mut self.content_manager);
                             // }
                         }
-                        if !event_handled {event_handled = self.player_widget.handle_events(key, &mut self.content_handler)?;}
+                        if !event_handled {event_handled = self.player_widget.handle_events(key, &mut self.content_manager)?;}
                         event_handled
                     },
                 };
@@ -402,7 +402,7 @@ impl App {
                 }    
             }
             Event::Resize(_, _) => {
-                self.content_handler.image_handler.dimensions_changed();
+                self.content_manager.image_handler.dimensions_changed();
             }
             Event::Mouse(_) => (),
         }
@@ -431,17 +431,17 @@ impl App {
 
         self.status_bar.render(f, status_rect);
         self.player_widget.render(f, right_rect);
-        self.browser_widget.render(f, left_rect, self.content_handler.get_selected_index());
+        self.browser_widget.render(f, left_rect, self.content_manager.get_selected_index());
         
-        self.content_handler.image_handler.set_offset(right_rect.x + 1, right_rect.y + 1);
-        self.content_handler.image_handler.set_size(Some(right_rect.width as u32 - 2), Some(right_rect.height as u32 - 2));
-        self.content_handler.image_handler.maybe_print()?;
+        self.content_manager.image_handler.set_offset(right_rect.x + 1, right_rect.y + 1);
+        self.content_manager.image_handler.set_size(Some(right_rect.width as u32 - 2), Some(right_rect.height as u32 - 2));
+        self.content_manager.image_handler.maybe_print()?;
 
         match self.state {
             AppState::Typing => {
                 f.set_cursor(
                     4 + left_rect.x + self.input_cursor_pos as u16, // BAD: offset due to sr no. can't be known here
-                    1 + left_rect.y + self.content_handler.get_selected_index().selected_index() as u16, // - offset?
+                    1 + left_rect.y + self.content_manager.get_selected_index().selected_index() as u16, // - offset?
                 );
             }
             _ => (),

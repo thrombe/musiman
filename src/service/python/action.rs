@@ -23,14 +23,14 @@ use anyhow::{
 use crate::{
     content::{
         callback::{
-            ContentHandlerCallback,
+            ContentManagerCallback,
             wrapper,
         },
         action::{
-            ContentHandlerAction,
+            ContentManagerAction,
         },
-        handler::ContentHandler,
-        manager::ContentProviderID,
+        manager::ContentManager,
+        register::ContentProviderID,
     },
     service::{
         python::{
@@ -56,12 +56,12 @@ pub enum PyAction { // TODO: use cow for strings in actions?
     GetSong {
         url: String,
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(String, String) -> ContentHandlerAction + Send + Sync>,
+        callback: Box<dyn Fn(String, String) -> ContentManagerAction + Send + Sync>,
     },
     ExecCode {
         code: PyCode,
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(String) -> Result<ContentHandlerAction> + Send + Sync>,
+        callback: Box<dyn Fn(String) -> Result<ContentManagerAction> + Send + Sync>,
         id: ContentProviderID,
     },
 }
@@ -113,14 +113,14 @@ impl PyAction {
         Ok(())
     }
 
-    pub fn resolve(self, py: Python, pyd: &Py<PyAny>, _pyh: &mut PyHandle) -> Result<ContentHandlerAction> {
+    pub fn resolve(self, py: Python, pyd: &Py<PyAny>, _pyh: &mut PyHandle) -> Result<ContentManagerAction> {
         dbg!("resolving YTAction", &self);
         let globals = [("res", pyd)].into_py_dict(py);
         let pyd = py.eval("res['data']", Some(globals), None)?.extract::<Py<PyAny>>()?;
         if py.eval("res['error'] != None", Some(globals), None)?.extract::<bool>()? {
             let err = py.eval("res['error']", Some(globals), None)?.extract::<String>()?;
             error!("{err}");
-            return Ok(ContentHandlerAction::None); // ?
+            return Ok(ContentManagerAction::None); // ?
         }
         let action = match self {
             Self::GetSong {callback, ..} => {
@@ -184,7 +184,7 @@ impl PyAction {
             }
             Self::ExecCode {callback, id, ..} => {
                 let res = pyd.extract::<String>(py)?;
-                let cb: wrapper::ContentHandlerCallback = PyCallback {
+                let cb: wrapper::ContentManagerCallback = PyCallback {
                     callback,
                     res,
                     id,
@@ -200,12 +200,12 @@ impl PyAction {
 #[derivative(Debug)]
 pub struct PyCallback {
     #[derivative(Debug="ignore")]
-    callback: Box<dyn Fn(String) -> Result<ContentHandlerAction> + Send + Sync>,
+    callback: Box<dyn Fn(String) -> Result<ContentManagerAction> + Send + Sync>,
     res: String,
     id: ContentProviderID,
 }
-impl ContentHandlerCallback for PyCallback {
-    fn call(self: Box<Self>, ch: &mut ContentHandler) -> Result<()> {
+impl ContentManagerCallback for PyCallback {
+    fn call(self: Box<Self>, ch: &mut ContentManager) -> Result<()> {
         (self.callback)(self.res)?.apply(ch)
     }
 }

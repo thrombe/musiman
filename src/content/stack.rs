@@ -8,7 +8,7 @@ use crate::{
 
 
 use crate::{
-    content::manager::{
+    content::register::{
         GlobalContent,
         ContentProviderID,
         GlobalProvider,

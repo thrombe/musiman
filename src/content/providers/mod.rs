@@ -6,7 +6,7 @@ pub mod yt_explorer;
 pub mod ytalbum;
 
 
-use crate::content::manager::ID;
+use crate::content::register::ID;
 
 
 /// don't impliment clone on this. instead use ContentHnadler.clone_content_provider

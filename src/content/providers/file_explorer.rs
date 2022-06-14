@@ -3,8 +3,8 @@
 use crate::{
     content::{
         song::Song,
-        action::ContentHandlerAction,
-        manager::{
+        action::ContentManagerAction,
+        register::{
             SongID,
             ContentProviderID,
         },
@@ -95,7 +95,7 @@ impl Loadable for FileExplorer {
         self.loaded
     }
 
-    fn load(&mut self, id: ContentProviderID) -> ContentHandlerAction {
+    fn load(&mut self, id: ContentProviderID) -> ContentManagerAction {
         self.loaded = true;
         let mut s = vec![];
         let mut sp = vec![];
@@ -117,7 +117,7 @@ impl Loadable for FileExplorer {
                 }
             }
         });
-        ContentHandlerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id}
+        ContentManagerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id}
     }
 }
 

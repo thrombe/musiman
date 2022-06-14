@@ -28,9 +28,9 @@ use std::{
 use crate::{
     content::{
         providers::ContentProvider,
-        handler::ContentHandler,
-        callback::wrapper::ContentHandlerCallback,
-        manager::{
+        manager::ContentManager,
+        callback::wrapper::ContentManagerCallback,
+        register::{
             ContentProviderID,
             GlobalProvider,
             ID,
@@ -49,25 +49,25 @@ use crate::{
     image::UnprocessedImage,
 };
 
-impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
-    fn into(self) -> ContentHandlerAction {
-        ContentHandlerAction::Actions(self)
+impl Into<ContentManagerAction> for Vec<ContentManagerAction> {
+    fn into(self) -> ContentManagerAction {
+        ContentManagerAction::Actions(self)
     }
 }
-impl Into<ContentHandlerAction> for Option<ContentHandlerAction> {
-    fn into(self) -> ContentHandlerAction {
+impl Into<ContentManagerAction> for Option<ContentManagerAction> {
+    fn into(self) -> ContentManagerAction {
         match self {
             Self::Some(a) => {
                 a
             }
             None => {
-                ContentHandlerAction::None
+                ContentManagerAction::None
             }
         }
     }
 }
-impl ContentHandlerAction {
-    pub fn apply(self, ch: &mut ContentHandler) -> Result<()> {
+impl ContentManagerAction {
+    pub fn apply(self, ch: &mut ContentManager) -> Result<()> {
         self.dbg_log();
         match self {
             Self::None => (),
@@ -177,9 +177,9 @@ impl ContentHandlerAction {
                     SongPath::YTPath(p) => {
                         let action: Self = PyAction::GetSong {
                             url: p.to_string(),
-                            callback: Box::new(move |uri: String, thumbnail: String| -> ContentHandlerAction {
+                            callback: Box::new(move |uri: String, thumbnail: String| -> ContentManagerAction {
                                 vec![
-                                    ContentHandlerAction::PlaySongURI {uri},
+                                    ContentManagerAction::PlaySongURI {uri},
                                     if art.is_some() {
                                         RustParallelAction::ProcessAndUpdateImageFromUrl {url: thumbnail}.into()
                                     } else {
@@ -217,8 +217,8 @@ impl ContentHandlerAction {
 
 pub struct ParallelHandle {
     handles: Vec<thread::JoinHandle<Result<()>>>,
-    receiver: Receiver<ContentHandlerAction>,
-    sender: Sender<ContentHandlerAction>,
+    receiver: Receiver<ContentManagerAction>,
+    sender: Sender<ContentManagerAction>,
     yt_man: PyManager,
 }
 impl Default for ParallelHandle {
@@ -256,7 +256,7 @@ impl ParallelHandle {
         }
     }
 
-    pub fn poll(&mut self) -> ContentHandlerAction {
+    pub fn poll(&mut self) -> ContentManagerAction {
         match self.receiver.try_recv().ok() {
             Some(a) => {
                 dbg!("action received");
@@ -277,12 +277,12 @@ pub enum RustParallelAction {
     }
 }
 impl RustParallelAction {
-    fn run(self, send: Sender<ContentHandlerAction>) -> Result<()> {
+    fn run(self, send: Sender<ContentManagerAction>) -> Result<()> {
         match self {
             Self::ProcessAndUpdateImageFromUrl {url}=> {
                 let mut img = UnprocessedImage::Url(url);
                 img.prepare_image()?;
-                send.send(ContentHandlerAction::UpdateImage {
+                send.send(ContentManagerAction::UpdateImage {
                     img,
                 })?;
             }
@@ -306,7 +306,7 @@ impl RustParallelAction {
 
                 let mut img = UnprocessedImage::Image {img: img?};
                 img.prepare_image()?;
-                send.send(ContentHandlerAction::UpdateImage {
+                send.send(ContentManagerAction::UpdateImage {
                     img,
                 })?;
             }
@@ -329,7 +329,7 @@ impl Into<ParallelAction> for RustParallelAction {
         ParallelAction::Rust(self)
     }
 }
-impl<T: Into<ParallelAction>> From<T> for ContentHandlerAction {
+impl<T: Into<ParallelAction>> From<T> for ContentManagerAction {
     fn from(a: T) -> Self {
         Self::ParallelAction { action: a.into() }
     }
@@ -337,7 +337,7 @@ impl<T: Into<ParallelAction>> From<T> for ContentHandlerAction {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub enum ContentHandlerAction {
+pub enum ContentManagerAction {
     LoadContentProvider {
         #[derivative(Debug="ignore")]
         songs: Vec<Song>,
@@ -368,7 +368,7 @@ pub enum ContentHandlerAction {
     EnableTyping {
         content: String,
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentHandlerAction + 'static + Send + Sync>,
+        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentManagerAction + 'static + Send + Sync>,
         loader: ID,
     },
     PopContentStack,
@@ -390,7 +390,7 @@ pub enum ContentHandlerAction {
     },
     OpenEditForCurrent,
     Callback {
-        callback: ContentHandlerCallback,
+        callback: ContentManagerCallback,
     },
     None,
 }

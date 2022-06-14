@@ -30,7 +30,7 @@ use std::{
 
 use crate::{
     content::{
-        action::ContentHandlerAction,
+        action::ContentManagerAction,
     },
     service::python::{
         action::PyAction,
@@ -50,7 +50,7 @@ pub struct PyActionEntry {
 #[derive(Debug)]
 pub struct PyManager {
     sender: Sender<PyAction>,
-    receiver: Receiver<ContentHandlerAction>,
+    receiver: Receiver<ContentManagerAction>,
     thread: JoinHandle<Result<()>>, // FIX: communicate the crash in this thread to the user
 }
 
@@ -68,7 +68,7 @@ impl PyManager {
         })
     }
 
-    pub fn poll(&mut self) -> ContentHandlerAction {
+    pub fn poll(&mut self) -> ContentManagerAction {
         if self.thread.is_finished() {
             let (a_sender, a_receiver) = mpsc::channel();
             let (yt_sender, yt_receiver) = mpsc::channel();
@@ -88,7 +88,7 @@ impl PyManager {
                 dbg!("action received");
                 a
             },
-            None => ContentHandlerAction::None
+            None => ContentManagerAction::None
         }
     }
 
@@ -97,7 +97,7 @@ impl PyManager {
         self.sender.send(action).ok().context("send error")
     }
 
-    fn init_thread(sender: Sender<ContentHandlerAction>, receiver: Receiver<PyAction>) -> JoinHandle<Result<()>> {
+    fn init_thread(sender: Sender<ContentManagerAction>, receiver: Receiver<PyAction>) -> JoinHandle<Result<()>> {
         let thread = thread::spawn(move || -> Result<()> {
             pyo3::prepare_freethreaded_python();
             let p = pyo3::Python::acquire_gil(); 

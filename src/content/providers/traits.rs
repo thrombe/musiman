@@ -15,12 +15,12 @@ use crate::{
     content::{
         stack::StateContext,
         providers::FriendlyID,
-        manager::{
+        register::{
             ContentProviderID,
             SongID,
             ID,
         },
-        action::ContentHandlerAction,
+        action::ContentManagerAction,
     },
     app::app::SelectedIndex,
 };
@@ -89,16 +89,16 @@ pub trait ContentProvider
     fn num_options(&self, _: &StateContext) -> usize {
         0
     }
-    fn apply_option(&mut self, _: &mut StateContext, _: ContentProviderID) -> ContentHandlerAction {
-        ContentHandlerAction::None
+    fn apply_option(&mut self, _: &mut StateContext, _: ContentProviderID) -> ContentManagerAction {
+        ContentManagerAction::None
     }
 
 
-    fn maybe_load(&mut self, _: ContentProviderID) -> ContentHandlerAction {
-        ContentHandlerAction::None
+    fn maybe_load(&mut self, _: ContentProviderID) -> ContentManagerAction {
+        ContentManagerAction::None
     }
-    fn load(&mut self, _: ContentProviderID) -> ContentHandlerAction {
-        ContentHandlerAction::None
+    fn load(&mut self, _: ContentProviderID) -> ContentManagerAction {
+        ContentManagerAction::None
     }
     fn is_loaded(&self) -> bool {
         true
@@ -114,8 +114,8 @@ pub trait ContentProvider
     fn num_editables(&self, _: &StateContext) -> usize {
         0
     }
-    fn select_editable(&mut self, _: &mut StateContext, _: ContentProviderID) -> ContentHandlerAction {
-        ContentHandlerAction::None
+    fn select_editable(&mut self, _: &mut StateContext, _: ContentProviderID) -> ContentManagerAction {
+        ContentManagerAction::None
     }
 
 
@@ -187,19 +187,19 @@ pub trait ContentProvider
 
 
 pub trait Loadable {
-    fn maybe_load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
+    fn maybe_load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
         if self.is_loaded() {
-            ContentHandlerAction::None
+            ContentManagerAction::None
         } else {
             self.load(self_id)
         }
     }
-    fn load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction;
+    fn load(&mut self, self_id: ContentProviderID) -> ContentManagerAction;
     fn is_loaded(&self) -> bool;
 }
 
 pub trait Menu {
-    fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction;
+    fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction;
     fn menu_options(&self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>>;
     fn has_menu(&self) -> bool {
         let (min, max) = self.menu_options(&StateContext::default()).size_hint();
@@ -212,7 +212,7 @@ pub trait Menu {
 }
 
 pub trait Editable {
-    fn select_editable(&mut self, ctx: &mut StateContext, self_if: ContentProviderID) -> ContentHandlerAction;
+    fn select_editable(&mut self, ctx: &mut StateContext, self_if: ContentProviderID) -> ContentManagerAction;
     fn num_editables(&self, ctx: &StateContext) -> usize {
         self.get_editables(ctx).size_hint().0
     }
@@ -262,7 +262,7 @@ macro_rules! _impliment_content_provider {
         }
     };
     ($t:ident, Editable) => {
-        fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+        fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
             Editable::select_editable(self, ctx, self_id)
         }
         fn num_editables(&self, ctx: &StateContext) -> usize {
@@ -276,7 +276,7 @@ macro_rules! _impliment_content_provider {
         }        
     };
     ($t:ident, Menu) => {
-        fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentHandlerAction {
+        fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
             Menu::apply_option(self, ctx, self_id)
         }
         fn menu_options(&self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
@@ -290,10 +290,10 @@ macro_rules! _impliment_content_provider {
         }        
     };
     ($t:ident, Loadable) => {
-        fn maybe_load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
+        fn maybe_load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
             Loadable::maybe_load(self, self_id)
         }
-        fn load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
+        fn load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
             Loadable::load(self, self_id)
         }
         fn is_loaded(&self) -> bool {

@@ -2,8 +2,8 @@
 use crate::{
     content::{
         providers::FriendlyID,
-        handler::ContentHandler,
-        manager::{
+        manager::ContentManager,
+        register::{
             ID,
         },
     },
@@ -20,7 +20,7 @@ impl<'a> From<Box<dyn Iterator<Item = FriendlyID> + 'a>> for DisplayContent {
     }
 }
 impl DisplayContent {
-    pub fn get(self, ch: &ContentHandler) -> Vec<String> {
+    pub fn get(self, ch: &ContentManager) -> Vec<String> {
         match self {
             Self::Names(names) => names,
             Self::IDs(ids) => {

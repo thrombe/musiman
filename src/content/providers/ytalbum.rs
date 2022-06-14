@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use crate::{
     content::{
-        action::ContentHandlerAction,
+        action::ContentManagerAction,
         providers::{
             traits::{
                 impliment_content_provider,
@@ -13,7 +13,7 @@ use crate::{
                 ContentProvider,
             },
         },
-        manager::{
+        register::{
             SongID,
             ContentProviderID,
         },
@@ -84,7 +84,7 @@ impl Loadable for YTAlbum {
     fn is_loaded(&self) -> bool {
         self.loaded
     }
-    fn load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
+    fn load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
         match &self.id {
             YTAlbumID::BrowseID(browse_id) => {
                 vec![
@@ -113,13 +113,13 @@ impl Loadable for YTAlbum {
                         )
                         .build().unwrap(),
                         id: self_id,
-                        callback: Box::new(move |res: String| -> Result<ContentHandlerAction> {
+                        callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
                             // the data we get from here have songs not necessarily the music videos
                             // but the data we get from the playlistId has the music videos
                             // (music videos being the songs with album art rather than the ones with dances and stuff)
                             // debug!("{res}");
                             let ytm_album = serde_json::from_str::<YTMusicAlbum>(&res)?;
-                            let action = ContentHandlerAction::ReplaceContentProvider {
+                            let action = ContentManagerAction::ReplaceContentProvider {
                                 old_id: self_id,
                                 cp: ytm_album.into(),
                             };
@@ -156,16 +156,16 @@ impl Loadable for YTAlbum {
                         )
                         .build().unwrap(),
                         id: self_id,
-                        callback: Box::new(move |res: String| -> Result<ContentHandlerAction> {
+                        callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
                             // debug!("{res}");
                             let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
                             let action = vec![
-                                ContentHandlerAction::LoadContentProvider {
+                                ContentManagerAction::LoadContentProvider {
                                     loader_id: self_id,
                                     songs: playlist.songs.into_iter().map(Into::into).collect(),
                                     content_providers: Default::default(),
                                 },
-                                ContentHandlerAction::RefreshDisplayContent,
+                                ContentManagerAction::RefreshDisplayContent,
                             ].into();
                             Ok(action)
                         })
