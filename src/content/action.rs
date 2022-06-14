@@ -29,6 +29,7 @@ use crate::{
     content::{
         providers::ContentProvider,
         handler::ContentHandler,
+        callback::wrapper::ContentHandlerCallback,
         manager::{
             ContentProviderID,
             GlobalProvider,
@@ -47,22 +48,6 @@ use crate::{
     },
     image::UnprocessedImage,
 };
-
-pub trait ContentHandlerCallback: Send + Sync + Debug {
-    fn call(self: Box<Self>, ch: &mut ContentHandler) -> Result<()>;
-}
-impl Into<ContentHandlerAction> for Box<dyn ContentHandlerCallback> {
-    fn into(self) -> ContentHandlerAction {
-        ContentHandlerAction::Callback { callback: self }
-    }
-}
-// impl<T> From<T> for ContentHandlerAction
-//     where T: ContentHandlerCallback
-// {
-//     fn from(callback: T) -> Self {
-//         Self::Callback { callback }
-//     }
-// }
 
 impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
     fn into(self) -> ContentHandlerAction {
@@ -405,7 +390,7 @@ pub enum ContentHandlerAction {
     },
     OpenEditForCurrent,
     Callback {
-        callback: Box<dyn ContentHandlerCallback>,
+        callback: ContentHandlerCallback,
     },
     None,
 }

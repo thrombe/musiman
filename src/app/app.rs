@@ -307,7 +307,7 @@ impl App {
     fn update(&mut self) -> Result<()> {
         self.player_widget.update(&mut self.content_handler)?;
         let action = self.content_handler.get_app_action();
-        action.apply(self);
+        action.apply(self)?;
         match self.state {
             AppState::Typing => {
                 let index = self.content_handler.get_selected_index().selected_index();

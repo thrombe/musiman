@@ -22,7 +22,13 @@ use anyhow::{
 
 use crate::{
     content::{
-        action::{ContentHandlerAction, ContentHandlerCallback},
+        callback::{
+            ContentHandlerCallback,
+            wrapper,
+        },
+        action::{
+            ContentHandlerAction,
+        },
         handler::ContentHandler,
         manager::ContentProviderID,
     },
@@ -178,11 +184,12 @@ impl PyAction {
             }
             Self::ExecCode {callback, id, ..} => {
                 let res = pyd.extract::<String>(py)?;
-                PyCallback {
+                let cb: wrapper::ContentHandlerCallback = PyCallback {
                     callback,
                     res,
                     id,
-                }.into()
+                }.into();
+                cb.into()
             }
         };
         Ok(action)
@@ -200,10 +207,5 @@ pub struct PyCallback {
 impl ContentHandlerCallback for PyCallback {
     fn call(self: Box<Self>, ch: &mut ContentHandler) -> Result<()> {
         (self.callback)(self.res)?.apply(ch)
-    }
-}
-impl Into<ContentHandlerAction> for PyCallback {
-    fn into(self) -> ContentHandlerAction {
-        (Box::new(self) as Box<dyn ContentHandlerCallback>).into()
     }
 }
