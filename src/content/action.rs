@@ -19,7 +19,9 @@ use std::{
         self,
         Receiver,
         Sender,
-    }, path::PathBuf,
+    },
+    path::PathBuf,
+    fmt::Debug,
 };
 
 
@@ -45,6 +47,22 @@ use crate::{
     },
     image::UnprocessedImage,
 };
+
+pub trait ContentHandlerCallback: Send + Sync + Debug {
+    fn call(self: Box<Self>, ch: &mut ContentHandler) -> Result<()>;
+}
+impl Into<ContentHandlerAction> for Box<dyn ContentHandlerCallback> {
+    fn into(self) -> ContentHandlerAction {
+        ContentHandlerAction::Callback { callback: self }
+    }
+}
+// impl<T> From<T> for ContentHandlerAction
+//     where T: ContentHandlerCallback
+// {
+//     fn from(callback: T) -> Self {
+//         Self::Callback { callback }
+//     }
+// }
 
 impl Into<ContentHandlerAction> for Vec<ContentHandlerAction> {
     fn into(self) -> ContentHandlerAction {
@@ -194,6 +212,9 @@ impl ContentHandlerAction {
             }
             Self::OpenEditForCurrent => {
                 ch.open_edit_for_current()?;
+            }
+            Self::Callback {callback} => {
+                callback.call(ch)?;
             }
         }
         Ok(())
@@ -383,6 +404,9 @@ pub enum ContentHandlerAction {
         uri: String,
     },
     OpenEditForCurrent,
+    Callback {
+        callback: Box<dyn ContentHandlerCallback>,
+    },
     None,
 }
 

@@ -169,11 +169,18 @@ plan:
   . use enums for error handling + see what errors should/should not panic/unwrap
   . maybe have a channel to send these errors on, and notify the users about some of these errors
 
-bugs:
+potential bug:
+  . ContentProvider methods like select_editable take self_id but does not enforce that the id is of self
+sol:
+  . a wrapper around ContentProvider like Registered<T> that has its id saved and it enforces that the method receives correct id
+    . eh too much hassle
+  . maybe T from ContentManager<T> can impliment a trait that makes T save the id and manage it
+
+bug:
   . id saved in current_queue + content modified (yt_explorer new search) + next song  -> plays a incorrect song
-    . sol:
-      . current_queue only points to some provider in a QueueProvider
-      . QueueProvider clones the original ContentProvider
+sol:
+  . current_queue only points to some provider in a QueueProvider
+    . QueueProvider clones the original ContentProvider
 
 . plan
   . import relevent notes from thrombe/musimanager

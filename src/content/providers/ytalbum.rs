@@ -1,14 +1,18 @@
 
+use anyhow::Result;
 
 use crate::{
     content::{
         action::ContentHandlerAction,
-        providers::traits::{
-            impliment_content_provider,
-            SongProvider,
-            Provider,
-            Loadable,
-            ContentProvider,
+        providers::{
+            self,
+            traits::{
+                impliment_content_provider,
+                SongProvider,
+                Provider,
+                Loadable,
+                ContentProvider,
+            },
         },
         manager::{
             SongID,
@@ -16,7 +20,21 @@ use crate::{
         },
     },
     app::app::SelectedIndex,
-    service::python::action::PyAction,
+    service::{
+        yt::{
+            ytdl::YTDLPlaylist,
+            ytmusic::YTMusicAlbum,
+        },
+        python::{
+            action::PyAction,
+            code::PyCodeBuilder,
+            item::{
+                YtMusic,
+                Ytdl,
+                Json,
+            },
+        },
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -69,21 +87,90 @@ impl Loadable for YTAlbum {
     }
     fn load(&mut self, self_id: ContentProviderID) -> ContentHandlerAction {
         match &self.id {
-            YTAlbumID::BrowseID(id) => {
+            YTAlbumID::BrowseID(browse_id) => {
                 vec![
-                    PyAction::GetAlbumPlaylistId {
-                        browse_id: id.clone(),
-                        loader: self_id,
+                    PyAction::ExecCode {
+                        code: PyCodeBuilder::new()
+                        .threaded()
+                        .set_dbg_status(false)
+                        .get_data_func(
+                            format!("
+                                album_data = ytmusic.get_album('{browse_id}')
+                                data = json.dumps(album_data, indent=4)
+                                return data
+                            "),
+                            Some(vec![
+                                Json::new("json").into(),
+                                YtMusic::new("ytmusic").into(),
+                            ]),
+                        )
+                        .dbg_func(
+                            "
+                                with open('config/temp/get_album_playlist_id.log', 'r') as f:
+                                    data = f.read()
+                                return data
+                            ",
+                            None,
+                        )
+                        .build().unwrap(),
+                        id: self_id,
+                        callback: Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                            // the data we get from here have songs not necessarily the music videos
+                            // but the data we get from the playlistId has the music videos
+                            // (music videos being the songs with album art rather than the ones with dances and stuff)
+                            // debug!("{res}");
+                            let ytm_album = serde_json::from_str::<YTMusicAlbum>(&res)?;
+                            let action = ContentHandlerAction::ReplaceContentProvider {
+                                old_id: self_id,
+                                cp: ytm_album.into(),
+                            };
+                            Ok(action)
+                        })
                     }.into(),
                 ].into()
             }
-            YTAlbumID::PlaylistID(id) => {
+            YTAlbumID::PlaylistID(playlist_id) => {
                 self.loaded = true;
                 vec![
-                    PyAction::GetPlaylist {
-                        playlist_id: id.to_owned(),
-                        loader: self_id,
-                    }.into()
+                    PyAction::ExecCode {
+                        code: PyCodeBuilder::new()
+                        .threaded()
+                        .set_dbg_status(false)
+                        .get_data_func(
+                            format!("
+                                data = ytdl.extract_info('{playlist_id}', download=False)
+                                data = json.dumps(data, indent=4)
+                                return data
+                            "),
+                            Some(vec![
+                                Json::new("json").into(),
+                                Ytdl::new("ytdl").into(),
+                            ]),
+                        )
+                        .dbg_func(
+                            "
+                                with open('config/temp/get_playlist.log', 'r') as f:
+                                    data = f.read()
+                                return data
+                            ",
+                            None,
+                        )
+                        .build().unwrap(),
+                        id: self_id,
+                        callback: Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                            // debug!("{res}");
+                            let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
+                            let action = vec![
+                                ContentHandlerAction::LoadContentProvider {
+                                    loader_id: self_id,
+                                    songs: playlist.songs.into_iter().map(Into::into).collect(),
+                                    content_providers: Default::default(),
+                                },
+                                ContentHandlerAction::RefreshDisplayContent,
+                            ].into();
+                            Ok(action)
+                        })
+                    }.into(),
                 ].into()
             }
         }

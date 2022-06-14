@@ -34,7 +34,10 @@ use crate::{
     },
     service::python::{
         action::PyAction,
-        PyHandle,
+        item::{
+            PyHandle,
+            Time,
+        },
     },
 };
 
@@ -100,12 +103,13 @@ impl PyManager {
             let p = pyo3::Python::acquire_gil(); 
             let py = p.python();
 
-            let pyh = &mut PyHandle::new(py)?;
+            let pyh = &mut PyHandle::new()?;
             let mut actions = vec![];
+            let time = [Time::new("time").into()];
 
             loop {
                 // sleeping in python seems to not ruin speed. sleeping in rust somehow destroys it
-                py.run("time.sleep(0.2)", Some([("time", &pyh.time)].into_py_dict(py)), None)?;
+                py.run("time.sleep(0.2)", Some(pyh.get_dict(py, &time)?), None)?;
                 match receiver.try_recv() {
                     Ok(a) => {
                         // choosing the default value of a dict so that the new data can be inserted into this dict, and
@@ -132,7 +136,7 @@ impl PyManager {
                             .map(|(i, _)| i)
                             .next() {
                                 Some(i) => {
-                                    let mut a = actions.swap_remove(i);
+                                    let a = actions.swap_remove(i);
                                     let action = a.action.resolve(py, &a.pyd, pyh)?;
                                     dbg!("sending action");
                                     sender.send(action)?;

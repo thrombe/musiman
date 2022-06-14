@@ -14,25 +14,32 @@ use pyo3::{
     },
     Py,
 };
-use serde_json;
 use derivative::Derivative;
-use anyhow::{Result, Context};
+use anyhow::{
+    Result,
+    Context,
+};
 
 use crate::{
     content::{
-        action::ContentHandlerAction,
+        action::{ContentHandlerAction, ContentHandlerCallback},
+        handler::ContentHandler,
+        providers::ContentProvider,
         manager::ContentProviderID,
     },
     service::{
         python::{
-            fix_code_indentation,
-            append_code,
-            PyHandle,
+            item::{
+                PyHandle,
+                Ytdl,
+                Json,
+            },
+            code::{
+                PyCode,
+                PyCodeBuilder,
+            },
         },
-        yt::{
-            ytdl::*,
-            ytmusic::*,
-        },
+        yt::ytdl::YtdlSong,
     },
 };
 
@@ -46,150 +53,62 @@ pub enum PyAction { // TODO: use cow for strings in actions?
         #[derivative(Debug="ignore")]
         callback: Box<dyn Fn(String, String) -> ContentHandlerAction + Send + Sync>,
     },
-    // TODO: more search actions
-    // https://ytmusicapi.readthedocs.io/en/latest/reference.html#ytmusicapi.YTMusic.search
-    AlbumSearch {
-        term: String,
-        loader: ContentProviderID,
-    },
-    VideoSearch {
-        term: String,
-        loader: ContentProviderID,
-    },
-    SongSearch {
-        term: String,
-        loader: ContentProviderID,
-    },
-    GetAlbumPlaylistId {
-        browse_id: String,
-        loader: ContentProviderID,
-    },
-    GetPlaylist {
-        playlist_id: String,
-        loader: ContentProviderID,
+    ExecCode {
+        code: PyCode,
+        #[derivative(Debug="ignore")]
+        callback: Box<dyn Fn(&mut ContentProvider, String) -> Result<ContentHandlerAction> + Send + Sync>,
+        id: ContentProviderID,
     },
 }
 impl PyAction {
     pub fn run(&mut self, py: Python, pyd: &Py<PyAny>, pyh: &mut PyHandle) -> Result<()> {
         dbg!("running ytaction", &self);
-        let globals = [
-            ("res", &*pyd),
-            ("thread", &pyh.thread),
-            ("ytdl", &pyh.ytdl),
-            ("ytmusic", &pyh.ytmusic),
-            ("json", &pyh.json),
-        ].into_py_dict(py);
-        " #// ? template
-        def dbg_data():
-            with open('config/temp/{file_name}.log', 'r') as f:
-                data = f.read()
-            return data
-        def get_data():
-            {code_here}
-            data = json.dumps(data, indent=4)
-            return data
-        get_data = dbg_data # // dbg:
-        ";
+        let mut bad_code;
         let code = match self {
             Self::GetSong {url, ..} => {
-                format!("
-                    def dbg_data():
+                bad_code = PyCodeBuilder::new()
+                .threaded()
+                .set_dbg_status(false)
+                .dbg_func(
+                    "
                         with open('config/temp/ytdl_song.log', 'r') as f:
                             data = f.read()
-                        return data
-                    def get_data():
+                        return data                    
+                    ",
+                    None,
+                )
+                .get_data_func(
+                    format!("
                         ytdl_data = ytdl.extract_info(url='{url}', download=False)
                         data = json.dumps(ytdl_data, indent=4)
                         return data
-                    #get_data = dbg_data # // dbg:
-                ")
+                    "),
+                    Some(vec![
+                        Ytdl::new("ytdl").into(),
+                        Json::new("json").into(),
+                    ]),
+                )
+                .build()?;
+                &mut bad_code
             }
-            Self::AlbumSearch {term, ..} => { // TODO: allow to choose limit and ignore_spelling from ui too
-                format!("
-                    def dbg_data():
-                        with open('config/temp/album_search.log', 'r') as f:
-                            data = f.read()
-                        return data
-                    def get_data():
-                        data = ytmusic.search('{term}', filter='albums', limit=75, ignore_spelling=True)
-                        data = json.dumps(data, indent=4)
-                        return data
-                    #get_data = dbg_data # // dbg:
-                ")
-            }
-            Self::VideoSearch {term, ..} => {
-                format!("
-                    def dbg_data():
-                        with open('config/temp/video_search.log', 'r') as f:
-                            data = f.read()
-                        return data
-                    def get_data():
-                        data = ytmusic.search('{term}', filter='videos', limit=75, ignore_spelling=True)
-                        data = json.dumps(data, indent=4)
-                        return data
-                    #get_data = dbg_data # // dbg:
-                ")
-            }
-            Self::SongSearch {term, ..} => {
-                format!("
-                    def dbg_data():
-                        with open('config/temp/song_search.log', 'r') as f:
-                            data = f.read()
-                        return data
-                    def get_data():
-                        data = ytmusic.search('{term}', filter='songs', limit=75, ignore_spelling=True)
-                        data = json.dumps(data, indent=4)
-                        return data
-                    #get_data = dbg_data # // dbg:
-                ")
-            }
-            Self::GetAlbumPlaylistId {browse_id, ..} => {
-                format!("
-                    def dbg_data():
-                        with open('config/temp/get_album_playlist_id.log', 'r') as f:
-                            data = f.read()
-                        return data
-                    def get_data():
-                        album_data = ytmusic.get_album('{browse_id}')
-                        data = json.dumps(album_data, indent=4)
-                        return data
-                    #get_data = dbg_data # // dbg:
-                ")
-            }
-            Self::GetPlaylist {playlist_id, ..} => {
-                format!("
-                    def dbg_data():
-                        with open('config/temp/get_playlist.log', 'r') as f:
-                            data = f.read()
-                        return data
-                    def get_data():
-                        data = ytdl.extract_info('{playlist_id}', download=False)
-                        data = json.dumps(data, indent=4)
-                        return data
-                    #get_data = dbg_data # // dbg:
-                ")
+            Self::ExecCode {code, ..} => {
+                code
             }
         };
-        let try_catch = fix_code_indentation("
-            def try_catch(f):
-                try:
-                    res['data'] = f()
-                except Exception as e:
-                    import traceback
-                    res['error'] = traceback.format_exc()
-                res['found'] = True
-            handle = thread(target=try_catch, args=[get_data])
-            handle.start()
-            #try_catch(get_data)
-        ");
-        let code = fix_code_indentation(&code);
-        let code = append_code(code, try_catch);
-        debug!("{code}");
-        py.run(&code, Some(globals), None)?;
+        debug!("{}", code.code);
+        let dict = match &code.globals {
+            Some(g) => Some(pyh.get_dict(py, g)?),
+            None => None,
+        };
+        let dict = dict.map(|dict| {
+            dict.set_item("res", pyd).unwrap();
+            dict
+        });
+        py.run(&code.code, dict, None)?;
         Ok(())
     }
 
-    pub fn resolve(&mut self, py: Python, pyd: &Py<PyAny>, _pyh: &mut PyHandle) -> Result<ContentHandlerAction> {
+    pub fn resolve(self, py: Python, pyd: &Py<PyAny>, _pyh: &mut PyHandle) -> Result<ContentHandlerAction> {
         dbg!("resolving YTAction", &self);
         let globals = [("res", pyd)].into_py_dict(py);
         let pyd = py.eval("res['data']", Some(globals), None)?.extract::<Py<PyAny>>()?;
@@ -258,78 +177,34 @@ impl PyAction {
                 .clone();
                 callback(best_audio_url, best_thumbnail_url)
             }
-            Self::AlbumSearch {loader, ..} => {
+            Self::ExecCode {callback, id, ..} => {
                 let res = pyd.extract::<String>(py)?;
-                // debug!("{res}");
-                let albums = serde_json::from_str::<Vec<YTMusicSearchAlbum>>(&res);
-                // dbg!(&albums);
-                let content_providers = albums?.into_iter().map(Into::into).collect();
-                // dbg!(&content_providers);
-                vec![
-                    ContentHandlerAction::LoadContentProvider {
-                        songs: Default::default(),
-                        content_providers,
-                        loader_id: *loader,
-                    },
-                    ContentHandlerAction::RefreshDisplayContent,
-                ].into()
-            }
-            Self::VideoSearch {loader, ..} => {
-                let res = pyd.extract::<String>(py)?;
-                // debug!("{res}");
-                let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
-                let songs = videos.into_iter().map(Into::into).collect();
-                vec![
-                    ContentHandlerAction::LoadContentProvider {
-                        songs,
-                        content_providers: Default::default(),
-                        loader_id: *loader,
-                    },
-                    ContentHandlerAction::RefreshDisplayContent,
-                ].into()
-            }
-            Self::SongSearch {loader, ..} => {
-                let res = pyd.extract::<String>(py)?;
-                // debug!("{res}");
-                let songs = serde_json::from_str::<Vec<YTMusicSearchSong>>(&res)?;
-                // dbg!(&songs);
-                let songs = songs.into_iter().map(Into::into).collect();
-                vec![
-                    ContentHandlerAction::LoadContentProvider {
-                        songs,
-                        content_providers: Default::default(),
-                        loader_id: *loader,
-                    },
-                    ContentHandlerAction::RefreshDisplayContent,
-                ].into()
-            }
-            Self::GetAlbumPlaylistId {loader, ..} => {
-                // the data we get from here have songs not necessarily the music videos
-                // but the data we get from the playlistId has the music videos
-                // (music videos being the songs with album art rather than the ones with dances and stuff)
-                let res = pyd.extract::<String>(py)?;
-                // debug!("{res}");
-                let ytm_album = serde_json::from_str::<YTMusicAlbum>(&res)?;
-                ContentHandlerAction::ReplaceContentProvider {
-                    old_id: *loader,
-                    cp: ytm_album.into(),
-                }
-                // None.into()
-            }
-            Self::GetPlaylist {loader, ..} => {
-                let res = pyd.extract::<String>(py)?;
-                // debug!("{res}");
-                let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
-                vec![
-                    ContentHandlerAction::LoadContentProvider {
-                        loader_id: *loader,
-                        songs: playlist.songs.into_iter().map(Into::into).collect(),
-                        content_providers: Default::default(),
-                    },
-                    ContentHandlerAction::RefreshDisplayContent,
-                ].into()
+                PyCallback {
+                    callback,
+                    res,
+                    id,
+                }.into()
             }
         };
         Ok(action)
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct PyCallback {
+    #[derivative(Debug="ignore")]
+    callback: Box<dyn Fn(&mut ContentProvider, String) -> Result<ContentHandlerAction> + Send + Sync>,
+    res: String,
+    id: ContentProviderID,
+}
+impl ContentHandlerCallback for PyCallback {
+    fn call(self: Box<Self>, ch: &mut ContentHandler) -> Result<()> {
+        (self.callback)(ch.get_provider_mut(self.id), self.res)?.apply(ch)
+    }
+}
+impl Into<ContentHandlerAction> for PyCallback {
+    fn into(self) -> ContentHandlerAction {
+        (Box::new(self) as Box<dyn ContentHandlerCallback>).into()
     }
 }

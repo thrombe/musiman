@@ -1,4 +1,12 @@
 
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+    error,
+};
+
+use anyhow::Result;
 
 use crate::{
     content::{
@@ -23,7 +31,21 @@ use crate::{
         },
     },
     app::app::SelectedIndex,
-    service::python::action::PyAction,
+    service::{
+        python::{
+            action::PyAction,
+            code::PyCodeBuilder,
+            item::{
+                YtMusic,
+                Json,
+            },
+        },
+        yt::ytmusic::{
+            YTMusicSearchVideo,
+            YTMusicSearchSong,
+            YTMusicSearchAlbum,
+        },
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -44,7 +66,7 @@ impl Default for YTExplorer {
             providers: Default::default(),
             selected: Default::default(),
             search_term: Default::default(),
-            search_type: YTSearchType::Album,
+            search_type: YTSearchType::Albums,
             loaded: false,
             name: "Youtube".into(),
         }
@@ -78,6 +100,99 @@ impl YTExplorer {
             }
             _ => unreachable!()
         }
+    }
+
+    fn get_search_action(&self, self_id: ContentProviderID) -> ContentHandlerAction {
+        // TODO: more search actions
+        // https://ytmusicapi.readthedocs.io/en/latest/reference.html#ytmusicapi.YTMusic.search
+        let code = PyCodeBuilder::new()
+        .threaded()
+        .get_data_func(
+            format!(
+                "
+                    data = ytmusic.search('{}', filter='{}', limit=75, ignore_spelling=True)
+                    data = json.dumps(data, indent=4)
+                    return data
+                ",
+                self.search_term,
+                self.search_type.ytmusic_filter(),
+            ),
+            Some(vec![
+                YtMusic::new("ytmusic").into(),
+                Json::new("json").into(),
+            ]),
+        )
+        .dbg_func(
+            "
+                with open('config/temp/video_search.log', 'r') as f:
+                    data = f.read()
+                return data
+            ",
+            None,
+        )
+        .set_dbg_status(false)
+        .build().unwrap();
+        let callback: Box<dyn Fn(&mut providers::ContentProvider, String) -> Result<ContentHandlerAction> + Send + Sync> = match self.search_type {
+            YTSearchType::Albums => {
+                Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                    // debug!("{res}");
+                    let albums = serde_json::from_str::<Vec<YTMusicSearchAlbum>>(&res);
+                    // dbg!(&albums);
+                    let content_providers = albums?.into_iter().map(Into::into).collect();
+                    // dbg!(&content_providers);
+                    let action = vec![
+                        ContentHandlerAction::LoadContentProvider {
+                            songs: Default::default(),
+                            content_providers,
+                            loader_id: self_id,
+                        },
+                        ContentHandlerAction::RefreshDisplayContent,
+                    ].into();
+                    Ok(action)
+                })
+            }
+            YTSearchType::Playlists => {
+                todo!()
+            }
+            YTSearchType::Songs => {
+                Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                    // debug!("{res}");
+                    let songs = serde_json::from_str::<Vec<YTMusicSearchSong>>(&res)?;
+                    // dbg!(&songs);
+                    let songs = songs.into_iter().map(Into::into).collect();
+                    let action = vec![
+                        ContentHandlerAction::LoadContentProvider {
+                            songs,
+                            content_providers: Default::default(),
+                            loader_id: self_id,
+                        },
+                        ContentHandlerAction::RefreshDisplayContent,
+                    ].into();
+                    Ok(action)
+                })
+            }
+            YTSearchType::Videos => {
+                Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                    // debug!("{res}");
+                    let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
+                    let songs = videos.into_iter().map(Into::into).collect();
+                    let action = vec![
+                        ContentHandlerAction::LoadContentProvider {
+                            songs,
+                            content_providers: Default::default(),
+                            loader_id: self_id,
+                        },
+                        ContentHandlerAction::RefreshDisplayContent,
+                    ].into();
+                    Ok(action)
+                })
+            }
+        };
+        PyAction::ExecCode {
+            callback,
+            code,
+            id: self_id,
+        }.into()
     }
 }
 
@@ -150,29 +265,7 @@ impl Editable for YTExplorer {
                             return vec![
                                 ContentHandlerAction::PopContentStack, // typing
                                 ContentHandlerAction::PopContentStack, // edit
-                                match cp.search_type {
-                                    YTSearchType::Album => {
-                                        PyAction::AlbumSearch {
-                                            term: cp.search_term.clone(),
-                                            loader: self_id,
-                                        }.into()
-                                    }
-                                    YTSearchType::Playlist => {
-                                        todo!()
-                                    }
-                                    YTSearchType::Song => {
-                                        PyAction::SongSearch {
-                                            term: cp.search_term.clone(),
-                                            loader: self_id,
-                                        }.into()
-                                    }
-                                    YTSearchType::Video => {
-                                        PyAction::VideoSearch {
-                                            term: cp.search_term.clone(),
-                                            loader: self_id,
-                                        }.into()
-                                    }
-                                }
+                                cp.get_search_action(self_id)
                             ].into();
                         };
                         vec![
@@ -231,19 +324,28 @@ impl From<YTSearchType> for Editables {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum YTSearchType {
-    Album,
-    Song,
-    Video,
-    Playlist,
+    Albums,
+    Songs,
+    Videos,
+    Playlists,
 }
 impl YTSearchType {
     fn iter() -> &'static [Self] {
         &[
-            Self::Album,
-            Self::Song,
-            Self::Video,
-            Self::Playlist,
+            Self::Albums,
+            Self::Songs,
+            Self::Videos,
+            Self::Playlists,
         ]
+    }
+    fn ytmusic_filter(&self) -> &'static str {
+        // https://ytmusicapi.readthedocs.io/en/latest/reference.html#ytmusicapi.YTMusic.search
+        match self {
+            Self::Albums => "albums",
+            Self::Songs => "songs",
+            Self::Videos => "videos",
+            Self::Playlists => "playlists",
+        }
     }
 }
 impl Into<FriendlyID> for YTSearchType {
