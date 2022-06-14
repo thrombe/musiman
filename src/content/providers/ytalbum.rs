@@ -3,14 +3,14 @@ use anyhow::Result;
 
 use crate::{
     content::{
-        action::ContentManagerAction,
+        manager::action::ContentManagerAction,
         providers::{
             traits::{
                 impliment_content_provider,
                 SongProvider,
                 Provider,
                 Loadable,
-                ContentProvider,
+                ContentProviderTrait,
             },
         },
         register::{
@@ -190,6 +190,6 @@ impl Provider for YTAlbum {
 
 
 
-impl ContentProvider for YTAlbum {
+impl ContentProviderTrait for YTAlbum {
     impliment_content_provider!(YTAlbum, SongProvider, Loadable, Provider);
 }

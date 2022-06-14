@@ -11,7 +11,7 @@ use anyhow::Result;
 use crate::{
     content::{
         stack::StateContext,
-        action::ContentManagerAction,
+        manager::action::ContentManagerAction,
         register::{
             SongID,
             ContentProviderID,
@@ -21,7 +21,7 @@ use crate::{
             FriendlyID,
             traits::{
                 impliment_content_provider,
-                ContentProvider,
+                ContentProviderTrait,
                 Provider,
                 Editable,
                 SongProvider,
@@ -302,7 +302,7 @@ impl Loadable for YTExplorer {
     }
 }
 
-impl ContentProvider for YTExplorer {
+impl ContentProviderTrait for YTExplorer {
     impliment_content_provider!(YTExplorer, Provider, Loadable, Editable, SongProvider, CPProvider);
 }
 

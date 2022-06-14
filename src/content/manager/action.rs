@@ -28,8 +28,10 @@ use std::{
 use crate::{
     content::{
         providers::ContentProvider,
-        manager::ContentManager,
-        callback::wrapper::ContentManagerCallback,
+        manager::{
+            manager::ContentManager,
+            callback::ContentManagerCallback,
+        },
         register::{
             ContentProviderID,
             GlobalProvider,

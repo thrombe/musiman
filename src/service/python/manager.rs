@@ -29,7 +29,7 @@ use std::{
 };
 
 use crate::{
-    content::{
+    content::manager::{
         action::ContentManagerAction,
     },
     service::python::{

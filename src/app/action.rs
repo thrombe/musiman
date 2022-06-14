@@ -16,7 +16,7 @@ use crate::{
     },
     content::{
         providers::ContentProvider,
-        action::ContentManagerAction,
+        manager::action::ContentManagerAction,
         register::ID,
     },
 };

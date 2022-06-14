@@ -27,7 +27,7 @@ use crate::{
         },
         song::Song,
         stack::ContentStack,
-        action::{
+        manager::action::{
             ParallelHandle,
             ContentManagerAction,
         },

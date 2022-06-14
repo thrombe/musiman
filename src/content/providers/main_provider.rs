@@ -3,14 +3,14 @@ use std::borrow::Cow;
 
 use crate::{
     content::{
-        action::ContentManagerAction,
+        manager::action::ContentManagerAction,
         stack::StateContext,
         register::ContentProviderID,
         providers::{
             FriendlyID,
             traits::{
                 impliment_content_provider,
-                ContentProvider,
+                ContentProviderTrait,
                 CPProvider,
                 Menu,
                 Provider,
@@ -119,7 +119,7 @@ impl Provider for MainProvider {
     }    
 }
 
-impl ContentProvider for MainProvider {
+impl ContentProviderTrait for MainProvider {
     impliment_content_provider!(MainProvider, Provider, Menu, CPProvider);
 }
 

@@ -3,7 +3,7 @@
 use crate::{
     content::{
         song::Song,
-        action::ContentManagerAction,
+        manager::action::ContentManagerAction,
         register::{
             SongID,
             ContentProviderID,
@@ -11,7 +11,7 @@ use crate::{
         providers::{
             traits::{
                 impliment_content_provider,
-                ContentProvider,
+                ContentProviderTrait,
                 Loadable,
                 Provider,
                 SongProvider,
@@ -121,6 +121,6 @@ impl Loadable for FileExplorer {
     }
 }
 
-impl ContentProvider for FileExplorer {
+impl ContentProviderTrait for FileExplorer {
     impliment_content_provider!(FileExplorer, Provider, SongProvider, CPProvider, Loadable);
 }

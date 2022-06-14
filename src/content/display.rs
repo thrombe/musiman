@@ -2,7 +2,7 @@
 use crate::{
     content::{
         providers::FriendlyID,
-        manager::ContentManager,
+        manager::manager::ContentManager,
         register::{
             ID,
         },

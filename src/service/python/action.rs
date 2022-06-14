@@ -22,14 +22,16 @@ use anyhow::{
 
 use crate::{
     content::{
-        callback::{
-            ContentManagerCallback,
-            wrapper,
+        manager::{
+            callback::{
+                ContentManagerCallback,
+                ContentManagerCallbackTrait,
+            },
+            action::{
+                ContentManagerAction,
+            },
+            manager::ContentManager,
         },
-        action::{
-            ContentManagerAction,
-        },
-        manager::ContentManager,
         register::ContentProviderID,
     },
     service::{
@@ -184,7 +186,7 @@ impl PyAction {
             }
             Self::ExecCode {callback, id, ..} => {
                 let res = pyd.extract::<String>(py)?;
-                let cb: wrapper::ContentManagerCallback = PyCallback {
+                let cb: ContentManagerCallback = PyCallback {
                     callback,
                     res,
                     id,
@@ -204,7 +206,7 @@ pub struct PyCallback {
     res: String,
     id: ContentProviderID,
 }
-impl ContentManagerCallback for PyCallback {
+impl ContentManagerCallbackTrait for PyCallback {
     fn call(self: Box<Self>, ch: &mut ContentManager) -> Result<()> {
         (self.callback)(self.res)?.apply(ch)
     }

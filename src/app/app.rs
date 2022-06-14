@@ -49,7 +49,7 @@ use crossterm::{
 use anyhow::Result;
 
 use crate::{
-    content::{
+    content::manager::{
         manager::ContentManager,
         action::ContentManagerAction,
     },

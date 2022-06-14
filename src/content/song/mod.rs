@@ -30,7 +30,7 @@ use serde::{
 
 
 use crate::{
-    content::action::{
+    content::manager::action::{
         ContentManagerAction,
         RustParallelAction,
     },

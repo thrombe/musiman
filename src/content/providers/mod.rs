@@ -11,9 +11,9 @@ use crate::content::register::ID;
 
 /// don't impliment clone on this. instead use ContentHnadler.clone_content_provider
 #[derive(Debug)]
-pub struct ContentProvider(Box<dyn traits::ContentProvider>);
+pub struct ContentProvider(Box<dyn traits::ContentProviderTrait>);
 impl std::ops::Deref for ContentProvider {
-    type Target = Box<dyn traits::ContentProvider>;
+    type Target = Box<dyn traits::ContentProviderTrait>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -23,13 +23,13 @@ impl std::ops::DerefMut for ContentProvider {
         &mut self.0
     }
 }
-impl From<Box<dyn traits::ContentProvider>> for ContentProvider {
-    fn from(o: Box<dyn traits::ContentProvider>) -> Self {
+impl From<Box<dyn traits::ContentProviderTrait>> for ContentProvider {
+    fn from(o: Box<dyn traits::ContentProviderTrait>) -> Self {
         Self(o)
     }
 }
 impl ContentProvider {
-    pub fn new(t: Box<dyn traits::ContentProvider>) -> Self {
+    pub fn new(t: Box<dyn traits::ContentProviderTrait>) -> Self {
         Self(t)
     }
 }
