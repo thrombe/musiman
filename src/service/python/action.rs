@@ -24,7 +24,6 @@ use crate::{
     content::{
         action::{ContentHandlerAction, ContentHandlerCallback},
         handler::ContentHandler,
-        providers::ContentProvider,
         manager::ContentProviderID,
     },
     service::{
@@ -56,7 +55,7 @@ pub enum PyAction { // TODO: use cow for strings in actions?
     ExecCode {
         code: PyCode,
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(&mut ContentProvider, String) -> Result<ContentHandlerAction> + Send + Sync>,
+        callback: Box<dyn Fn(String) -> Result<ContentHandlerAction> + Send + Sync>,
         id: ContentProviderID,
     },
 }
@@ -194,13 +193,13 @@ impl PyAction {
 #[derivative(Debug)]
 pub struct PyCallback {
     #[derivative(Debug="ignore")]
-    callback: Box<dyn Fn(&mut ContentProvider, String) -> Result<ContentHandlerAction> + Send + Sync>,
+    callback: Box<dyn Fn(String) -> Result<ContentHandlerAction> + Send + Sync>,
     res: String,
     id: ContentProviderID,
 }
 impl ContentHandlerCallback for PyCallback {
     fn call(self: Box<Self>, ch: &mut ContentHandler) -> Result<()> {
-        (self.callback)(ch.get_provider_mut(self.id), self.res)?.apply(ch)
+        (self.callback)(self.res)?.apply(ch)
     }
 }
 impl Into<ContentHandlerAction> for PyCallback {

@@ -132,9 +132,9 @@ impl YTExplorer {
         )
         .set_dbg_status(false)
         .build().unwrap();
-        let callback: Box<dyn Fn(&mut providers::ContentProvider, String) -> Result<ContentHandlerAction> + Send + Sync> = match self.search_type {
+        let callback: Box<dyn Fn(String) -> Result<ContentHandlerAction> + Send + Sync> = match self.search_type {
             YTSearchType::Albums => {
-                Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                Box::new(move |res: String| -> Result<ContentHandlerAction> {
                     // debug!("{res}");
                     let albums = serde_json::from_str::<Vec<YTMusicSearchAlbum>>(&res);
                     // dbg!(&albums);
@@ -155,7 +155,7 @@ impl YTExplorer {
                 todo!()
             }
             YTSearchType::Songs => {
-                Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                Box::new(move |res: String| -> Result<ContentHandlerAction> {
                     // debug!("{res}");
                     let songs = serde_json::from_str::<Vec<YTMusicSearchSong>>(&res)?;
                     // dbg!(&songs);
@@ -172,7 +172,7 @@ impl YTExplorer {
                 })
             }
             YTSearchType::Videos => {
-                Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                Box::new(move |res: String| -> Result<ContentHandlerAction> {
                     // debug!("{res}");
                     let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
                     let songs = videos.into_iter().map(Into::into).collect();

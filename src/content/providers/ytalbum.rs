@@ -5,7 +5,6 @@ use crate::{
     content::{
         action::ContentHandlerAction,
         providers::{
-            self,
             traits::{
                 impliment_content_provider,
                 SongProvider,
@@ -114,7 +113,7 @@ impl Loadable for YTAlbum {
                         )
                         .build().unwrap(),
                         id: self_id,
-                        callback: Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                        callback: Box::new(move |res: String| -> Result<ContentHandlerAction> {
                             // the data we get from here have songs not necessarily the music videos
                             // but the data we get from the playlistId has the music videos
                             // (music videos being the songs with album art rather than the ones with dances and stuff)
@@ -157,7 +156,7 @@ impl Loadable for YTAlbum {
                         )
                         .build().unwrap(),
                         id: self_id,
-                        callback: Box::new(move |ch: &mut providers::ContentProvider, res: String| -> Result<ContentHandlerAction> {
+                        callback: Box::new(move |res: String| -> Result<ContentHandlerAction> {
                             // debug!("{res}");
                             let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
                             let action = vec![
