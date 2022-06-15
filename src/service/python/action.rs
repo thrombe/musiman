@@ -23,16 +23,10 @@ use anyhow::{
 use crate::{
     content::{
         manager::{
-            callback::{
-                ContentManagerCallback,
-                ContentManagerCallbackTrait,
-            },
             action::{
                 ContentManagerAction,
             },
-            manager::ContentManager,
         },
-        register::ContentProviderID,
     },
     service::{
         python::{
@@ -54,7 +48,7 @@ use crate::{
 // pyo3 cant do python in multiple rust threads at a time. so gotta make sure only one is active at a time
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub enum PyAction { // TODO: use cow for strings in actions?
+pub enum PyAction {
     GetSong {
         url: String,
         #[derivative(Debug="ignore")]
@@ -63,8 +57,7 @@ pub enum PyAction { // TODO: use cow for strings in actions?
     ExecCode {
         code: PyCode,
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(String) -> Result<ContentManagerAction> + Send + Sync>,
-        id: ContentProviderID,
+        callback: PyCallback,
     },
 }
 impl PyAction {
@@ -184,30 +177,13 @@ impl PyAction {
                 .clone();
                 callback(best_audio_url, best_thumbnail_url)
             }
-            Self::ExecCode {callback, id, ..} => {
+            Self::ExecCode {callback, ..} => {
                 let res = pyd.extract::<String>(py)?;
-                let cb: ContentManagerCallback = PyCallback {
-                    callback,
-                    res,
-                    id,
-                }.into();
-                cb.into()
+                callback(res)?
             }
         };
         Ok(action)
     }
 }
 
-#[derive(Derivative)]
-#[derivative(Debug)]
-pub struct PyCallback {
-    #[derivative(Debug="ignore")]
-    callback: Box<dyn Fn(String) -> Result<ContentManagerAction> + Send + Sync>,
-    res: String,
-    id: ContentProviderID,
-}
-impl ContentManagerCallbackTrait for PyCallback {
-    fn call(self: Box<Self>, ch: &mut ContentManager) -> Result<()> {
-        (self.callback)(self.res)?.apply(ch)
-    }
-}
+pub type PyCallback = Box<dyn FnOnce(String) -> Result<ContentManagerAction> + Send + Sync>;

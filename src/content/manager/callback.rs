@@ -8,7 +8,9 @@ use crate::{
     content::{
         manager::{
             manager::ContentManager,
-            action::ContentManagerAction,
+            action::{
+                ContentManagerAction,
+            },
         },
     },
 };
@@ -29,17 +31,13 @@ impl Into<ContentManagerAction> for ContentManagerCallback {
         ContentManagerAction::Callback { callback: self }
     }
 }
-// impl Deref for ContentManagerCallback {
-//     type Target = Box<dyn super::ContentManagerCallback>;
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
 
 
 // why something else like Actions?
 // callbacks can be implimented by anyone (so it dosent pollute the ContentManagerActions), and are generally
 // made to do io stuff but not blocking in main thread
+// maybe a provider calls some actions and it needs to save something in itself, then a implimentation of
+// this can pass in the provider as arg in the callback func
 pub trait ContentManagerCallbackTrait: Send + Sync + Debug {
     fn call(self: Box<Self>, ch: &mut ContentManager) -> Result<()>;
 }
@@ -51,3 +49,5 @@ impl<T> From<T> for ContentManagerCallback
         ContentManagerCallback::new(Box::new(callback))
     }
 }
+
+

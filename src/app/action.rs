@@ -21,6 +21,8 @@ use crate::{
     },
 };
 
+pub type TypingCallback = Box<dyn Fn(&mut ContentProvider, String) -> ContentManagerAction + Send + Sync>;
+
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub enum AppAction {
@@ -31,7 +33,7 @@ pub enum AppAction {
     EnableTyping {
         content: String,
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentManagerAction + 'static + Send + Sync>,
+        callback: TypingCallback,
         loader: ID,
     },
     UpdateDisplayContent {
@@ -40,7 +42,7 @@ pub enum AppAction {
     Redraw,
     ApplyTyped {
         #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentManagerAction + 'static + Send + Sync>,
+        callback: TypingCallback,
         loader: ID,        
     }
 }

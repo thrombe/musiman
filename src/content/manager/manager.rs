@@ -379,9 +379,7 @@ impl ContentManager {
                 match id {
                     ID::Song(id) => {
                         let s = self.get_song(id);
-                        if s.has_menu() {
-                            self.content_stack.open_menu(id);
-                        }
+                        todo!()
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
@@ -487,16 +485,13 @@ impl ContentManager {
         }
     }
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
-        let song = self.get_song(id);
-        let art = song.get_art();
-        let path = song.path();
-        debug!("playing song {song:#?}");
         self.player.stop().unwrap();
+        let song = self.get_song(id);
+        let play_action = song.play()?;
+        let art_action = song.show_art()?;
         self.active_song = Some(id);
-        ContentManagerAction::PlaySong {
-            song: path,
-            art,
-        }.apply(self)?;
+        play_action.apply(self)?;
+        art_action.apply(self)?;
         Ok(())
     }
     pub fn toggle_song_pause(&mut self) {

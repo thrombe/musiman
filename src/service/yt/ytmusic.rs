@@ -12,7 +12,7 @@ use crate::{
     content::{
         song::{
             Song,
-            SongMetadata,
+            yt_song::YtSong,
         },
         providers::{
             ContentProvider,
@@ -77,12 +77,10 @@ pub struct YTMusicSearchVideo {
 }
 impl Into<Song> for YTMusicSearchVideo {
     fn into(self) -> Song {
-        Song {
-            metadata: SongMetadata::YT {
-                title: self.title.unwrap(),
-                id: self.video_id.unwrap(),
-            }
-        }
+        YtSong {
+            title: self.title.unwrap(),
+            id: self.video_id.unwrap(),
+        }.into()
     }
 }
 
@@ -128,12 +126,10 @@ pub struct YTMusicSearchSong {
 }
 impl Into<Song> for YTMusicSearchSong {
     fn into(self) -> Song {
-        Song {
-            metadata: SongMetadata::YT {
-                title: self.title.unwrap(),
-                id: self.video_id.unwrap(),
-            }
-        }
+        YtSong {
+            title: self.title.unwrap(),
+            id: self.video_id.unwrap(),
+        }.into()
     }
 }
 #[derive(Serialize, Deserialize, Debug)]

@@ -10,7 +10,6 @@ use crate::{
 
 use anyhow::{
     Result,
-    Context,
 };
 use derivative::Derivative;
 use std::{
@@ -20,7 +19,6 @@ use std::{
         Receiver,
         Sender,
     },
-    path::PathBuf,
     fmt::Debug,
 };
 
@@ -30,20 +28,21 @@ use crate::{
         providers::ContentProvider,
         manager::{
             manager::ContentManager,
-            callback::ContentManagerCallback,
+            callback::{
+                ContentManagerCallback,
+            },
         },
         register::{
             ContentProviderID,
             GlobalProvider,
             ID,
         },
-        song::{
-            Song,
-            SongArt,
-            SongPath,
-        },
+        song::Song,
     },
-    app::action::AppAction,
+    app::action::{
+        AppAction,
+        TypingCallback,
+    },
     service::python::{
         action::PyAction,
         manager::PyManager,
@@ -68,6 +67,61 @@ impl Into<ContentManagerAction> for Option<ContentManagerAction> {
         }
     }
 }
+
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub enum ContentManagerAction {
+    LoadContentProvider {
+        #[derivative(Debug="ignore")]
+        songs: Vec<Song>,
+        #[derivative(Debug="ignore")]
+        content_providers: Vec<ContentProvider>,
+        loader_id: ContentProviderID,
+    },
+    TryLoadContentProvider {
+        loader_id: ContentProviderID,
+    },
+    ReplaceContentProvider {
+        old_id: ContentProviderID,
+        cp: ContentProvider,
+    },
+    AddCPToCP {
+        id: ContentProviderID,
+        cp: ContentProvider,
+    },
+    AddCPToCPAndContentStack {
+        id: ContentProviderID,
+        cp: ContentProvider,
+    },
+    PushToContentStack {
+        id: GlobalProvider,
+    },
+    EnableTyping {
+        content: String,
+        #[derivative(Debug="ignore")]
+        callback: TypingCallback,
+        loader: ID,
+    },
+    PopContentStack,
+    Actions(Vec<Self>),
+    ParallelAction {
+        action: ParallelAction,
+    },
+    UpdateImage{
+        img: UnprocessedImage,
+    },
+    ClearImage,
+    RefreshDisplayContent,
+    PlaySongURI {
+        uri: String,
+    },
+    OpenEditForCurrent,
+    Callback {
+        callback: ContentManagerCallback,
+    },
+    None,
+}
+
 impl ContentManagerAction {
     pub fn apply(self, ch: &mut ContentManager) -> Result<()> {
         self.dbg_log();
@@ -164,36 +218,6 @@ impl ContentManagerAction {
                 ch.image_handler.clear_image();
                 ch.app_action.queue(AppAction::Redraw);
             }
-            Self::PlaySong {song, art} => {
-                Self::ClearImage.apply(ch)?;
-                let art = if let SongArt::YTSong(p) = art {
-                    Some(p)
-                } else {
-                    art.load().apply(ch)?;
-                    None
-                };
-                match song {
-                    SongPath::LocalPath(..) => {
-                        ch.player.play(song.to_string())?;
-                    }
-                    SongPath::YTPath(p) => {
-                        let action: Self = PyAction::GetSong {
-                            url: p.to_string(),
-                            callback: Box::new(move |uri: String, thumbnail: String| -> ContentManagerAction {
-                                vec![
-                                    ContentManagerAction::PlaySongURI {uri},
-                                    if art.is_some() {
-                                        RustParallelAction::ProcessAndUpdateImageFromUrl {url: thumbnail}.into()
-                                    } else {
-                                        None.into()
-                                    },
-                                ].into()
-                            })
-                        }.into();
-                        action.apply(ch)?;
-                    }
-                }
-            }
             Self::PlaySongURI {uri} => {
                 ch.player.play(uri)?;
             }
@@ -234,6 +258,7 @@ impl Default for ParallelHandle {
         }
     }
 }
+
 impl ParallelHandle {
     fn run(&mut self, action: ParallelAction) { // TODO: use threadpool crate instead of creating threads as they are required
         let action = match action {
@@ -269,48 +294,28 @@ impl ParallelHandle {
     }
 }
 
-#[derive(Debug)]
+pub type RsCallback = Box<dyn FnOnce() -> Result<RustParallelAction> + Sync + Send>;
+
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub enum RustParallelAction {
-    ProcessAndUpdateImageFromUrl {
-        url: String,
+    Callback {
+        #[derivative(Debug="ignore")]
+        callback: RsCallback,
     },
-    ProcessAndUpdateImageFromSongPath {
-        path: PathBuf,
-    }
+    ContentManagerAction {
+        action: Box<ContentManagerAction>,
+    },
 }
+
 impl RustParallelAction {
     fn run(self, send: Sender<ContentManagerAction>) -> Result<()> {
         match self {
-            Self::ProcessAndUpdateImageFromUrl {url}=> {
-                let mut img = UnprocessedImage::Url(url);
-                img.prepare_image()?;
-                send.send(ContentManagerAction::UpdateImage {
-                    img,
-                })?;
+            Self::Callback {callback} => {
+                callback()?.run(send)?;
             }
-            Self::ProcessAndUpdateImageFromSongPath {path} => {
-                let tf = lofty::read_from_path(&path, true)?;
-                let tags = tf.primary_tag().context("no primary tag on the image")?;
-                let pics = tags.pictures();
-                let img = if pics.len() >= 1 {
-                    Ok(
-                        image::io::Reader::new(
-                            std::io::Cursor::new(
-                                pics[0].data().to_owned()
-                            )
-                        )
-                        .with_guessed_format()?
-                        .decode()?
-                    )
-                } else {
-                    Err(anyhow::anyhow!("no image"))
-                };
-
-                let mut img = UnprocessedImage::Image {img: img?};
-                img.prepare_image()?;
-                send.send(ContentManagerAction::UpdateImage {
-                    img,
-                })?;
+            Self::ContentManagerAction {action} => {
+                send.send(*action)?;
             }
         }
         Ok(())
@@ -336,64 +341,3 @@ impl<T: Into<ParallelAction>> From<T> for ContentManagerAction {
         Self::ParallelAction { action: a.into() }
     }
 }
-
-#[derive(Derivative)]
-#[derivative(Debug)]
-pub enum ContentManagerAction {
-    LoadContentProvider {
-        #[derivative(Debug="ignore")]
-        songs: Vec<Song>,
-        #[derivative(Debug="ignore")]
-        content_providers: Vec<ContentProvider>,
-        loader_id: ContentProviderID,
-    },
-    TryLoadContentProvider {
-        loader_id: ContentProviderID,
-    },
-    ReplaceContentProvider {
-        old_id: ContentProviderID,
-        cp: ContentProvider,
-    },
-    AddCPToCP {
-        id: ContentProviderID,
-        cp: ContentProvider,
-        // new_cp_content_type: ContentProviderContentType,
-    },
-    AddCPToCPAndContentStack {
-        id: ContentProviderID,
-        cp: ContentProvider,
-        // new_cp_content_type: ContentProviderContentType,
-    },
-    PushToContentStack {
-        id: GlobalProvider,
-    },
-    EnableTyping {
-        content: String,
-        #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(&mut ContentProvider, String) -> ContentManagerAction + 'static + Send + Sync>,
-        loader: ID,
-    },
-    PopContentStack,
-    Actions(Vec<Self>),
-    ParallelAction {
-        action: ParallelAction,
-    },
-    UpdateImage{
-        img: UnprocessedImage,
-    },
-    ClearImage,
-    RefreshDisplayContent,
-    PlaySong {
-        song: SongPath,
-        art: SongArt,
-    },
-    PlaySongURI {
-        uri: String,
-    },
-    OpenEditForCurrent,
-    Callback {
-        callback: ContentManagerCallback,
-    },
-    None,
-}
-

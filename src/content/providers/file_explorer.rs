@@ -2,7 +2,7 @@
 
 use crate::{
     content::{
-        song::Song,
+        song::tagged_file_song::TaggedFileSong,
         manager::action::ContentManagerAction,
         register::{
             SongID,
@@ -108,10 +108,10 @@ impl Loadable for FileExplorer {
                 let dir = e.to_str().unwrap().to_owned();
                 sp.push(FileExplorer::new("", &dir).into());
             } else if e.is_file() {
-                let file = e.to_str().unwrap().to_owned();
+                let file = e.to_str().unwrap();
                 if file.ends_with(".m4a") {
-                    match Song::from_file(file).ok() {
-                        Some(song) => s.push(song),
+                    match TaggedFileSong::from_file(file.into()).unwrap() { // BAD: unwrap
+                        Some(song) => s.push(song.into()),
                         None => (),
                     }
                 }

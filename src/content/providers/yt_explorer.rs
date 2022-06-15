@@ -33,7 +33,10 @@ use crate::{
     app::app::SelectedIndex,
     service::{
         python::{
-            action::PyAction,
+            action::{
+                PyAction,
+                PyCallback,
+            },
             code::PyCodeBuilder,
             item::{
                 YtMusic,
@@ -132,7 +135,7 @@ impl YTExplorer {
         )
         .set_dbg_status(false)
         .build().unwrap();
-        let callback: Box<dyn Fn(String) -> Result<ContentManagerAction> + Send + Sync> = match self.search_type {
+        let callback: PyCallback = match self.search_type {
             YTSearchType::Albums => {
                 Box::new(move |res: String| -> Result<ContentManagerAction> {
                     // debug!("{res}");
@@ -191,7 +194,6 @@ impl YTExplorer {
         PyAction::ExecCode {
             callback,
             code,
-            id: self_id,
         }.into()
     }
 }

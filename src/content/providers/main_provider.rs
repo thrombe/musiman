@@ -90,7 +90,6 @@ impl Menu for MainProvider {
                             "File Explorer: ",
                             "/home/issac/daata/phon-data/.musi/IsBac/",
                         ).into(),
-                        // new_cp_content_type: ContentProviderContentType::Normal,
                     },
                 ].into()
             }

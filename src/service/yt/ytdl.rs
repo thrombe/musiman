@@ -12,7 +12,7 @@ use crate::{
     content::{
         song::{
             Song,
-            SongMetadata,
+            yt_song::YtSong,
         },
     },
 };
@@ -34,12 +34,10 @@ pub struct YTDLPlaylistSong {
 }
 impl Into<Song> for YTDLPlaylistSong {
     fn into(self) -> Song {
-        Song {
-            metadata: SongMetadata::YT {
-                title: self.title.unwrap(),
-                id: self.id.unwrap(),
-            }
-        }
+        YtSong {
+            title: self.title.unwrap(),
+            id: self.id.unwrap(),
+        }.into()
     }
 }
 

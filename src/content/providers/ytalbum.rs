@@ -112,7 +112,6 @@ impl Loadable for YTAlbum {
                             None,
                         )
                         .build().unwrap(),
-                        id: self_id,
                         callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
                             // the data we get from here have songs not necessarily the music videos
                             // but the data we get from the playlistId has the music videos
@@ -155,7 +154,6 @@ impl Loadable for YTAlbum {
                             None,
                         )
                         .build().unwrap(),
-                        id: self_id,
                         callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
                             // debug!("{res}");
                             let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
