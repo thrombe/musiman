@@ -261,10 +261,21 @@ impl Editable for YTExplorer {
                             let cp = me.as_any_mut().downcast_mut::<Self>().unwrap();
                             cp.loaded = true;
                             cp.search_term = content;
-                            cp.songs.clear();
-                            cp.providers.clear();
+                            let songs = std::mem::replace(&mut cp.songs, Default::default());
+                            let providers = std::mem::replace(&mut cp.providers, Default::default());
                             cp.selected.select(0);
                             return vec![
+                                ContentManagerAction::Unregister {
+                                    ids: songs
+                                    .into_iter()
+                                    .map(Into::into)
+                                    .chain(
+                                        providers
+                                        .into_iter()
+                                        .map(Into::into)
+                                    )
+                                    .collect(),
+                                },
                                 ContentManagerAction::PopContentStack, // typing
                                 ContentManagerAction::PopContentStack, // edit
                                 cp.get_search_action(self_id)

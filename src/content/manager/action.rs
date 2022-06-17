@@ -119,6 +119,9 @@ pub enum ContentManagerAction {
     Callback {
         callback: ContentManagerCallback,
     },
+    Unregister {
+        ids: Vec<ID>,
+    },
     None,
 }
 
@@ -226,6 +229,9 @@ impl ContentManagerAction {
             }
             Self::Callback {callback} => {
                 callback.call(ch)?;
+            }
+            Self::Unregister {ids} => {
+                ids.into_iter().for_each(|id| ch.unregister(id.into()));
             }
         }
         Ok(())

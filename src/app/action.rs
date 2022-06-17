@@ -21,7 +21,7 @@ use crate::{
     },
 };
 
-pub type TypingCallback = Box<dyn Fn(&mut ContentProvider, String) -> ContentManagerAction + Send + Sync>;
+pub type TypingCallback = Box<dyn FnOnce(&mut ContentProvider, String) -> ContentManagerAction + Send + Sync>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]

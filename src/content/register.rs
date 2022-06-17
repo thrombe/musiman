@@ -1,5 +1,12 @@
 
-use std::marker::PhantomData;
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+    error,
+};
+
+use std::{marker::PhantomData, fmt::Debug};
 
 use crate::{
     content::{
@@ -111,7 +118,8 @@ pub struct ContentRegister<T, P> {
 
 impl<T, P> ContentRegister<T, P>
     where
-        P: From<ContentID<T>> + Into<ContentID<T>>
+        P: From<ContentID<T>> + Into<ContentID<T>>,
+        T: Debug,
 {
     pub fn new() -> Self {
         Self {
@@ -124,11 +132,11 @@ impl<T, P> ContentRegister<T, P>
 
     fn dealloc(&mut self, id: P) -> Option<T> {
         let id: ContentID<T> = id.into();
-        self.generation += 1;
+        // self.generation += 1;
         self.empty_indices.push(id.index);
 
-        match self.items.remove(id.index) {
-            Some(s) => Some(s.val),
+        match self.items.get_mut(id.index) {
+            Some(s) => Some(s.take().unwrap().val),
             None => None,
         }
     }

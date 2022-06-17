@@ -9,7 +9,7 @@ pub mod ytalbum;
 use crate::content::register::ID;
 
 
-/// don't impliment clone on this. instead use ContentHnadler.clone_content_provider
+/// don't impliment clone on this. instead use ContentManager.clone_content_provider
 #[derive(Debug)]
 pub struct ContentProvider(Box<dyn traits::ContentProviderTrait>);
 impl std::ops::Deref for ContentProvider {
@@ -37,8 +37,6 @@ impl ContentProvider {
 
 
 
-
-// pub struct Provider(Box<dyn ContentProvider>);
 
 pub enum FriendlyID {
     String(String),
