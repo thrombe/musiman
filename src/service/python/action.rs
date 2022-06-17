@@ -17,7 +17,6 @@ use pyo3::{
 use derivative::Derivative;
 use anyhow::{
     Result,
-    Context,
 };
 
 use crate::{
@@ -32,15 +31,11 @@ use crate::{
         python::{
             item::{
                 PyHandle,
-                Ytdl,
-                Json,
             },
             code::{
                 PyCode,
-                PyCodeBuilder,
             },
         },
-        yt::ytdl::YtdlSong,
     },
 };
 
@@ -49,11 +44,6 @@ use crate::{
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub enum PyAction {
-    GetSong {
-        url: String,
-        #[derivative(Debug="ignore")]
-        callback: Box<dyn Fn(String, String) -> ContentManagerAction + Send + Sync>,
-    },
     ExecCode {
         code: PyCode,
         #[derivative(Debug="ignore")]
@@ -63,34 +53,7 @@ pub enum PyAction {
 impl PyAction {
     pub fn run(&mut self, py: Python, pyd: &Py<PyAny>, pyh: &mut PyHandle) -> Result<()> {
         dbg!("running ytaction", &self);
-        let mut bad_code;
         let code = match self {
-            Self::GetSong {url, ..} => {
-                bad_code = PyCodeBuilder::new()
-                .threaded()
-                .set_dbg_status(false)
-                .dbg_func(
-                    "
-                        with open('config/temp/ytdl_song.log', 'r') as f:
-                            data = f.read()
-                        return data                    
-                    ",
-                    None,
-                )
-                .get_data_func(
-                    format!("
-                        ytdl_data = ytdl.extract_info(url='{url}', download=False)
-                        data = json.dumps(ytdl_data, indent=4)
-                        return data
-                    "),
-                    Some(vec![
-                        Ytdl::new("ytdl").into(),
-                        Json::new("json").into(),
-                    ]),
-                )
-                .build()?;
-                &mut bad_code
-            }
             Self::ExecCode {code, ..} => {
                 code
             }
@@ -118,65 +81,6 @@ impl PyAction {
             return Ok(ContentManagerAction::None); // ?
         }
         let action = match self {
-            Self::GetSong {callback, ..} => {
-                let res = pyd.extract::<String>(py)?;
-                // debug!("{res}");
-                let song = serde_json::from_str::<YtdlSong>(&res)?;
-                // dbg!(&song);
-                let best_thumbnail_url = song
-                .thumbnails
-                .context("")?
-                .into_iter()
-                .filter(|e| e.preference.is_some() && e.url.is_some())
-                .reduce(|a, b| {
-                    if a.preference.unwrap() > b.preference.unwrap() {
-                        a
-                    } else {
-                        b
-                    }
-                }).context("")?.url.unwrap();
-                
-                // yanked and translated code from ytdlp github readme
-                // https://github.com/yt-dlp/yt-dlp#use-a-custom-format-selector
-                let best_video_ext = song
-                .formats
-                .as_ref()
-                .context("")?
-                .iter()
-                .rev()
-                .filter(|f| {
-                    f.vcodec.is_some() &&
-                    f.vcodec.as_ref().unwrap() != "none" &&
-                    f.acodec.is_some() &&
-                    f.acodec.as_ref().unwrap() == "none"
-                })
-                .next()
-                .context("")?
-                .ext
-                .as_ref()
-                .context("")?;
-                let best_audio_url = song
-                .formats
-                .as_ref()
-                .context("")?
-                .iter()
-                .rev()
-                .filter(|f| {
-                    f.acodec.is_some() &&
-                    f.acodec.as_ref().unwrap() != "none" &&
-                    f.vcodec.is_some() &&
-                    f.vcodec.as_ref().unwrap() == "none" &&
-                    f.ext.is_some() &&
-                    f.ext.as_ref().unwrap() == best_video_ext
-                })
-                .next()
-                .context("")?
-                .url
-                .as_ref()
-                .context("")?
-                .clone();
-                callback(best_audio_url, best_thumbnail_url)
-            }
             Self::ExecCode {callback, ..} => {
                 let res = pyd.extract::<String>(py)?;
                 callback(res)?

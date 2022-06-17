@@ -1009,6 +1009,7 @@ name = "musiplayer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "derivative",
  "gstreamer",
  "gstreamer-player",
  "mpv",
