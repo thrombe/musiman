@@ -106,12 +106,20 @@ where T: Into<ContentProviderID>
 
 
 #[derive(Debug)]
+enum Operation {
+    Insert,
+    Remove,
+    None,
+}
+
+#[derive(Debug)]
 pub struct ContentRegister<T, P> {
     items: Vec<Option<ContentEntry<T>>>,
     
     // allocator
     empty_indices: Vec<usize>,
     generation: u64,
+    last_operation: Operation,
 
     _phantom: PhantomData<P>,
 }
@@ -126,6 +134,7 @@ impl<T, P> ContentRegister<T, P>
             items: vec![],
             empty_indices: vec![],
             generation: 0,
+            last_operation: Operation::None,
             _phantom: PhantomData,
         }
     }
@@ -136,7 +145,14 @@ impl<T, P> ContentRegister<T, P>
         self.empty_indices.push(id.index);
 
         match self.items.get_mut(id.index) {
-            Some(s) => Some(s.take().unwrap().val),
+            Some(s) => {
+                // generational id only needs to go up after every remove operation that happens immediately after a insert operation
+                if let Operation::Insert = self.last_operation {
+                    self.generation += 1;
+                }
+                self.last_operation = Operation::Remove;
+                Some(s.take().unwrap().val)
+            }
             None => None,
         }
     }
@@ -198,9 +214,7 @@ impl<T, P> ContentRegister<T, P>
 
     /// panics if index > len
     fn set(&mut self, item: T, index: usize) -> P {
-        if index < self.items.len() {
-            self.generation += 1;
-        }
+        self.last_operation = Operation::Insert;
         self.items.insert(index, Some(ContentEntry {
             val: item,
             generation: self.generation,
