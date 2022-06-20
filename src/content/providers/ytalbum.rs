@@ -92,7 +92,7 @@ impl Loadable for YTAlbum {
                         code: PyCodeBuilder::new()
                         .threaded()
                         .set_dbg_status(false)
-                        .get_data_func(
+                        .func(
                             format!("
                                 album_data = ytmusic.get_album('{browse_id}')
                                 data = json.dumps(album_data, indent=4)
@@ -134,7 +134,7 @@ impl Loadable for YTAlbum {
                         code: PyCodeBuilder::new()
                         .threaded()
                         .set_dbg_status(false)
-                        .get_data_func(
+                        .func(
                             format!("
                                 data = ytdl.extract_info('{playlist_id}', download=False)
                                 data = json.dumps(data, indent=4)

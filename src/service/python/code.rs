@@ -42,7 +42,7 @@ impl PyCodeBuilder {
         self.dbg_stat = stat;
         self
     }
-    pub fn get_data_func<T: Into<Cow<'static, str>>>(mut self, code: T, globals: Option<Items>) -> Self {
+    pub fn func<T: Into<Cow<'static, str>>>(mut self, code: T, globals: Option<Items>) -> Self {
         self.code = Some(code.into());
         self.globals = globals;
         self

@@ -59,7 +59,7 @@ impl YtSong {
                 ",
                 None,
             )
-            .get_data_func(
+            .func(
                 format!("
                     ytdl_data = ytdl.extract_info(url='https://youtu.be/{}', download=False)
                     data = json.dumps(ytdl_data, indent=4)

@@ -1,5 +1,5 @@
 
-mod traits;
+pub mod traits;
 pub mod main_provider;
 pub mod file_explorer;
 pub mod yt_explorer;

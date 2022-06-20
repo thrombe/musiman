@@ -60,6 +60,8 @@ impl<T> From<T> for super::ContentProvider
 
 // ? this requirement is quite dangerous time waster. can it be enforced?
 // the macro must be called on all the traits, else those implimentations will not be used
+// TODO: SOL: instead of this, impliment as_<trait> methods which gives Option<&dyn <trait>>, so the caller is forced to make sure it impliments the trait.
+// TODO: also remove the confirmation methods like has_menu. as this data is encoded in the Option as above
 pub trait ContentProviderTrait
     where
         Self: std::fmt::Debug + Send + Sync + CPClone + Any,

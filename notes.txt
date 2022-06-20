@@ -106,11 +106,14 @@
     "highlight this one in blue"
 . plan:
   . use custom types/enums wrappers and wrap the special formatted ones with these types
+    . pass these to app, which then uses the backend to render these
     . this would no longer mean that the two parts are decoupled tho.
     . but well what else can i do?
     . the wrappers can maybe take multiple things, like maybe
       wrapper{texts: Vec<wrapper{text, format_type: highlighted}>, overallformat_type: numbered}
-    . maybe repurpose GetNames for this
+    \. maybe repurpose GetNames for this
+  . make all providers impliment a render method that directly uses the backend stuff to render stuff.
+    . but ui in providers this way (its not much better the other way anyway)
   \. use the tui-rs stuff directly and send in the formatted text directly
     . this means ui is also done in ContentManager
     . maybe add a type that handles the ui here and try not to leak stuff outside it.
@@ -121,19 +124,19 @@
 . plan:
   . ?
 
-. behaviour:
-  . fire actions from ContentProviders and receive the results back
-. plan:
-  . any actions that request data will have a callback function that will receive &mut ContentProvider and the data or something and
+/. behaviour:
+  /. fire actions from ContentProviders and receive the results back
+/. plan:
+  /. any actions that request data will have a callback function that will receive &mut ContentProvider and the data or something and
     may return another action
-  . same can be applied for EnableEditing
-  . callback can be enum like Callback::OnContentProvider {f: FOnce(cp: &mut ContentProvider, data: ?), id: ContentProviderID}
-    . execute using Callback::apply(self, ch: &ContentManager) -> Action
+  /. same can be applied for EnableEditing
+  /. callback can be enum like Callback::OnContentProvider {f: FOnce(cp: &mut ContentProvider, data: ?), id: ContentProviderID}
+    /. execute using Callback::apply(self, ch: &ContentManager) -> Action
 
-. behaviour:
-  . doing yt actions
-. plan:
-  . create a seperate ytaction for each thing that someone else might want to do, and impliment a resolve function for the data
+/. behaviour:
+  /. doing yt actions
+/. plan:
+  \. create a seperate ytaction for each thing that someone else might want to do, and impliment a resolve function for the data
     and send more actions to finally complete the action that was meant to happen
     . disadvantages:
       . code is split between yt stuff and content providers.
@@ -147,15 +150,15 @@
       . as raw data is received, ContentProviders can parse just what they need at that point.
     . disadvantages:
       . content providers know about the backend stuff
-  . if trait ContentProvider
-    . a few implimentations can know about the yt stuff. others do not need to
+  /. if trait ContentProvider
+    /. a few implimentations can know about the yt stuff. others do not need to
 
-todo:
-  . move logic to providers from actions
-plan:
-  . use callback funcs to generate actions
-  . move the yt parsing logic to the providers
-    . even the python code should come from providers
+/todo:
+  /. move logic to providers from actions
+/plan:
+  /. use callback funcs to generate actions
+  /. move the yt parsing logic to the providers
+    /. even the python code should come from providers
 
 . behaviour:
   . work without any setup
@@ -181,6 +184,16 @@ bug:
 sol:
   . current_queue only points to some provider in a QueueProvider
     . QueueProvider clones the original ContentProvider
+
+behaviour:
+  . config file to decide style/colors (theme files ig)
+plan:
+  . impliment serialize and deserialise (or just ToString/FromString) on new type say DisplayConfig
+  . print it out in the file as if its on the terminal but print the colors where there would be text.
+  . simply changing these colors should change the color in the program
+  . this happens per implimentation of Display ig.
+  . use some register<DisplayConfig: DisplayConfigTrait>() func or something to add the default config file in config folder
+  . doing register<_>() does something and loads the config and stores it somewhere, then do get_config<_>() -> &DisplayConfig
 
 . plan
   . import relevent notes from thrombe/musimanager

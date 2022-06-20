@@ -58,7 +58,7 @@ pub struct ContentManager {
     yanker: Yanker,
     edit_manager: EditManager,
     pub image_handler: ImageHandler,
-    pub player: Player,
+    pub player: Player, // FIX: memory leak somewhere maybe. (the ram usage keeps increasing) // https://github.com/sdroege/gstreamer-rs/blob/main/examples/src/bin/play.rs
     notifier: Notifier,
     
     active_queue: Option<ContentProviderID>, // can also be a bunch of queues? like -> play all artists
@@ -535,7 +535,7 @@ impl ContentManager {
         std::mem::replace(&mut self.app_action, Default::default())
     }
 
-    pub fn increment_selection(&mut self) {
+    pub fn increment_selection(&mut self) { // TODO: maybe just pass the max limit of index to the content_stack when edit/menu instead of asking the providers (what if it changes tho)
         let state = self.content_stack.get_state_mut();
         match state {
             ContentState::Normal => {

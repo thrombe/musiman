@@ -81,3 +81,4 @@ pub trait Showable {
 
 }
 
+use crate::content::providers::traits::{Menu, Editable};

@@ -110,7 +110,7 @@ impl YTExplorer {
         // https://ytmusicapi.readthedocs.io/en/latest/reference.html#ytmusicapi.YTMusic.search
         let code = PyCodeBuilder::new()
         .threaded()
-        .get_data_func(
+        .func(
             format!(
                 "
                     data = ytmusic.search('{}', filter='{}', limit=75, ignore_spelling=True)
@@ -208,7 +208,6 @@ impl Provider for YTExplorer {
     fn get_selected_index(&self) -> &SelectedIndex {
         &self.selected
     }
-
 }
 impl SongProvider for YTExplorer {
     fn add_song(&mut self, id: SongID) {
@@ -217,7 +216,6 @@ impl SongProvider for YTExplorer {
     fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
         Box::new(self.songs.iter())
     }
-
 }
 impl CPProvider for YTExplorer {
     fn add_provider(&mut self, id: ContentProviderID) {
@@ -226,7 +224,6 @@ impl CPProvider for YTExplorer {
     fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
         Box::new(self.providers.iter())
     }
-
 }
 impl Editable for YTExplorer {
     fn get_editables<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID> + 'a> {
