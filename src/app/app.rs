@@ -139,9 +139,30 @@ impl BrowserWidget {
         Ok(true)
     }
 
-    fn render<'a, B: Backend>(&self, f: &mut Frame<B>, r: Rect, cm: &mut ContentManager) {
-        let messages = self.list_builder.list(r, cm.get_selected_index().selected_index());
-        f.render_stateful_widget(messages, r, cm.get_selected_index().into());
+    fn render<'a, B: Backend>(&self, f: &mut Frame<B>, r: Rect, cm: &mut ContentManager, input: &[char], state: AppState) {
+        let selected_index = cm.get_selected_index().selected_index();
+        
+        let list = if let AppState::Typing = state {
+            let pos = self.list_builder.get_abs_pos(r, selected_index);
+            let x = pos.inner_rect.x + pos.serial_number_width;
+            if x as usize + input.len() < (pos.inner_rect.x + pos.inner_rect.width) as usize {
+                // FIX: show the right side of the text when typing if it dosent fit. like  "..olling<cursor>"
+                f.set_cursor(x + input.len() as u16, pos.inner_rect.y + 1); // TODO: find out why +1 to y
+            }
+
+            let input = input.iter().collect::<String>();
+            let callback = move |mut text: Text<'a>| -> Text<'a> {
+                text.lines[0].0[0].content = Cow::from(input);
+                text
+            };
+            
+
+            let callback = Box::new(callback);
+            self.list_builder.replace_selected(callback).list(r, selected_index)
+        } else {
+            self.list_builder.list(r, selected_index)
+        };
+        f.render_stateful_widget(list, r, cm.get_selected_index().into());
     }
 }
 
@@ -417,7 +438,7 @@ impl App {
 
         self.status_bar.render(f, status_rect);
         self.player_widget.render(f, right_rect);
-        self.browser_widget.render(f, left_rect, &mut self.content_manager);
+        self.browser_widget.render(f, left_rect, &mut self.content_manager, &self.input, self.state);
         
         self.content_manager.image_handler.set_offset(right_rect.x + 1, right_rect.y + 1);
         self.content_manager.image_handler.set_size(Some(right_rect.width as u32 - 2), Some(right_rect.height as u32 - 2));

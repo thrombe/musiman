@@ -28,6 +28,35 @@ plan:
     . or have the songs sent to the provider in associated types
 */
 
+pub type ReplaceSelectedTextCallback<'a> = Box<dyn FnOnce(Text<'a>) -> Text<'a>>;
+
+pub struct ReplaceSelectedTextListBuilder<'a, 'b> {
+    builder: &'b ListBuilder<'a>,
+    callback: ReplaceSelectedTextCallback<'a>,
+}
+impl<'a, 'b> ReplaceSelectedTextListBuilder<'a, 'b> {
+    pub fn list(self, rect: Rect, selected_index: usize) -> List<'a> {
+        let mut items = self.builder.texts(rect, selected_index);
+        
+        if let Some(t) = items.get_mut(selected_index) {
+            *t = (self.callback)(t.clone());
+        }
+
+        let items = items
+        .into_iter()
+        .map(ListItem::new)
+        .collect::<Vec<_>>();
+        
+        let mut list = List::new(items);
+        
+        if self.builder.block.is_some() {
+            list = list.block(self.builder.block.as_ref().unwrap().clone())
+        }
+        
+        list
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct ListBuilder<'a> {
     pub items: Vec<Item<'a>>,
@@ -62,6 +91,9 @@ impl<'a> ListBuilder<'a> {
         .collect::<Vec<_>>();
 
         items
+    }
+    pub fn replace_selected<'b>(&'b self, callback: ReplaceSelectedTextCallback<'a>) -> ReplaceSelectedTextListBuilder<'a, 'b> {
+        ReplaceSelectedTextListBuilder { builder: self, callback }
     }
     pub fn title<'b: 'c + 'a, 'c, T: Into<Spans<'b>>>(&'c mut self, title: T) -> &mut Self {
         self.title = Some(title.into());
