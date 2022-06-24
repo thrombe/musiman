@@ -215,7 +215,7 @@ impl<'b> Display<'b> for YTAlbum {
                 self.songs
                 .iter()
                 .map(|id| context.songs.get(*id).unwrap())
-                .map(|s| s.get_name())
+                .map(|s| s.as_display().title())
                 .map(String::from)
                 .map(Span::from)
                 .map(Line::new)

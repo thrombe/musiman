@@ -109,7 +109,7 @@ impl<'content_manager> Display<'content_manager> for YTExplorer {
                 let items = self.songs
                 .iter()
                 .map(|id| context.songs.get(*id).unwrap())
-                .map(|s| s.get_name())
+                .map(|s| s.as_display().title())
                 .map(String::from)
                 .map(Span::from);
                 

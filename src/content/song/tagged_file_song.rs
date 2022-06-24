@@ -33,6 +33,7 @@ use crate::{
         song::traits::{
             SongTrait,
             Func,
+            SongDisplay,
         },
     },
 };
@@ -122,9 +123,6 @@ fn log_song(path: &str) -> Result<()> {
 
 
 impl SongTrait for TaggedFileSong {
-    fn get_name(&self) -> &str {
-        self.title.as_ref()
-    }
     fn is_online(&self) -> bool {
         false
     }
@@ -179,5 +177,20 @@ impl SongTrait for TaggedFileSong {
         ].into();
         Ok(action)
     }
+
+    fn as_display(&self) -> &dyn super::traits::SongDisplay {
+        self
+    }
 }
 
+impl SongDisplay for TaggedFileSong {
+    fn title(&self) -> &str {
+        self.title.as_ref()
+    }
+    fn album(&self) -> Option<&str> {
+        Some(self.album.as_ref())
+    }
+    fn artist(&self) -> Option<&str> {
+        Some(self.artist.as_ref())
+    }
+}

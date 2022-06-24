@@ -20,6 +20,7 @@ use crate::{
         song::traits::{
             SongTrait,
             Func,
+            SongDisplay,
         },
     },
     service::{
@@ -84,9 +85,6 @@ impl YtSong {
 }
 
 impl SongTrait for YtSong {
-    fn get_name(&self) -> &str {
-        self.title.as_str()
-    }
     fn is_online(&self) -> bool {
         true
     }
@@ -179,6 +177,16 @@ impl SongTrait for YtSong {
             format!("title: {}", self.title),
             format!("video id: {}", self.id),
         ].into_iter().map(Into::into))
+    }
+
+    fn as_display(&self) -> &dyn SongDisplay {
+        self
+    }
+}
+
+impl SongDisplay for YtSong {
+    fn title(&self) -> &str {
+        self.title.as_ref()
     }
 }
 

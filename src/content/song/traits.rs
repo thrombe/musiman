@@ -56,7 +56,8 @@ pub trait SongTrait: Send + Sync + Debug {
         self.get_showable_info()
     }
     fn get_showable_info(&self) -> Box<dyn Iterator<Item = Cow<'static, str>>>;
-    fn get_name(&self) -> &str;
+
+    fn as_display(&self) -> &dyn SongDisplay;
 }
 
 pub trait Playable {
@@ -79,6 +80,16 @@ pub trait Online {
 
 pub trait Showable {
 
+}
+
+pub trait SongDisplay { // nothing is gonna be 'static str here, so not bothering to do Cow s here
+    fn title(&self) -> &str;
+    fn artist(&self) -> Option<&str> {
+        None
+    }
+    fn album(&self) -> Option<&str> {
+        None
+    }
 }
 
 use crate::content::providers::traits::{Menu, Editable};
