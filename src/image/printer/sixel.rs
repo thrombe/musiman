@@ -14,7 +14,7 @@ use std::io::{
     Stdout,
 };
 use termion;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use derivative::Derivative;
 
 use crate::image::{
@@ -109,6 +109,14 @@ impl Sixel {
         // so we make the final image height a multiple of 6 which is less than or equal to h*char_height
         h = (h/6)*6;
 
+        if w*h == 0 { // if either the width or the height is zero, return with empty output
+            return Ok(Self {
+                output: vec![],
+                x: config.x,
+                y: config.y,
+            });
+        }
+
         let img = img.resize_exact(w, h, FilterType::Triangle);
 
         let mut data = img.to_rgb8().to_vec();
@@ -179,6 +187,10 @@ impl Drop for DitherWrapper {
 }
 impl DitherWrapper {
     fn new(data: &mut Vec<u8>, img_width: u32, img_height: u32) -> Result<Self> {
+        if img_width*img_height == 0 {
+            // trying to create a dither with zero height/width segfaults
+            bail!("bad image dimensions");
+        }
         unsafe {
             // let dither = ptr::null_mut();
             // let res = sixel_dither_new(
@@ -223,13 +235,18 @@ fn get_size_pix(img: &DynamicImage, width: Option<u32>, height: Option<u32>) -> 
 
     let (char_width, char_height) = {
         let (scr_width, scr_height) = termion::terminal_size_pixels().unwrap();
-        
+
         // terminal size in pixels can be a little bigger than the space where chars are printed.
         // so floor is needed
-        (
+        let (mut char_width, mut char_height) = (
             (scr_width as f32/scr_width_chars as f32) as u32,
             (scr_height as f32/scr_height_chars as f32) as u32
-        )
+        );
+        if scr_width == 0 && scr_height == 0 {
+            char_width = 12;
+            char_height = 24;
+        }
+        (char_width, char_height)
     };
 
     let (_scr_width_pix, _scr_height_pix) = {
