@@ -258,6 +258,6 @@ pub enum MarkerPos {
 pub trait Display<'b> {
     type DisplayContext;
     fn display(&self, _context: Self::DisplayContext) -> ListBuilder<'static>;
-    fn get_name<'a>(&self) -> Cow<'a, str>;
+    fn get_name(&self) -> Cow<'static, str>;
 }
 

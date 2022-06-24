@@ -64,10 +64,6 @@ impl FileExplorer {
 }
 
 impl Provider for FileExplorer {
-    fn get_name(&self) -> &str {
-        &self.name
-    }
-
     fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
         &mut self.selected
     }
@@ -133,7 +129,7 @@ impl<'b> Display<'b> for FileExplorer {
     fn display(&self, _context: Self::DisplayContext) -> ListBuilder<'static> {
         todo!()
     }
-    fn get_name<'a>(&self) -> std::borrow::Cow<'a, str> {
+    fn get_name(&self) -> std::borrow::Cow<'static, str> {
         todo!()
     }
 }

@@ -131,9 +131,6 @@ impl Menu for MainProvider {
 }
 
 impl Provider for MainProvider {
-    fn get_name(&self) -> &str {
-        self.name.as_ref()
-    }
     fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
         &mut self.selected
     }
@@ -146,8 +143,7 @@ impl<'b> Display<'b> for MainProvider {
     type DisplayContext = DisplayContext<'b>;
     fn display(&self, context: Self::DisplayContext) -> ListBuilder<'static> {
         let mut lb = ListBuilder::default();
-        let title = (self as &dyn Provider).get_name().to_owned();
-        lb.title(title);
+        lb.title(Span::raw(self.get_name()));
 
         lb.items = match context.state {
             DisplayState::Normal => {
@@ -193,7 +189,7 @@ impl<'b> Display<'b> for MainProvider {
         lb
     }
 
-    fn get_name<'a>(&self) -> std::borrow::Cow<'a, str> {
+    fn get_name<'a>(&'a self) -> std::borrow::Cow<'static, str> {
         self.name.clone()
     }
 }

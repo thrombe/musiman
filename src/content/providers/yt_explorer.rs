@@ -7,6 +7,7 @@ use crate::{
 };
 
 use anyhow::Result;
+use std::borrow::Cow;
 
 use tui::{
     text::Span,
@@ -76,7 +77,7 @@ use crate::{
 pub struct YTExplorer {
     songs: Vec<SongID>,
     providers: Vec<ContentProviderID>,
-    name: String,
+    name: Cow<'static, str>,
     selected: SelectedIndex,
     loaded: bool,
     search_term: String,
@@ -101,7 +102,7 @@ impl<'content_manager> Display<'content_manager> for YTExplorer {
     type DisplayContext = DisplayContext<'content_manager>;
     fn display(&self, context: Self::DisplayContext) -> ListBuilder<'static> {
         let mut lb = ListBuilder::default();
-        lb.title((self as &dyn Provider).get_name().to_owned());
+        lb.title(Span::raw(self.get_name()));
 
         lb.items = match context.state {
             DisplayState::Normal => {
@@ -165,8 +166,8 @@ impl<'content_manager> Display<'content_manager> for YTExplorer {
         lb
     }
 
-    fn get_name<'a>(&self) -> std::borrow::Cow<'a, str> {
-        std::borrow::Cow::from(self.name.clone())
+    fn get_name(&self) -> Cow<'static, str> {
+        self.name.clone()
     }
 }
 
@@ -293,9 +294,6 @@ impl YTExplorer {
 }
 
 impl Provider for YTExplorer {
-    fn get_name(&self) -> &str {
-        &self.name
-    }
     fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
         &mut self.selected
     }

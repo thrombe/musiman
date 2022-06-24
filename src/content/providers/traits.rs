@@ -128,7 +128,6 @@ pub trait ContentProviderTrait
 
 
     // every content provider has to impliment these
-    fn get_name(&self) -> &str;
     fn get_selected_index_mut(&mut self) -> &mut SelectedIndex;
     fn get_selected_index(&self) -> &SelectedIndex;
 
@@ -248,7 +247,6 @@ pub trait CPProvider {
 }
 
 pub trait Provider {
-    fn get_name(&self) -> &str;
     fn get_selected_index_mut(&mut self) -> &mut SelectedIndex;
     fn get_selected_index(&self) -> &SelectedIndex;
 }
@@ -312,9 +310,6 @@ macro_rules! _impliment_content_provider {
         }   
     };
     ($t:ident, Provider) => {
-        fn get_name(&self) -> &str {
-            Provider::get_name(self)
-        }
         fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
             Provider::get_selected_index_mut(self)
         }

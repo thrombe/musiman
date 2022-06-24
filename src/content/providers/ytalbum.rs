@@ -182,9 +182,6 @@ impl Loadable for YTAlbum {
 }
 
 impl Provider for YTAlbum {
-    fn get_name(&self) -> &str {
-        &self.name
-    }
     fn get_selected_index(&self) -> &SelectedIndex {
         &self.index
     }
@@ -198,7 +195,7 @@ impl<'b> Display<'b> for YTAlbum {
     fn display(&self, _context: Self::DisplayContext) -> ListBuilder<'static> {
         todo!()
     }
-    fn get_name<'a>(&self) -> std::borrow::Cow<'a, str> {
+    fn get_name(&self) -> std::borrow::Cow<'static, str> {
         todo!()
     }
 }
