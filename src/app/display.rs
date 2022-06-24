@@ -139,6 +139,7 @@ impl<'a> ListBuilder<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Pos {
     pub text_width: u16,
     pub serial_number_width: u16,

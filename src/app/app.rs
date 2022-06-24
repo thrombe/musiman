@@ -147,8 +147,14 @@ impl BrowserWidget {
             let pos = self.list_builder.get_abs_pos(r, selected_index);
             let x = pos.inner_rect.x + pos.serial_number_width;
             if x as usize + input.len() < (pos.inner_rect.x + pos.inner_rect.width) as usize {
-                // FIX: show the right side of the text when typing if it dosent fit. like  "..olling<cursor>"
-                f.set_cursor(x + input.len() as u16, pos.inner_rect.y + 1); // TODO: find out why +1 to y
+                // TODO: show the right side of the text when typing if it dosent fit. like  "..olling<cursor>"
+                f.set_cursor(
+                    x + input.len() as u16,
+                    // BAD: cannot figure out the exact y of the cursor (will need ListState.offset)
+                    pos.inner_rect.y
+                    .checked_add(selected_index.try_into().unwrap())
+                    .unwrap()
+                );
             }
 
             let input = input.iter().collect::<String>();
