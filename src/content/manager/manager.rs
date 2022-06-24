@@ -66,7 +66,7 @@ pub struct ContentManager {
     notifier: Notifier,
     
     active_queue: Option<ContentProviderID>, // can also be a bunch of queues? like -> play all artists
-    active_song: Option<SongID>,
+    pub active_song: Option<SongID>,
 
     pub parallel_handle: ParallelHandle,
     pub app_action: AppAction,

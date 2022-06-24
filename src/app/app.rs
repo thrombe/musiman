@@ -13,6 +13,8 @@ use tui::{
         Borders,
         Paragraph,
         ListState,
+        List,
+        ListItem,
         Gauge,
     },
     layout::{
@@ -213,32 +215,63 @@ impl PlayerWidget {
     fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, cm: &mut ContentManager) -> Result<()> {
         let block = Block::default().borders(Borders::ALL);
         let inner_rect = block.inner(r);
-        let (image_rect, song_info_rect, song_progress_rect) = {
-            let mut rects = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
-            .split(inner_rect)
-            .into_iter();
-            let mut song_info_rects = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(1)].as_ref())
-            .split(rects.next_back().unwrap())
-            .into_iter();
-            (rects.next().unwrap(), song_info_rects.next().unwrap(), song_info_rects.next().unwrap())
-        };
 
-        let gauge = Gauge::default()
-        .ratio(cm.player.progress()?)
-        .gauge_style(Style::default().fg(Color::Cyan))
-        // .style(Style::default().fg(Color::LightGreen)) // label style
-        .label(""); // this disables the default label of percentage
-        //? maybe show the time too? "<progress>/<duration>"
+        if let Some(song_id) = cm.active_song {
+            let song = cm.get_song(song_id).as_display();
+            // TODO: center align the info
+            let song_info = [
+                Some(format!("title: {title}", title = song.title())),
+                song.artist().map(|artist| format!("artist: {artist}")),
+                song.album().map(|album| format!("album: {album}")),
+            ].into_iter()
+            .filter_map(|i| i)
+            .map(Span::raw)
+            .map(Spans::from)
+            .map(ListItem::new)
+            .collect::<Vec<_>>();
 
-        f.render_widget(gauge, song_progress_rect);
+            let (image_rect, song_info_rect, song_progress_rect) = {
+                let mut rects = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(0),
+                    Constraint::Length(song_info.len().try_into().unwrap())
+                ].as_ref())
+                .split(inner_rect)
+                .into_iter();
 
-        cm.image_handler.set_offset(image_rect.x, image_rect.y);
-        cm.image_handler.set_size(Some(image_rect.width as u32), Some(image_rect.height as u32));
-        cm.image_handler.maybe_print()?;
+                let mut song_info_rects = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(0), Constraint::Length(1)].as_ref())
+                .split(rects.next_back().unwrap())
+                .into_iter();
+                
+                (
+                    rects.next().unwrap(),
+                    song_info_rects.next().unwrap(),
+                    song_info_rects.next().unwrap(),
+                )
+            };
+
+            // render the progress bar
+            let gauge = Gauge::default()
+            .ratio(cm.player.progress()?)
+            .gauge_style(Style::default().fg(Color::Cyan))
+            // .style(Style::default().fg(Color::LightGreen)) // label style
+            //? maybe show the time too? "<progress>/<duration>"
+            .label(""); // this disables the default label of percentage
+            f.render_widget(gauge, song_progress_rect);
+    
+            // render the image
+            cm.image_handler.set_offset(image_rect.x, image_rect.y);
+            cm.image_handler.set_size(Some(image_rect.width as u32), Some(image_rect.height as u32));
+            cm.image_handler.maybe_print()?;    
+
+            let song_info = List::new(song_info);
+            f.render_widget(song_info, song_info_rect);
+        }
+
+
 
         // tui::widgets::LineGauge/tui::widgets::Gauge for progress bar
         match self.render_state.clone() {
