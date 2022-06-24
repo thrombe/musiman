@@ -13,6 +13,7 @@ use tui::{
         Borders,
         Paragraph,
         ListState,
+        Gauge,
     },
     layout::{
         Layout,
@@ -141,7 +142,7 @@ impl BrowserWidget {
 
     fn render<'a, B: Backend>(&self, f: &mut Frame<B>, r: Rect, cm: &mut ContentManager, input: &[char], state: AppState) {
         let selected_index = cm.get_selected_index().selected_index();
-        
+
         let list = if let AppState::Typing = state {
             let pos = self.list_builder.get_abs_pos(r, selected_index);
             let x = pos.inner_rect.x + pos.serial_number_width;
@@ -203,17 +204,46 @@ impl PlayerWidget {
         Ok(true)
     }
 
-    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {
+    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, cm: &mut ContentManager) -> Result<()> {
+        let block = Block::default().borders(Borders::ALL);
+        let inner_rect = block.inner(r);
+        let (image_rect, song_info_rect, song_progress_rect) = {
+            let mut rects = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
+            .split(inner_rect)
+            .into_iter();
+            let mut song_info_rects = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(1)].as_ref())
+            .split(rects.next_back().unwrap())
+            .into_iter();
+            (rects.next().unwrap(), song_info_rects.next().unwrap(), song_info_rects.next().unwrap())
+        };
+
+        let gauge = Gauge::default()
+        .ratio(cm.player.progress()?)
+        .gauge_style(Style::default().fg(Color::Cyan))
+        // .style(Style::default().fg(Color::LightGreen)) // label style
+        .label(""); // this disables the default label of percentage
+        //? maybe show the time too? "<progress>/<duration>"
+
+        f.render_widget(gauge, song_progress_rect);
+
+        cm.image_handler.set_offset(image_rect.x, image_rect.y);
+        cm.image_handler.set_size(Some(image_rect.width as u32), Some(image_rect.height as u32));
+        cm.image_handler.maybe_print()?;
+
         // tui::widgets::LineGauge/tui::widgets::Gauge for progress bar
         match self.render_state.clone() {
             RenderState::Normal => {
                 f.render_widget(
-                    Block::default()
-                        .borders(Borders::ALL).title("Player Widget"),
+                    block.title("Player Widget"),
                     r
                 );
             }
         }
+        Ok(())
     }
 
     fn update(&mut self, ch: &mut ContentManager) -> Result<()> {
@@ -437,13 +467,9 @@ impl App {
         };
 
         self.status_bar.render(f, status_rect);
-        self.player_widget.render(f, right_rect);
+        self.player_widget.render(f, right_rect, &mut self.content_manager)?;
         self.browser_widget.render(f, left_rect, &mut self.content_manager, &self.input, self.state);
         
-        self.content_manager.image_handler.set_offset(right_rect.x + 1, right_rect.y + 1);
-        self.content_manager.image_handler.set_size(Some(right_rect.width as u32 - 2), Some(right_rect.height as u32 - 2));
-        self.content_manager.image_handler.maybe_print()?;
-
         Ok(())
     }
 }
