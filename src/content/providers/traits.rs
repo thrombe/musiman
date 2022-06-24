@@ -14,15 +14,21 @@ use std::{
 use crate::{
     content::{
         stack::StateContext,
-        providers::FriendlyID,
         register::{
             ContentProviderID,
             SongID,
             ID,
         },
         manager::action::ContentManagerAction,
+        display::DisplayContext,
+        providers::FriendlyID,
     },
-    app::app::SelectedIndex,
+    app::{
+        app::SelectedIndex,
+        display::{
+            Display,
+        },
+    },
 };
 
 pub trait CPClone {
@@ -185,6 +191,9 @@ pub trait ContentProviderTrait
     // for downcasting (the macro has implimentation for this)
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    // to have to not replicate all methods from display here
+    fn as_display(&self) -> &dyn Display<DisplayContext = DisplayContext>;
 }
 
 
@@ -313,11 +322,11 @@ macro_rules! _impliment_content_provider {
             Provider::get_selected_index(self)
         }
     };
-    // ($t:ident, CPProvider) => {
-    //     impl ContentProvider for $t {
-
-    //     }
-    // };
+    ($t:ident, Display) => {
+        fn as_display(&self) -> &dyn Display<DisplayContext = DisplayContext> {
+            self
+        }
+    };
     ($t:ident, $r:tt, $($e:tt), +) => {
         impliment_content_provider!($t, $r); // wtf, it does not recognise _impliment_content_provider
         $(

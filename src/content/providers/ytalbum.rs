@@ -17,8 +17,15 @@ use crate::{
             SongID,
             ContentProviderID,
         },
+        display::DisplayContext,
     },
-    app::app::SelectedIndex,
+    app::{
+        app::SelectedIndex,
+        display::{
+            Display,
+            ListBuilder,
+        },
+    },
     service::{
         yt::{
             ytdl::YTDLPlaylist,
@@ -186,8 +193,17 @@ impl Provider for YTAlbum {
     }
 }
 
+impl<'b> Display<'b> for YTAlbum {
+    type DisplayContext = DisplayContext<'b>;
+    fn display(&self, _context: Self::DisplayContext) -> ListBuilder<'static> {
+        todo!()
+    }
+    fn get_name<'a>(&self) -> std::borrow::Cow<'a, str> {
+        todo!()
+    }
+}
 
 
 impl ContentProviderTrait for YTAlbum {
-    impliment_content_provider!(YTAlbum, SongProvider, Loadable, Provider);
+    impliment_content_provider!(YTAlbum, SongProvider, Loadable, Provider, Display);
 }

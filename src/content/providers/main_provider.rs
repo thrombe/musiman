@@ -1,13 +1,23 @@
 
 use std::borrow::Cow;
 
+use tui::{
+    text::{
+        Spans,
+        Span,
+    },
+    style::{
+        Style,
+        Color,
+    },
+};
+
 use crate::{
     content::{
         manager::action::ContentManagerAction,
         stack::StateContext,
         register::ContentProviderID,
         providers::{
-            FriendlyID,
             traits::{
                 impliment_content_provider,
                 ContentProviderTrait,
@@ -17,9 +27,23 @@ use crate::{
             },
             file_explorer::FileExplorer,
             yt_explorer::YTExplorer,
+            FriendlyID,
+        },
+        display::{
+            DisplayContext,
+            DisplayState,
         },
     },
-    app::app::SelectedIndex,
+    app::{
+        app::SelectedIndex,
+        display::{
+            Display,
+            SelectedText,
+            Item,
+            ListBuilder,
+            Line,
+        },
+    },
 };
 
 
@@ -118,8 +142,64 @@ impl Provider for MainProvider {
     }    
 }
 
+impl<'b> Display<'b> for MainProvider {
+    type DisplayContext = DisplayContext<'b>;
+    fn display(&self, context: Self::DisplayContext) -> ListBuilder<'static> {
+        let mut lb = ListBuilder::default();
+        let title = (self as &dyn Provider).get_name().to_owned();
+        lb.title(title);
+
+        lb.items = match context.state {
+            DisplayState::Normal => {
+                self.providers
+                .iter()
+                .map(|id| {
+                    context.providers
+                    .get(*id)
+                    .unwrap()
+                    .as_display()
+                    .get_name()
+                })
+                .map(|c| Span {
+                    content: c,
+                    style: Default::default(),
+                })
+                .map(Line::new)
+                .map(|line| Item {
+                    text: vec![line],
+                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0)))
+                })
+                .collect()
+            }
+            DisplayState::Menu(ctx) => {
+                self.menu(ctx)
+                .map(|o| {
+                    format!("{o:#?}")
+                    .replace("_", " ")
+                    .to_lowercase()
+                })
+                .map(Span::from)
+                .map(Line::new)
+                .map(|line| Item {
+                    text: vec![line],
+                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0))),
+                })
+                .collect()
+            }
+            
+            DisplayState::Edit(_) => unreachable!(),
+        };
+
+        lb
+    }
+
+    fn get_name<'a>(&self) -> std::borrow::Cow<'a, str> {
+        self.name.clone()
+    }
+}
+
 impl ContentProviderTrait for MainProvider {
-    impliment_content_provider!(MainProvider, Provider, Menu, CPProvider);
+    impliment_content_provider!(MainProvider, Provider, Menu, CPProvider, Display);
 }
 
 impl MainProvider {

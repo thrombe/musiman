@@ -8,6 +8,14 @@ use crate::{
 
 use anyhow::Result;
 
+use tui::{
+    text::Span,
+    style::{
+        Color,
+        Style,
+    },
+};
+
 use crate::{
     content::{
         stack::StateContext,
@@ -18,7 +26,6 @@ use crate::{
         },
         providers::{
             self,
-            FriendlyID,
             traits::{
                 impliment_content_provider,
                 ContentProviderTrait,
@@ -28,9 +35,23 @@ use crate::{
                 CPProvider,
                 Loadable,
             },
+            FriendlyID,
+        },
+        display::{
+            DisplayContext,
+            DisplayState,
         },
     },
-    app::app::SelectedIndex,
+    app::{
+        app::SelectedIndex,
+        display::{
+            Display,
+            ListBuilder,
+            Item,
+            Line,
+            SelectedText,
+        },
+    },
     service::{
         python::{
             action::{
@@ -73,6 +94,79 @@ impl Default for YTExplorer {
             loaded: false,
             name: "Youtube".into(),
         }
+    }
+}
+
+impl<'content_manager> Display<'content_manager> for YTExplorer {
+    type DisplayContext = DisplayContext<'content_manager>;
+    fn display(&self, context: Self::DisplayContext) -> ListBuilder<'static> {
+        let mut lb = ListBuilder::default();
+        lb.title((self as &dyn Provider).get_name().to_owned());
+
+        lb.items = match context.state {
+            DisplayState::Normal => {
+                let items = self.songs
+                .iter()
+                .map(|id| context.songs.get(*id).unwrap())
+                .map(|s| s.get_name())
+                .map(String::from)
+                .map(Span::from);
+                
+                let more_items = self.providers
+                .iter()
+                .map(|id| {
+                    context.providers
+                    .get(*id)
+                    .unwrap()
+                    .as_display()
+                    .get_name()
+                })
+                .map(|c| Span {
+                    content: c,
+                    style: Default::default(),
+                });
+
+                items.chain(more_items)
+                .map(Line::new)
+                .map(|line| Item {
+                    text: vec![line],
+                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0)))
+                })
+                .collect()
+            }
+            
+            DisplayState::Edit(ctx) => {
+                self.editables(ctx)
+                .map(|e| {
+                    match e {
+                        Editables::Main(e) => {
+                            match e {
+                                YTEEditables::SEARCH_TERM => e.to_string() + ": " + &self.search_term,
+                                YTEEditables::SEARCH_TYPE => e.to_string() + ": " + &self.search_type.to_string(),
+                            }
+                        }
+                        Editables::SType(e) => {
+                            e.to_string()
+                        }
+                    }
+                })
+                .map(Span::from)
+                .map(Line::new)
+                .map(|line| Item {
+                    text: vec![line],
+                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0))),
+                })
+                .collect()
+            }
+            
+            DisplayState::Menu(_) => unreachable!(),
+        };
+
+        lb
+    }
+
+    fn get_name<'a>(&self) -> std::borrow::Cow<'a, str> {
+        std::borrow::Cow::from(self.name.clone())
     }
 }
 
@@ -254,7 +348,7 @@ impl Editable for YTExplorer {
                         let mut index = SelectedIndex::default();
                         index.select(i);
                         ctx.push(index);
-                        let callback = move |me: &mut providers::ContentProvider, content: String| -> ContentManagerAction {
+                        let apply_callback = move |me: &mut providers::ContentProvider, content: String| -> ContentManagerAction {
                             let cp = me.as_any_mut().downcast_mut::<Self>().unwrap();
                             cp.loaded = true;
                             cp.search_term = content;
@@ -281,7 +375,7 @@ impl Editable for YTExplorer {
                         vec![
                             ContentManagerAction::EnableTyping {
                                 content: self.search_term.clone(),
-                                callback: Box::new(callback),
+                                callback: Box::new(apply_callback),
                                 loader: self_id.into(),
                             },
                         ].into()
@@ -313,7 +407,7 @@ impl Loadable for YTExplorer {
 }
 
 impl ContentProviderTrait for YTExplorer {
-    impliment_content_provider!(YTExplorer, Provider, Loadable, Editable, SongProvider, CPProvider);
+    impliment_content_provider!(YTExplorer, Provider, Loadable, Editable, SongProvider, CPProvider, Display);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug,)]

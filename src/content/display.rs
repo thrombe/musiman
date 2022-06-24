@@ -1,60 +1,30 @@
 
+
 use crate::{
     content::{
-        providers::FriendlyID,
-        manager::manager::ContentManager,
         register::{
-            ID,
+            ContentProviderID,
+            SongID,
+            ContentRegister,
         },
+        song::Song,
+        providers::ContentProvider,
     },
 };
 
-pub enum DisplayContent {
-    Names(Vec<String>),
-    IDs(Vec<ID>),
-    FriendlyID(Vec<FriendlyID>)
+use super::stack::StateContext;
+
+
+pub struct DisplayContext<'a> {
+    pub state: DisplayState<'a>,
+    pub songs: &'a ContentRegister<Song, SongID>,
+    pub providers: &'a ContentRegister<ContentProvider, ContentProviderID>
 }
-impl<'a> From<Box<dyn Iterator<Item = FriendlyID> + 'a>> for DisplayContent {
-    fn from(ids: Box<dyn Iterator<Item = FriendlyID> + 'a>) -> Self {
-        Self::FriendlyID(ids.collect())
-    }
-}
-impl DisplayContent {
-    pub fn get(self, ch: &ContentManager) -> Vec<String> {
-        match self {
-            Self::Names(names) => names,
-            Self::IDs(ids) => {
-                ids.iter().map(|&id| {
-                    match id {
-                        ID::Song(id) => {
-                            ch.get_song(id).get_name()
-                        }
-                        ID::ContentProvider(id) => {
-                            ch.get_provider(id).get_name()
-                        }
-                    }.to_owned()
-                }).collect()
-            }
-            Self::FriendlyID(fids) => {
-                fids
-                .into_iter()
-                .map(|fid| {
-                    match fid {
-                        FriendlyID::String(c) => c,
-                        FriendlyID::ID(id) => {
-                            match id {
-                                ID::Song(id) => {
-                                    ch.get_song(id).get_name()
-                                }
-                                ID::ContentProvider(id) => {
-                                    &ch.get_provider(id).get_name()
-                                }
-                            }.to_owned()
-                        }
-                    }
-                })
-                .collect()
-            }
-        }
-    }
+
+
+// BAD: this again introduces the problem that a state with edit can be passed to a provider without edit
+pub enum DisplayState<'a> {
+    Normal,
+    Menu(&'a StateContext),
+    Edit(&'a StateContext),
 }

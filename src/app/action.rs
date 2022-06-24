@@ -10,9 +10,12 @@ use derivative::Derivative;
 use anyhow::Result;
 
 use crate::{
-    app::app::{
-        App,
-        AppState,
+    app::{
+        app::{
+            App,
+            AppState,
+        },
+        display::ListBuilder,
     },
     content::{
         providers::ContentProvider,
@@ -36,9 +39,7 @@ pub enum AppAction {
         callback: TypingCallback,
         loader: ID,
     },
-    UpdateDisplayContent {
-        content: Vec<String>,
-    },
+    UpdateDisplayContent,
     Redraw,
     ApplyTyped {
         #[derivative(Debug="ignore")]
@@ -99,7 +100,6 @@ impl AppAction {
             }
             Self::EnableTyping {mut content, callback, loader} => {
                 app.state = AppState::Typing;
-                // app.input = content.chars().collect();
                 app.input = content.drain(..).collect();
                 app.input_cursor_pos = app.input.len();
                 app.typing_callback = AppAction::ApplyTyped { callback, loader }
@@ -117,8 +117,8 @@ impl AppAction {
                     }
                 }
             }
-            Self::UpdateDisplayContent {content} => {
-                app.browser_widget.options = content;
+            Self::UpdateDisplayContent => {
+                app.browser_widget.list_builder = app.content_manager.display();
             }
             Self::Redraw => {
                 app.redraw_needed = true;

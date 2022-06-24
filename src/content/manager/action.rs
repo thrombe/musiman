@@ -176,7 +176,7 @@ impl ContentManagerAction {
 
                 Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch)?;
 
-                ch.app_action.queue(AppAction::UpdateDisplayContent { content: ch.get_content_names() });
+                ch.app_action.queue(AppAction::UpdateDisplayContent);
             }
             Self::PushToContentStack { id } => {
                 dbg!(id);
@@ -212,7 +212,7 @@ impl ContentManagerAction {
                 ch.parallel_handle.run(action);
             }
             Self::RefreshDisplayContent => {
-                ch.app_action.queue(AppAction::UpdateDisplayContent { content: ch.get_content_names() });
+                ch.app_action.queue(AppAction::UpdateDisplayContent);
             }
             Self::UpdateImage {img} => {
                 ch.image_handler.set_image(img);

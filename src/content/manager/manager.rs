@@ -32,11 +32,15 @@ use crate::{
             ContentManagerAction,
         },
         stack::ContentState,
-        display::DisplayContent,
+        display::{
+            DisplayContext,
+            DisplayState,
+        },
     },
     app::{
         action::AppAction,
         app::SelectedIndex,
+        display::ListBuilder,
     },
     service::{
         db::DBHandler,
@@ -136,6 +140,66 @@ impl ContentManager {
             }
             GlobalContent::Notifier => (),
         }
+    }
+}
+
+impl ContentManager {
+    pub fn display(&self) -> ListBuilder<'static> {
+        let state = self.content_stack.get_state();
+        match state {
+            ContentState::Normal => {
+                let id = self.content_stack.last();
+                match id {
+                    GlobalProvider::ContentProvider(id) => {
+                        self.display_provider(id, DisplayState::Normal)
+                    }
+                    GlobalProvider::Notifier => todo!(),
+                }
+            }
+            ContentState::Menu { ctx, id } => {
+                match *id {
+                    GlobalContent::Notifier => todo!(),
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::Song(id) => {
+                                self.display_song(id, DisplayState::Menu(ctx))
+                            }
+                            ID::ContentProvider(id) => {
+                                self.display_provider(id, DisplayState::Menu(ctx))
+                            }
+                        }
+                    }
+                }
+            }
+            ContentState::Edit { ctx, id } => {
+                match *id {
+                    GlobalContent::Notifier => todo!(),
+                    GlobalContent::ID(id) => {
+                        match id {
+                            ID::Song(id) => {
+                                self.display_song(id, DisplayState::Edit(ctx))
+                            }
+                            ID::ContentProvider(id) => {
+                                self.display_provider(id, DisplayState::Edit(ctx))
+                            }
+                        }
+                    }
+                }
+            }
+            ContentState::GlobalMenu(_) => todo!(),
+        }
+    }
+
+    fn display_provider<'b>(&self, id: ContentProviderID, state: DisplayState<'b>) -> ListBuilder<'static> {
+        let cp = self.get_provider(id);
+        cp.as_display().display(DisplayContext {
+            state,
+            songs: &self.songs,
+            providers: &self.content_providers,
+        })
+    }
+    fn display_song(&self, id: SongID, state: DisplayState) -> ListBuilder<'static> {
+        todo!()
     }
 }
 
@@ -256,58 +320,8 @@ impl ContentManager {
                 todo!()
             }
         }
-        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
+        self.app_action.queue(AppAction::UpdateDisplayContent);
         Ok(())
-    }
-
-    pub fn get_content_names(&self) -> Vec<String> {
-        let state = self.content_stack.get_state();
-        match state {
-            ContentState::Normal => {
-                let id = self.content_stack.last();
-                match id {
-                    GlobalProvider::ContentProvider(id) => {
-                        let cp = self.get_provider(id);
-                        let dc: DisplayContent = cp.get_friendly_ids().into();
-                        dc.get(self)
-                    }
-                    GlobalProvider::Notifier => todo!(),
-                }
-            }
-            ContentState::Menu {ctx, id} => {
-                match id {
-                    GlobalContent::ID(id) => {
-                        match id {
-                            ID::Song(id) => todo!(),
-                            ID::ContentProvider(id) => {
-                                let cp = self.get_provider(*id);
-                                let dc: DisplayContent = cp.menu_options(ctx).into();
-                                dc.get(self)
-                            }
-                        }
-                    }
-                    GlobalContent::Notifier => todo!(),
-                }
-            }
-            ContentState::Edit {ctx, id} => {
-                match id {
-                    GlobalContent::ID(id) => {
-                        match id {
-                            ID::Song(id) => todo!(),
-                            ID::ContentProvider(id) => {
-                                let cp = self.get_provider(*id);
-                                let dc: DisplayContent = cp.get_editables(ctx).into();
-                                dc.get(self)
-                            }
-                        }
-                    }
-                    GlobalContent::Notifier => todo!(),
-                }
-            }
-            ContentState::GlobalMenu(i) => {
-                todo!()
-            }
-        }
     }
 
     pub fn get_selected_index(&mut self) -> &mut SelectedIndex {
@@ -393,7 +407,7 @@ impl ContentManager {
                 todo!()
             }
         }
-        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
+        self.app_action.queue(AppAction::UpdateDisplayContent);
         Ok(())
     }    
 
@@ -452,7 +466,7 @@ impl ContentManager {
                 todo!()
             }
         }
-        self.app_action.queue(AppAction::UpdateDisplayContent { content: self.get_content_names() });
+        self.app_action.queue(AppAction::UpdateDisplayContent);
         Ok(())
     }    
 

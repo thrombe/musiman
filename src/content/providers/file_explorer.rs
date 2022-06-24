@@ -18,8 +18,15 @@ use crate::{
                 CPProvider,
             },
         },
+        display::DisplayContext,
     },
-    app::app::SelectedIndex,
+    app::{
+        app::SelectedIndex,
+        display::{
+            Display,
+            ListBuilder,
+        },
+    },
 };
 
 
@@ -121,6 +128,16 @@ impl Loadable for FileExplorer {
     }
 }
 
+impl<'b> Display<'b> for FileExplorer {
+    type DisplayContext = DisplayContext<'b>;
+    fn display(&self, _context: Self::DisplayContext) -> ListBuilder<'static> {
+        todo!()
+    }
+    fn get_name<'a>(&self) -> std::borrow::Cow<'a, str> {
+        todo!()
+    }
+}
+
 impl ContentProviderTrait for FileExplorer {
-    impliment_content_provider!(FileExplorer, Provider, SongProvider, CPProvider, Loadable);
+    impliment_content_provider!(FileExplorer, Provider, SongProvider, CPProvider, Loadable, Display);
 }

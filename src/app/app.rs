@@ -11,8 +11,6 @@ use tui::{
     widgets::{
         Block,
         Borders,
-        List,
-        ListItem,
         Paragraph,
         ListState,
     },
@@ -47,13 +45,19 @@ use crossterm::{
 };
 // use unicode_width::UnicodeWidthStr; // string.width() -> gives correct width (including cjk chars) (i assume)
 use anyhow::Result;
+use std::borrow::Cow;
 
 use crate::{
     content::manager::{
         manager::ContentManager,
         action::ContentManagerAction,
     },
-    app::action::AppAction,
+    app::{
+        action::AppAction,
+        display::{
+            ListBuilder,
+        },
+    },
 };
 
 
@@ -96,7 +100,7 @@ impl SelectedIndex {
 
 #[derive(Default)]
 pub struct BrowserWidget {
-    pub options: Vec<String>,
+    pub list_builder: ListBuilder<'static>,
 }
 
 impl BrowserWidget {
@@ -110,7 +114,7 @@ impl BrowserWidget {
                 ch.debug_current();
             }
             KeyCode::Char('g') => {
-                // self.options = ch.menu_for_selected();
+                todo!()
             }
             KeyCode::Char('G') => {
                 ch.open_menu_for_current()?;
@@ -135,21 +139,9 @@ impl BrowserWidget {
         Ok(true)
     }
 
-    fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect, selected_index: &mut SelectedIndex) {
-        let messages = List::new(
-                self.options.iter()
-                .enumerate()
-                .map(|(i, m)| {
-                    let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
-                    ListItem::new(content).style(Style::default().fg(Color::Cyan))
-                })
-                .collect::<Vec<_>>()
-        )
-        .block(Block::default().borders(Borders::ALL).title("Browser Widget"))
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Rgb(200, 100, 0)))
-        // .highlight_symbol("> ")
-        ;
-        f.render_stateful_widget(messages, r, selected_index.into());
+    fn render<'a, B: Backend>(&self, f: &mut Frame<B>, r: Rect, cm: &mut ContentManager) {
+        let messages = self.list_builder.list(r, cm.get_selected_index().selected_index());
+        f.render_stateful_widget(messages, r, cm.get_selected_index().into());
     }
 }
 
@@ -191,6 +183,7 @@ impl PlayerWidget {
     }
 
     fn render<B: Backend>(&self, f: &mut Frame<B>, r: Rect) {
+        // tui::widgets::LineGauge/tui::widgets::Gauge for progress bar
         match self.render_state.clone() {
             RenderState::Normal => {
                 f.render_widget(
@@ -308,13 +301,6 @@ impl App {
         self.player_widget.update(&mut self.content_manager)?;
         let action = self.content_manager.get_app_action();
         action.apply(self)?;
-        match self.state {
-            AppState::Typing => {
-                let index = self.content_manager.get_selected_index().selected_index();
-                self.browser_widget.options[index] = self.input[..].iter().collect::<String>();
-            }
-            _ => (),
-        }
         Ok(())
     }
     
@@ -431,21 +417,12 @@ impl App {
 
         self.status_bar.render(f, status_rect);
         self.player_widget.render(f, right_rect);
-        self.browser_widget.render(f, left_rect, self.content_manager.get_selected_index());
+        self.browser_widget.render(f, left_rect, &mut self.content_manager);
         
         self.content_manager.image_handler.set_offset(right_rect.x + 1, right_rect.y + 1);
         self.content_manager.image_handler.set_size(Some(right_rect.width as u32 - 2), Some(right_rect.height as u32 - 2));
         self.content_manager.image_handler.maybe_print()?;
 
-        match self.state {
-            AppState::Typing => {
-                f.set_cursor(
-                    4 + left_rect.x + self.input_cursor_pos as u16, // BAD: offset due to sr no. can't be known here
-                    1 + left_rect.y + self.content_manager.get_selected_index().selected_index() as u16, // - offset?
-                );
-            }
-            _ => (),
-        }
         Ok(())
     }
 }

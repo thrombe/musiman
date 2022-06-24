@@ -195,6 +195,15 @@ plan:
   . use some register<DisplayConfig: DisplayConfigTrait>() func or something to add the default config file in config folder
   . doing register<_>() does something and loads the config and stores it somewhere, then do get_config<_>() -> &DisplayConfig
 
+behaviour:
+  . cp typing but better
+plan:
+  . 3 callbacks from cp
+    . apply
+    . update typed stuff realtime
+    . set cursor
+  . do it completely in ListBuilder somehow
+
 . plan
   . import relevent notes from thrombe/musimanager
   . a global settings
