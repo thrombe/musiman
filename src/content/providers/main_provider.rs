@@ -106,14 +106,15 @@ impl Menu for MainProvider {
             MainProviderMenuOption::ADD_PLAYLIST_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_QUEUE_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_FILE_EXPLORER => {
+                let path = "/home/issac/daata/phon-data/.musi/IsBac";
+                let mut fe = FileExplorer::default();
+                fe.name = Cow::from(format!("File Explorer: {dir}", dir = path.rsplit_terminator("/").next().unwrap()));
+                fe.path = Cow::from(path);
                 vec![
                     ContentManagerAction::PopContentStack,
                     ContentManagerAction::AddCPToCPAndContentStack {
                         id: self_id,
-                        cp: FileExplorer::new(
-                            "File Explorer: ",
-                            "/home/issac/daata/phon-data/.musi/IsBac/",
-                        ).into(),
+                        cp: fe.into()
                     },
                 ].into()
             }

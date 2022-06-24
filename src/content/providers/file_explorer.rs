@@ -1,5 +1,14 @@
 
 
+use std::borrow::Cow;
+use tui::{
+    text::Span,
+    style::{
+        Color,
+        Style,
+    },
+};
+
 use crate::{
     content::{
         song::tagged_file_song::TaggedFileSong,
@@ -18,12 +27,18 @@ use crate::{
                 CPProvider,
             },
         },
-        display::DisplayContext,
+        display::{
+            DisplayContext,
+            DisplayState,
+        },
     },
     app::{
         app::SelectedIndex,
         display::{
             Display,
+            Line,
+            Item,
+            SelectedText,
             ListBuilder,
         },
     },
@@ -34,9 +49,9 @@ use crate::{
 pub struct FileExplorer {
     songs: Vec<SongID>,
     providers: Vec<ContentProviderID>,
-    name: String,
+    pub name: Cow<'static, str>,
     selected: SelectedIndex,
-    path: String,
+    pub path: Cow<'static, str>,
     loaded: bool,
 }
 
@@ -49,16 +64,6 @@ impl Default for FileExplorer {
             selected: Default::default(),
             path: "".into(),
             loaded: false,
-        }
-    }
-}
-
-impl FileExplorer {
-    pub fn new(name: &str, path: &str) -> Self {
-        Self {
-            name: name.to_owned() + path.rsplit_terminator("/").next().unwrap(),
-            path: path.into(),
-            ..Default::default()
         }
     }
 }
@@ -102,14 +107,18 @@ impl Loadable for FileExplorer {
         self.loaded = true;
         let mut s = vec![];
         let mut sp = vec![];
-        std::fs::read_dir(&self.path)
+        std::fs::read_dir(self.path.as_ref())
         .unwrap()
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .for_each(|e| {
             if e.is_dir() {
-                let dir = e.to_str().unwrap().to_owned();
-                sp.push(FileExplorer::new("", &dir).into());
+                let dir = e.to_str().unwrap();
+                sp.push(FileExplorer {
+                    name: Cow::from(dir.rsplit_terminator("/").next().unwrap().to_owned()),
+                    path: Cow::from(dir.to_owned()),
+                    ..Default::default()
+                }.into());
             } else if e.is_file() {
                 let file = e.to_str().unwrap();
                 if file.ends_with(".m4a") {
@@ -126,11 +135,49 @@ impl Loadable for FileExplorer {
 
 impl<'b> Display<'b> for FileExplorer {
     type DisplayContext = DisplayContext<'b>;
-    fn display(&self, _context: Self::DisplayContext) -> ListBuilder<'static> {
-        todo!()
+    fn display(&self, context: Self::DisplayContext) -> ListBuilder<'static> {
+        let mut lb = ListBuilder::default();
+        lb.title(Span::raw(self.get_name()));
+
+        lb.items = match context.state {
+            DisplayState::Normal => { // BAD: code directly copied from yt_explorer. find a way to not duplicate code maybe using ContentProvider.ids() ??
+                let items = self.songs
+                .iter()
+                .map(|id| context.songs.get(*id).unwrap())
+                .map(|s| s.get_name())
+                .map(String::from)
+                .map(Span::from);
+                
+                let more_items = self.providers
+                .iter()
+                .map(|id| {
+                    context.providers
+                    .get(*id)
+                    .unwrap()
+                    .as_display()
+                    .get_name()
+                })
+                .map(|c| Span {
+                    content: c,
+                    style: Default::default(),
+                });
+
+                items.chain(more_items)
+                .map(Line::new)
+                .map(|line| Item {
+                    text: vec![line],
+                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0)))
+                })
+                .collect()
+            }
+            DisplayState::Menu(_) => unreachable!(),
+            DisplayState::Edit(_) => unreachable!(),
+        };
+
+        lb
     }
-    fn get_name(&self) -> std::borrow::Cow<'static, str> {
-        todo!()
+    fn get_name(&self) -> Cow<'static, str> {
+        self.name.clone()
     }
 }
 

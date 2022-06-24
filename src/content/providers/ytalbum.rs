@@ -1,5 +1,13 @@
 
 use anyhow::Result;
+use std::borrow::Cow;
+use tui::{
+    style::{
+        Color,
+        Style
+    },
+    text::Span,
+};
 
 use crate::{
     content::{
@@ -17,13 +25,19 @@ use crate::{
             SongID,
             ContentProviderID,
         },
-        display::DisplayContext,
+        display::{
+            DisplayContext,
+            DisplayState,
+        },
     },
     app::{
         app::SelectedIndex,
         display::{
             Display,
             ListBuilder,
+            Line,
+            SelectedText,
+            Item,
         },
     },
     service::{
@@ -48,25 +62,25 @@ pub struct YTAlbum {
     songs: Vec<SongID>,
     loaded: bool,
     id: YTAlbumID,
-    name: String,
+    name: Cow<'static, str>,
     index: SelectedIndex,
 }
 impl YTAlbum {
-    pub fn new_playlist_id(name: String, playlist_id: String) -> Self {
+    pub fn new_playlist_id<T: Into<Cow<'static, str>>>(name: T, playlist_id: T) -> Self {
         Self {
             songs: Default::default(),
             loaded: false,
-            id: YTAlbumID::PlaylistID(playlist_id),
-            name,
+            id: YTAlbumID::PlaylistID(playlist_id.into()),
+            name: name.into(),
             index: Default::default(),
         }
     }
-    pub fn new_browse_id(name: String, browse_id: String) -> Self {
+    pub fn new_browse_id<T: Into<Cow<'static, str>>>(name: T, browse_id: T) -> Self {
         Self {
             songs: Default::default(),
             loaded: false,
-            id: YTAlbumID::BrowseID(browse_id),
-            name,
+            id: YTAlbumID::BrowseID(browse_id.into()),
+            name: name.into(),
             index: Default::default(),
         }
     }
@@ -74,8 +88,8 @@ impl YTAlbum {
 
 #[derive(Debug, Clone)]
 enum YTAlbumID {
-    PlaylistID(String),
-    BrowseID(String),
+    PlaylistID(Cow<'static, str>),
+    BrowseID(Cow<'static, str>),
 }
 
 impl SongProvider for YTAlbum {
@@ -192,11 +206,33 @@ impl Provider for YTAlbum {
 
 impl<'b> Display<'b> for YTAlbum {
     type DisplayContext = DisplayContext<'b>;
-    fn display(&self, _context: Self::DisplayContext) -> ListBuilder<'static> {
-        todo!()
+    fn display(&self, context: Self::DisplayContext) -> ListBuilder<'static> {
+        let mut lb = ListBuilder::default();
+        lb.title(Span::raw(self.get_name()));
+
+        lb.items = match context.state {
+            DisplayState::Normal => { // BAD: partially copied from yt_explorer
+                self.songs
+                .iter()
+                .map(|id| context.songs.get(*id).unwrap())
+                .map(|s| s.get_name())
+                .map(String::from)
+                .map(Span::from)
+                .map(Line::new)
+                .map(|line| Item {
+                    text: vec![line],
+                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0)))
+                })
+                .collect()
+            }
+            DisplayState::Menu(_) => unreachable!(),
+            DisplayState::Edit(_) => unreachable!(),
+        };
+
+        lb
     }
-    fn get_name(&self) -> std::borrow::Cow<'static, str> {
-        todo!()
+    fn get_name(&self) -> Cow<'static, str> {
+        self.name.clone()
     }
 }
 
