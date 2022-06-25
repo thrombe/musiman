@@ -65,59 +65,27 @@ impl<T> From<T> for super::ContentProvider
 
 // ? this requirement is quite dangerous time waster. can it be enforced?
 // the macro must be called on all the traits, else those implimentations will not be used
-// TODO: SOL: instead of this, impliment as_<trait> methods which gives Option<&dyn <trait>>, so the caller is forced to make sure it impliments the trait.
-// TODO: also remove the confirmation methods like has_menu. as this data is encoded in the Option as above
 pub trait ContentProviderTrait
     where
         Self: std::fmt::Debug + Send + Sync + CPClone + Any,
 {
-    fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
-        Box::new([].into_iter())
-    }
-    fn add_song(&mut self, _: SongID) {
-        error!("this provider cannot store songs {self:#?}");
-    }
+    fn as_song_provider(&self) -> Option<&dyn SongProvider> {None}
+    fn as_song_provider_mut(&mut self) -> Option<&mut dyn SongProvider> {None}
     
 
-    fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
-        Box::new([].into_iter())
-    }
-    fn add_provider(&mut self, _: ContentProviderID) {
-        error!("this provider cannot store providers {self:#?}");
-    }
+    fn as_provider(&self) -> Option<&dyn CPProvider> {None}
+    fn as_provider_mut(&mut self) -> Option<&mut dyn CPProvider> {None}
 
 
-    fn has_menu(&self) -> bool {
-        false
-    }
-    fn num_options(&self, _: &StateContext) -> usize {
-        0
-    }
-    fn apply_option(&mut self, _: &mut StateContext, _: ContentProviderID) -> ContentManagerAction {
-        ContentManagerAction::None
-    }
+    fn as_menu(&self) -> Option<&dyn Menu> {None}
+    fn as_menu_mut(&mut self) -> Option<&mut dyn Menu> {None}
 
 
-    fn maybe_load(&mut self, _: ContentProviderID) -> ContentManagerAction {
-        ContentManagerAction::None
-    }
-    fn load(&mut self, _: ContentProviderID) -> ContentManagerAction {
-        ContentManagerAction::None
-    }
-    fn is_loaded(&self) -> bool {
-        true
-    }
+    fn as_loadable(&mut self) -> Option<&mut dyn Loadable> {None}
 
     
-    fn has_editables(&self) -> bool {
-        false
-    }
-    fn num_editables(&self, _: &StateContext) -> usize {
-        0
-    }
-    fn select_editable(&mut self, _: &mut StateContext, _: ContentProviderID) -> ContentManagerAction {
-        ContentManagerAction::None
-    }
+    fn as_editable(&self) -> Option<&dyn Editable> {None}
+    fn as_editable_mut(&mut self) -> Option<&mut dyn Editable> {None}
 
 
     // every content provider has to impliment these
@@ -159,18 +127,22 @@ pub trait ContentProviderTrait
     }
     fn ids<'a>(&'a self) -> Box<dyn Iterator<Item = ID> + 'a> {
         Box::new(
-            self.providers()
+            self.as_provider()
+            .map(|p| p.providers())
+            .unwrap_or(Box::new([].into_iter()))
             .map(Clone::clone)
             .map(Into::into)
             .chain(
-                self.songs()
+                self.as_song_provider()
+                .map(|s| s.songs())
+                .unwrap_or(Box::new([].into_iter()))
                 .map(Clone::clone)
                 .map(Into::into)
             )
         )
     }
     fn get_size(&self) -> usize {
-        self.ids().size_hint().0
+        self.ids().count()
     }
     
     // for downcasting (the macro has implimentation for this)
@@ -196,18 +168,12 @@ pub trait Loadable {
 
 pub trait Menu {
     fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction;
-    fn has_menu(&self) -> bool {
-        true
-    }
     fn num_options(&self, ctx: &StateContext) -> usize;
 }
 
 pub trait Editable {
     fn select_editable(&mut self, ctx: &mut StateContext, self_if: ContentProviderID) -> ContentManagerAction;
     fn num_editables(&self, ctx: &StateContext) -> usize;
-    fn has_editables(&self) -> bool {
-        true
-    }
 }
 
 pub trait SongProvider {
@@ -229,53 +195,23 @@ pub trait Provider {
 #[macro_export]
 macro_rules! _impliment_content_provider {
     ($t:ident, CPProvider) => {
-        fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
-            CPProvider::providers(self)
-        }
-        fn add_provider(&mut self, id: ContentProviderID) {
-            CPProvider::add_provider(self, id)
-        }
+        fn as_provider(&self) -> Option<&dyn CPProvider> {Some(self)}
+        fn as_provider_mut(&mut self) -> Option<&mut dyn CPProvider> {Some(self)}
     };
     ($t:ident, SongProvider) => {
-        fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
-            SongProvider::songs(self)
-        }
-        fn add_song(&mut self, id: SongID) {
-            SongProvider::add_song(self, id)
-        }
+        fn as_song_provider(&self) -> Option<&dyn SongProvider> {Some(self)}
+        fn as_song_provider_mut(&mut self) -> Option<&mut dyn SongProvider> {Some(self)}
     };
     ($t:ident, Editable) => {
-        fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
-            Editable::select_editable(self, ctx, self_id)
-        }
-        fn num_editables(&self, ctx: &StateContext) -> usize {
-            Editable::num_editables(self, ctx)
-        }
-        fn has_editables(&self) -> bool {
-            Editable::has_editables(self)
-        }
+        fn as_editable(&self) -> Option<&dyn Editable> {Some(self)}
+        fn as_editable_mut(&mut self) -> Option<&mut dyn Editable> {Some(self)}
     };
     ($t:ident, Menu) => {
-        fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
-            Menu::apply_option(self, ctx, self_id)
-        }
-        fn has_menu(&self) -> bool {
-            Menu::has_menu(self)
-        }
-        fn num_options(&self, ctx: &StateContext) -> usize {
-            Menu::num_options(self, ctx)
-        }        
+        fn as_menu(&self) -> Option<&dyn Menu> {Some(self)}
+        fn as_menu_mut(&mut self) -> Option<&mut dyn Menu> {Some(self)}
     };
     ($t:ident, Loadable) => {
-        fn maybe_load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
-            Loadable::maybe_load(self, self_id)
-        }
-        fn load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
-            Loadable::load(self, self_id)
-        }
-        fn is_loaded(&self) -> bool {
-            Loadable::is_loaded(self)
-        }   
+        fn as_loadable(&mut self) -> Option<&mut dyn Loadable> {Some(self)}
     };
     ($t:ident, Provider) => {
         fn get_selected_index_mut(&mut self) -> &mut SelectedIndex {
@@ -286,9 +222,7 @@ macro_rules! _impliment_content_provider {
         }
     };
     ($t:ident, Display) => {
-        fn as_display(&self) -> &dyn Display<DisplayContext = DisplayContext> {
-            self
-        }
+        fn as_display(&self) -> &dyn Display<DisplayContext = DisplayContext> {self}
     };
     ($t:ident, $r:tt, $($e:tt), +) => {
         impliment_content_provider!($t, $r); // wtf, it does not recognise _impliment_content_provider
@@ -296,12 +230,8 @@ macro_rules! _impliment_content_provider {
             impliment_content_provider!($t, $e);
         )+
 
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-            self
-        }
+        fn as_any(&self) -> &dyn std::any::Any {self}
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {self}
     };
 }
 

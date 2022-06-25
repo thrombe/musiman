@@ -126,10 +126,10 @@ impl ContentManager {
                         let cp = self.content_providers.unregister(id);
                         match cp {
                             Some(cp) => {
-                                for &s_id in cp.songs() {
+                                for &s_id in cp.as_song_provider().unwrap().songs() {
                                     let _ = self.unregister(s_id.into());
                                 }
-                                for &cp_id in cp.providers() {
+                                for &cp_id in cp.as_provider().unwrap().providers() {
                                     let _ = self.unregister(cp_id.into());
                                 }
                             }
@@ -240,6 +240,10 @@ impl ContentManager {
         // dbg!(self.player.position());
         // dbg!(self.player.progress());
         dbg!(&self.image_handler);
+        if self.active_song.is_some() {
+            let s = self.get_song(self.active_song.unwrap()).as_display();
+            dbg!(s.title(), s.artist(), s.album());
+        }
         let id = self.content_stack.last();
         match id {
             GlobalProvider::ContentProvider(id) => {
@@ -284,7 +288,7 @@ impl ContentManager {
                         match id {
                             ID::ContentProvider(id) => {
                                 let cp = self.content_providers.get_mut(id).unwrap();
-                                let action = cp.apply_option(ctx, id);
+                                let action = cp.as_menu_mut().unwrap().apply_option(ctx, id);
                                 action.apply(self)?;
                             }
                             ID::Song(id) => {
@@ -303,7 +307,7 @@ impl ContentManager {
                         match id {
                             ID::ContentProvider(id) => {
                                 let cp = self.content_providers.get_mut(id).unwrap();
-                                let action = cp.select_editable(ctx, id);
+                                let action = cp.as_editable_mut().unwrap().select_editable(ctx, id);
                                 action.apply(self)?;
                             }
                             ID::Song(id) => {
@@ -397,7 +401,7 @@ impl ContentManager {
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
-                        if cp.has_menu() {
+                        if cp.as_menu().is_some() {
                             self.content_stack.open_menu(id);
                         }
                     }
@@ -456,7 +460,7 @@ impl ContentManager {
                     }
                     ID::ContentProvider(id) => {
                         let cp = self.get_provider(id);
-                        if cp.has_editables() {
+                        if cp.as_editable().is_some() {
                             self.content_stack.open_edit(id);
                         }
                     }
@@ -491,12 +495,12 @@ impl ContentManager {
 
         // FIX: find queue provider. think of a better soloution
         let mp = self.get_provider(mp_id);
-        for &cp_id in mp.providers().collect::<Vec<_>>() {
+        // for &cp_id in mp.providers().collect::<Vec<_>>() {
             // let cp = self.get_provider_mut(cp_id);
             // if cp.cp_type == ContentProviderType::Queues {
             //     cp.add(id.into());
             // }
-        }
+        // }
     }
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
         self.active_song.map(|id| self.unregister(id.into()));
@@ -568,7 +572,7 @@ impl ContentManager {
                             }
                             ID::ContentProvider(id) => {
                                 let cp = self.content_providers.get_mut(id).unwrap();
-                                cp.num_editables(ctx)
+                                cp.as_editable().unwrap().num_editables(ctx)
                             }
                         }
                     }
@@ -589,7 +593,7 @@ impl ContentManager {
                             }
                             ID::ContentProvider(id) => {
                                 let cp = self.content_providers.get(id).unwrap();
-                                cp.num_options(ctx)
+                                cp.as_menu().unwrap().num_options(ctx)
                             }
                         }
                     }

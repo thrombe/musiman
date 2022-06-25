@@ -7,10 +7,7 @@ use crate::{
     error,
 };
 
-
-use anyhow::{
-    Result,
-};
+use anyhow::Result;
 use derivative::Derivative;
 use std::{
     thread,
@@ -28,9 +25,7 @@ use crate::{
         providers::ContentProvider,
         manager::{
             manager::ContentManager,
-            callback::{
-                ContentManagerCallback,
-            },
+            callback::ContentManagerCallback,
         },
         register::{
             ContentProviderID,
@@ -131,9 +126,11 @@ impl ContentManagerAction {
         match self {
             Self::None => (),
             Self::TryLoadContentProvider {loader_id} => {
-                let loaded = ch.get_provider_mut(loader_id);
-                let action = loaded.maybe_load(loader_id);
-                action.apply(ch)?;
+                let cp = ch.get_provider_mut(loader_id).as_loadable();
+                if let Some(cp) = cp {
+                    let action = cp.maybe_load(loader_id);
+                    action.apply(ch)?;
+                }
             }
             Self::LoadContentProvider {songs, content_providers, loader_id} => {
                 let songs = songs
@@ -149,10 +146,10 @@ impl ContentManagerAction {
                 let cp = ch.get_provider_mut(loader_id);
                 songs
                 .into_iter()
-                .for_each(|s| cp.add_song(s));
+                .for_each(|s| cp.as_song_provider_mut().unwrap().add_song(s));
                 content_providers
                 .into_iter()
-                .for_each(|c| cp.add_provider(c));
+                .for_each(|c| cp.as_provider_mut().unwrap().add_provider(c));
             }
             Self::ReplaceContentProvider {old_id, cp} => {
                 let p = ch.get_provider_mut(old_id);
@@ -162,14 +159,14 @@ impl ContentManagerAction {
             Self::AddCPToCP {id, cp} => {
                 let loaded_id = ch.alloc_content_provider(cp);
                 let loader = ch.get_provider_mut(id);
-                loader.add_provider(loaded_id);
+                loader.as_provider_mut().unwrap().add_provider(loaded_id);
 
                 Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch)?;
             }
             Self::AddCPToCPAndContentStack {id, cp} => {
                 let loaded_id = ch.alloc_content_provider(cp);
                 let loader = ch.get_provider_mut(id);
-                loader.add_provider(loaded_id);
+                loader.as_provider_mut().unwrap().add_provider(loaded_id);
 
                 ch.content_stack.push(loaded_id);
                 ch.register(loaded_id.into());
