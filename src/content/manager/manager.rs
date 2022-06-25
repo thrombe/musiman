@@ -126,11 +126,15 @@ impl ContentManager {
                         let cp = self.content_providers.unregister(id);
                         match cp {
                             Some(cp) => {
-                                for &s_id in cp.as_song_provider().unwrap().songs() {
-                                    let _ = self.unregister(s_id.into());
+                                if let Some(cp) = cp.as_song_provider() {
+                                    for &s_id in cp.songs() {
+                                        let _ = self.unregister(s_id.into());
+                                    }
                                 }
-                                for &cp_id in cp.as_provider().unwrap().providers() {
-                                    let _ = self.unregister(cp_id.into());
+                                if let Some(cp) = cp.as_provider() {
+                                    for &cp_id in cp.providers() {
+                                        let _ = self.unregister(cp_id.into());
+                                    }
                                 }
                             }
                             None => (),
