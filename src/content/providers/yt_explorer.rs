@@ -6,7 +6,6 @@ use crate::{
     error,
 };
 
-use anyhow::Result;
 use std::borrow::Cow;
 
 use tui::{
@@ -24,9 +23,10 @@ use crate::{
         register::{
             SongID,
             ContentProviderID,
+            ID,
         },
         providers::{
-            self,
+            ContentProvider,
             traits::{
                 impliment_content_provider,
                 ContentProviderTrait,
@@ -62,14 +62,21 @@ use crate::{
             code::PyCodeBuilder,
             item::{
                 YtMusic,
+                Ytdl,
                 Json,
             },
         },
-        yt::ytmusic::{
-            YTMusicSearchVideo,
-            YTMusicSearchSong,
-            YTMusicSearchAlbum,
-            YTMusicSearchPlaylist,
+        yt::{
+            ytmusic::{
+                YTMusicSearchVideo,
+                YTMusicSearchSong,
+                YTMusicSearchAlbum,
+                YTMusicSearchPlaylist,
+            },
+            ytdl::{
+                YTDLPlaylist,
+                YtdlSong,
+            },
         },
     },
 };
@@ -99,8 +106,8 @@ impl Default for YTExplorer {
     }
 }
 
-impl<'content_manager> Display<'content_manager> for YTExplorer {
-    type DisplayContext = DisplayContext<'content_manager>;
+impl<'b> Display<'b> for YTExplorer {
+    type DisplayContext = DisplayContext<'b>;
     fn display(&self, context: Self::DisplayContext) -> ListBuilder<'static> {
         let mut lb = ListBuilder::default();
         lb.title(Span::raw(self.get_name()));
@@ -145,10 +152,14 @@ impl<'content_manager> Display<'content_manager> for YTExplorer {
                             match e {
                                 YTEEditables::SEARCH_TERM => e.to_string() + ": " + &self.search_term,
                                 YTEEditables::FILTER => e.to_string() + ": " + &self.filter.to_string(),
+                                YTEEditables::URL => e.to_string(),
                             }
                         }
                         Editables::SFilter(e) => {
                             e.to_string()
+                        }
+                        Editables::Url(e) => {
+                            format!("{e:#?}")
                         }
                     }
                 })
@@ -168,13 +179,7 @@ impl<'content_manager> Display<'content_manager> for YTExplorer {
     }
 
     fn get_name(&self) -> Cow<'static, str> {
-        Cow::from(
-            format!(
-                "{name}: {search_term}",
-                name = self.name,
-                search_term = self.search_term,
-            )
-        )
+        self.name.clone()
     }
 }
 
@@ -183,6 +188,20 @@ impl YTExplorer {
         Self {
             ..Default::default()
         }
+    }
+
+    fn pop_all_ids(&mut self) -> Vec<ID> {
+        let songs = std::mem::replace(&mut self.songs, Default::default());
+        let providers = std::mem::replace(&mut self.providers, Default::default());
+        songs
+        .into_iter()
+        .map(Into::into)
+        .chain(
+            providers
+            .into_iter()
+            .map(Into::into)
+        )
+        .collect()
     }
 
     // TODO: impliment this recursively for ease
@@ -194,17 +213,85 @@ impl YTExplorer {
             1 => {
                 let i = ctx.get(0).unwrap().selected_index();
                 let opt = YTEEditables::iter()[i];
-                match opt {
+                match opt { // TODO: put filter and search_term inside SEARCH (as it is seperate from the url stuff)
                     YTEEditables::FILTER => {
                         Box::new(YTSearchFilter::iter().into_iter().cloned().map(Into::into))
                     }
                     YTEEditables::SEARCH_TERM => {
                         Box::new(YTEEditables::iter().into_iter().cloned().map(Into::into))
                     }
+                    YTEEditables::URL => {
+                        Box::new(YTUrl::iter().into_iter().cloned().map(Into::into))
+                    }
                 }
+            }
+            2 => {
+                Box::new(YTUrl::iter().into_iter().cloned().map(Into::into))
             }
             _ => unreachable!()
         }
+    }
+
+    fn get_url_action(&self, self_id: ContentProviderID, url_type: YTUrl, url: String) -> ContentManagerAction {
+        let code = PyCodeBuilder::new()
+        .threaded()
+        .func(
+            format!(
+                "
+                    data = ytdl.extract_info('{url}', download=False)
+                    data = json.dumps(data, indent=4)
+                    return data
+                ",
+            ),
+            Some(vec![
+                Ytdl::new("ytdl").into(),
+                Json::new("json").into(),
+            ]),
+        )
+        .set_dbg_status(false)
+        .build().unwrap();
+
+        let callback: PyCallback = match url_type {
+            YTUrl::Playlist => {
+                Box::new(move |res: String| {
+                    // debug!("{res}");
+                    let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
+                    // dbg!(&playlist);
+
+                    let action = vec![
+                        ContentManagerAction::LoadContentProvider {
+                            loader_id: self_id,
+                            songs: playlist.songs.into_iter().map(Into::into).collect(),
+                            content_providers: Default::default(),
+                        },
+                        ContentManagerAction::RefreshDisplayContent,
+                    ].into();
+                    Ok(action)
+                })
+            }
+            YTUrl::Video => {
+                Box::new(move |res: String| {
+                    // debug!("{res}");
+                    let song = serde_json::from_str::<YtdlSong>(&res)?;
+                    // dbg!(&song);
+
+                    let action = vec![
+                        ContentManagerAction::LoadContentProvider {
+                            loader_id: self_id,
+                            songs: vec![song.into()],
+                            content_providers: Default::default(),
+                        },
+                        ContentManagerAction::RefreshDisplayContent,
+                    ].into();
+                    Ok(action)
+                })
+            }
+        };
+
+        PyAction::ExecCode {
+            code,
+            callback,
+        }.into()
     }
 
     fn get_search_action(&self, self_id: ContentProviderID) -> ContentManagerAction {
@@ -242,7 +329,7 @@ impl YTExplorer {
         .build().unwrap();
         let callback: PyCallback = match self.filter {
             YTSearchFilter::Albums => {
-                Box::new(move |res: String| -> Result<ContentManagerAction> {
+                Box::new(move |res: String| {
                     // debug!("{res}");
                     let albums = serde_json::from_str::<Vec<YTMusicSearchAlbum>>(&res);
                     // dbg!(&albums);
@@ -279,7 +366,7 @@ impl YTExplorer {
                 })
             }
             YTSearchFilter::Songs => {
-                Box::new(move |res: String| -> Result<ContentManagerAction> {
+                Box::new(move |res: String| {
                     // debug!("{res}");
                     let songs = serde_json::from_str::<Vec<YTMusicSearchSong>>(&res)?;
                     // dbg!(&songs);
@@ -296,7 +383,7 @@ impl YTExplorer {
                 })
             }
             YTSearchFilter::Videos => {
-                Box::new(move |res: String| -> Result<ContentManagerAction> {
+                Box::new(move |res: String| {
                     // debug!("{res}");
                     let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
                     let songs = videos.into_iter().map(Into::into).collect();
@@ -355,9 +442,11 @@ impl Editable for YTExplorer {
                         YTEEditables::FILTER => {
                             FriendlyID::String(e.to_string() + ": " + &self.filter.to_string())
                         }
+                        _ => panic!("no need for this function anymore")
                     }
                 }
                 Editables::SFilter(e) => e.into(),
+                _ => panic!(),
             }
         }))
     }
@@ -372,41 +461,35 @@ impl Editable for YTExplorer {
                         let mut index = SelectedIndex::default();
                         index.select(i);
                         ctx.push(index);
-                        let apply_callback = move |me: &mut providers::ContentProvider, content: String| -> ContentManagerAction {
-                            let cp = me.as_any_mut().downcast_mut::<Self>().unwrap();
-                            cp.loaded = true;
-                            cp.search_term = content;
-                            let songs = std::mem::replace(&mut cp.songs, Default::default());
-                            let providers = std::mem::replace(&mut cp.providers, Default::default());
-                            cp.selected.select(0);
-                            return vec![
-                                ContentManagerAction::Unregister {
-                                    ids: songs
-                                    .into_iter()
-                                    .map(Into::into)
-                                    .chain(
-                                        providers
-                                        .into_iter()
-                                        .map(Into::into)
-                                    )
-                                    .collect(),
-                                },
-                                ContentManagerAction::PopContentStack, // typing
-                                ContentManagerAction::PopContentStack, // edit
-                                cp.get_search_action(self_id)
-                            ].into();
-                        };
                         vec![
                             ContentManagerAction::EnableTyping {
                                 content: self.search_term.clone(),
-                                callback: Box::new(apply_callback),
                                 loader: self_id.into(),
+                                callback: Box::new(move |me: &mut ContentProvider, content: String| {
+                                    let cp = me.as_any_mut().downcast_mut::<Self>().unwrap();
+                                    cp.loaded = true;
+                                    cp.name = Cow::from(format!("Youtube: {content}"));
+                                    cp.search_term = content;
+                                    cp.selected.select(0);
+                                    vec![
+                                        ContentManagerAction::Unregister {
+                                            ids: cp.pop_all_ids(),
+                                        },
+                                        ContentManagerAction::PopContentStack, // typing
+                                        ContentManagerAction::PopContentStack, // edit
+                                        cp.get_search_action(self_id),
+                                    ].into()
+                                }),
                             },
                         ].into()
                     }
                     YTEEditables::FILTER => {
-                        let mut index = SelectedIndex::default();
-                        index.select(i);
+                        let index = SelectedIndex::default();
+                        ctx.push(index);
+                        ContentManagerAction::None
+                    }
+                    YTEEditables::URL => {
+                        let index = SelectedIndex::default();
                         ctx.push(index);
                         ContentManagerAction::None
                     }
@@ -415,6 +498,29 @@ impl Editable for YTExplorer {
             Editables::SFilter(e) => {
                 self.filter = e;
                 ContentManagerAction::PopContentStack
+            }
+            Editables::Url(e) => {
+                let mut index = SelectedIndex::default();
+                index.select(i);
+                ctx.push(index);
+
+                ContentManagerAction::EnableTyping {
+                    content: "".into(),
+                    loader: self_id.into(),
+                    callback: Box::new(move |me: &mut ContentProvider, content: String| {
+                        let cp = me.as_any_mut().downcast_mut::<Self>().unwrap();
+                        cp.loaded = true;
+                        cp.name = Cow::from(format!("Youtube: {e:#?} Url"));
+                        cp.selected.select(0);
+                        vec![
+                            ContentManagerAction::Unregister { ids: cp.pop_all_ids() },
+                            ContentManagerAction::PopContentStack, // typing
+                            ContentManagerAction::PopContentStack, // edit
+                            ContentManagerAction::PopContentStack, // edit
+                            cp.get_url_action(self_id, e, content),
+                        ].into()
+                    }),
+                }
             }
         }
     }
@@ -434,10 +540,11 @@ impl ContentProviderTrait for YTExplorer {
     impliment_content_provider!(YTExplorer, Provider, Loadable, Editable, SongProvider, CPProvider, Display);
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug,)]
+#[derive(Clone, Copy, Debug)]
 enum Editables {
     Main(YTEEditables),
     SFilter(YTSearchFilter),
+    Url(YTUrl),
 }
 impl From<YTEEditables> for Editables {
     fn from(e: YTEEditables) -> Self {
@@ -447,6 +554,11 @@ impl From<YTEEditables> for Editables {
 impl From<YTSearchFilter> for Editables {
     fn from(e: YTSearchFilter) -> Self {
         Self::SFilter(e)
+    }
+}
+impl From<YTUrl> for Editables {
+    fn from(e: YTUrl) -> Self {
+        Self::Url(e)
     }
 }
 
@@ -493,6 +605,7 @@ impl ToString for YTSearchFilter {
 enum YTEEditables {
     SEARCH_TERM,
     FILTER,
+    URL,
 }
 impl ToString for YTEEditables {
     fn to_string(&self) -> String {
@@ -506,7 +619,22 @@ impl YTEEditables {
         &[
             Self::FILTER,
             Self::SEARCH_TERM,
+            Self::URL,
         ]
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum YTUrl {
+    Playlist,
+    Video,
+    // Channel,
+}
+impl YTUrl {
+    fn iter() -> &'static [Self] {
+        &[
+            Self::Playlist,
+            Self::Video,
+        ]
+    }
+}

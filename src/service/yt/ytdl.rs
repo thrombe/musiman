@@ -62,6 +62,25 @@ pub struct YtdlSong {
     pub fulltitle: Option<String>,
     pub formats: Option<Vec<YtdlSongFormat>>,
 }
+impl Into<Song> for YtdlSong {
+    fn into(self) -> Song {
+        YtSong {
+            title: self.title.unwrap(),
+            artist: [
+                self.artist,
+                self.uploader,
+                self.channel,
+                self.creator,
+            ].into_iter()
+            .filter_map(|a| a)
+            .next()
+            .unwrap(),
+            album: self.album,
+            id: self.id.unwrap(),
+        }.into()
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct YtdlSongThumbnail { // the fields always seem to be there, but just to be sure
     pub preference: Option<i32>,
