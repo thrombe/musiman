@@ -168,7 +168,13 @@ impl<'content_manager> Display<'content_manager> for YTExplorer {
     }
 
     fn get_name(&self) -> Cow<'static, str> {
-        self.name.clone()
+        Cow::from(
+            format!(
+                "{name}: {search_term}",
+                name = self.name,
+                search_term = self.search_term,
+            )
+        )
     }
 }
 
