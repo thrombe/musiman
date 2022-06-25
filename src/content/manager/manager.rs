@@ -589,7 +589,7 @@ impl ContentManager {
                             }
                             ID::ContentProvider(id) => {
                                 let cp = self.content_providers.get(id).unwrap();
-                                cp.menu_options(ctx).size_hint().0
+                                cp.num_options(ctx)
                             }
                         }
                     }

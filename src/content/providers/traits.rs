@@ -21,7 +21,6 @@ use crate::{
         },
         manager::action::ContentManagerAction,
         display::DisplayContext,
-        providers::FriendlyID,
     },
     app::{
         app::SelectedIndex,
@@ -88,9 +87,6 @@ pub trait ContentProviderTrait
     }
 
 
-    fn menu_options(&self, _: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
-        Box::new([].into_iter())
-    }
     fn has_menu(&self) -> bool {
         false
     }
@@ -113,9 +109,6 @@ pub trait ContentProviderTrait
     }
 
     
-    fn get_editables<'a>(&'a self, _: &StateContext) -> Box<dyn Iterator<Item = FriendlyID> + 'a> {
-        Box::new([].into_iter())
-    }
     fn has_editables(&self) -> bool {
         false
     }
@@ -179,13 +172,6 @@ pub trait ContentProviderTrait
     fn get_size(&self) -> usize {
         self.ids().size_hint().0
     }
-    fn get_friendly_ids<'a>(&'a self) -> Box<dyn Iterator<Item = FriendlyID> + 'a> {
-        Box::new(
-            self
-            .ids()
-            .map(FriendlyID::ID)
-        )
-    }
     
     // for downcasting (the macro has implimentation for this)
     fn as_any(&self) -> &dyn Any;
@@ -210,30 +196,18 @@ pub trait Loadable {
 
 pub trait Menu {
     fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction;
-    fn menu_options(&self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>>;
     fn has_menu(&self) -> bool {
-        let (min, max) = self.menu_options(&StateContext::default()).size_hint();
-        // an iterator has exactly 0 elements iff it has atleast 0 and atmost 0 elements
-        !(min > 0 && max.is_some() && max.unwrap() == 0)
+        true
     }
-    fn num_options(&self, ctx: &StateContext) -> usize {
-        self.menu_options(ctx).size_hint().0
-    }
+    fn num_options(&self, ctx: &StateContext) -> usize;
 }
 
 pub trait Editable {
     fn select_editable(&mut self, ctx: &mut StateContext, self_if: ContentProviderID) -> ContentManagerAction;
-    fn num_editables(&self, ctx: &StateContext) -> usize {
-        self.get_editables(ctx).size_hint().0
-    }
+    fn num_editables(&self, ctx: &StateContext) -> usize;
     fn has_editables(&self) -> bool {
-        // implimentation is super similar to Self::has_menu
-    
-        let (min, max) = self.get_editables(&Default::default()).size_hint();
-        // an iterator has exactly 0 elements iff it has atleast 0 and atmost 0 elements
-        !(min > 0 && max.is_some() && max.unwrap() == 0)
+        true
     }
-    fn get_editables<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID> + 'a>;
 }
 
 pub trait SongProvider {
@@ -280,16 +254,10 @@ macro_rules! _impliment_content_provider {
         fn has_editables(&self) -> bool {
             Editable::has_editables(self)
         }
-        fn get_editables<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID> + 'a> {
-            Editable::get_editables(self, ctx)
-        }        
     };
     ($t:ident, Menu) => {
         fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
             Menu::apply_option(self, ctx, self_id)
-        }
-        fn menu_options(&self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
-            Menu::menu_options(self, ctx)
         }
         fn has_menu(&self) -> bool {
             Menu::has_menu(self)

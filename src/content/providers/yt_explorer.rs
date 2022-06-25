@@ -36,7 +36,6 @@ use crate::{
                 CPProvider,
                 Loadable,
             },
-            FriendlyID,
         },
         display::{
             DisplayContext,
@@ -431,24 +430,8 @@ impl CPProvider for YTExplorer {
     }
 }
 impl Editable for YTExplorer {
-    fn get_editables<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID> + 'a> {
-        Box::new(self.editables(ctx).map(|e| {
-            match e {
-                Editables::Main(e) => {
-                    match e {
-                        YTEEditables::SEARCH_TERM => {
-                            FriendlyID::String(e.to_string() + ": " + &self.search_term)
-                        }
-                        YTEEditables::FILTER => {
-                            FriendlyID::String(e.to_string() + ": " + &self.filter.to_string())
-                        }
-                        _ => panic!("no need for this function anymore")
-                    }
-                }
-                Editables::SFilter(e) => e.into(),
-                _ => panic!(),
-            }
-        }))
+    fn num_editables(&self, ctx: &StateContext) -> usize {
+        self.editables(ctx).count()
     }
 
     fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
@@ -586,11 +569,6 @@ impl YTSearchFilter {
             Self::Videos => "videos",
             Self::Playlists => "playlists",
         }
-    }
-}
-impl Into<FriendlyID> for YTSearchFilter {
-    fn into(self) -> FriendlyID {
-        FriendlyID::String(format!("{self:#?}"))
     }
 }
 impl ToString for YTSearchFilter {

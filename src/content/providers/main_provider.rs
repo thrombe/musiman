@@ -3,7 +3,6 @@ use std::borrow::Cow;
 
 use tui::{
     text::{
-        Spans,
         Span,
     },
     style::{
@@ -27,7 +26,6 @@ use crate::{
             },
             file_explorer::FileExplorer,
             yt_explorer::YTExplorer,
-            FriendlyID,
         },
         display::{
             DisplayContext,
@@ -73,17 +71,6 @@ enum MainProviderMenuOption {
     ADD_FILE_EXPLORER,
     ADD_YT_EXPLORER,
 }
-impl Into<FriendlyID> for MainProviderMenuOption {
-    fn into(self) -> FriendlyID {
-        FriendlyID::String(
-            String::from(
-                format!("{self:#?}")
-                .replace("_", " ")
-                .to_lowercase()
-            )
-        )
-    }
-}
 
 impl CPProvider for MainProvider {
     fn add_provider(&mut self, id: ContentProviderID) {
@@ -95,10 +82,10 @@ impl CPProvider for MainProvider {
 }
 
 impl Menu for MainProvider {
-    fn menu_options<'a>(&'a self, ctx: &StateContext) -> Box<dyn Iterator<Item = FriendlyID>> {
-        Box::new(self.menu(ctx).map(Into::into))
+    fn num_options(&self, ctx: &StateContext) -> usize {
+        self.menu(ctx).count()
     }
-    
+
     fn apply_option(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
         let option = self.menu(ctx).skip(ctx.last().selected_index()).next().unwrap();
         match option {

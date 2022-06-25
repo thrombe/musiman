@@ -7,9 +7,6 @@ pub mod ytalbum;
 pub mod ytplaylist;
 
 
-use crate::content::register::ID;
-
-
 /// don't impliment clone on this. instead use ContentManager.clone_content_provider
 #[derive(Debug)]
 pub struct ContentProvider(Box<dyn traits::ContentProviderTrait>);
@@ -33,17 +30,4 @@ impl ContentProvider {
     pub fn new(t: Box<dyn traits::ContentProviderTrait>) -> Self {
         Self(t)
     }
-}
-
-
-
-
-
-pub enum FriendlyID {
-    String(String),
-    ID(ID),
-}
-
-pub trait HumanReadable {
-    
 }
