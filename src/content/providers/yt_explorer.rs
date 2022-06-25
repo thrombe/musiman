@@ -82,7 +82,7 @@ pub struct YTExplorer {
     selected: SelectedIndex,
     loaded: bool,
     search_term: String,
-    search_type: YTSearchType,
+    filter: YTSearchFilter,
 }
 
 impl Default for YTExplorer {
@@ -92,7 +92,7 @@ impl Default for YTExplorer {
             providers: Default::default(),
             selected: Default::default(),
             search_term: Default::default(),
-            search_type: YTSearchType::Albums,
+            filter: YTSearchFilter::Albums,
             loaded: false,
             name: "Youtube".into(),
         }
@@ -144,10 +144,10 @@ impl<'content_manager> Display<'content_manager> for YTExplorer {
                         Editables::Main(e) => {
                             match e {
                                 YTEEditables::SEARCH_TERM => e.to_string() + ": " + &self.search_term,
-                                YTEEditables::SEARCH_TYPE => e.to_string() + ": " + &self.search_type.to_string(),
+                                YTEEditables::FILTER => e.to_string() + ": " + &self.filter.to_string(),
                             }
                         }
-                        Editables::SType(e) => {
+                        Editables::SFilter(e) => {
                             e.to_string()
                         }
                     }
@@ -195,8 +195,8 @@ impl YTExplorer {
                 let i = ctx.get(0).unwrap().selected_index();
                 let opt = YTEEditables::iter()[i];
                 match opt {
-                    YTEEditables::SEARCH_TYPE => {
-                        Box::new(YTSearchType::iter().into_iter().cloned().map(Into::into))
+                    YTEEditables::FILTER => {
+                        Box::new(YTSearchFilter::iter().into_iter().cloned().map(Into::into))
                     }
                     YTEEditables::SEARCH_TERM => {
                         Box::new(YTEEditables::iter().into_iter().cloned().map(Into::into))
@@ -220,7 +220,7 @@ impl YTExplorer {
                     return data
                 ",
                 self.search_term,
-                self.search_type.ytmusic_filter(),
+                self.filter.ytmusic_filter(),
             ),
             Some(vec![
                 YtMusic::new("ytmusic").into(),
@@ -234,14 +234,14 @@ impl YTExplorer {
                         data = f.read()
                     return data
                 ",
-                filter = self.search_type.ytmusic_filter(),
+                filter = self.filter.ytmusic_filter(),
             ),
             None,
         )
         .set_dbg_status(false)
         .build().unwrap();
-        let callback: PyCallback = match self.search_type {
-            YTSearchType::Albums => {
+        let callback: PyCallback = match self.filter {
+            YTSearchFilter::Albums => {
                 Box::new(move |res: String| -> Result<ContentManagerAction> {
                     // debug!("{res}");
                     let albums = serde_json::from_str::<Vec<YTMusicSearchAlbum>>(&res);
@@ -259,7 +259,7 @@ impl YTExplorer {
                     Ok(action)
                 })
             }
-            YTSearchType::Playlists => {
+            YTSearchFilter::Playlists => {
                 Box::new(move |res: String| {
                     // debug!("{res}");
                     let playlists = serde_json::from_str::<Vec<YTMusicSearchPlaylist>>(&res);
@@ -278,7 +278,7 @@ impl YTExplorer {
                     Ok(action)
                 })
             }
-            YTSearchType::Songs => {
+            YTSearchFilter::Songs => {
                 Box::new(move |res: String| -> Result<ContentManagerAction> {
                     // debug!("{res}");
                     let songs = serde_json::from_str::<Vec<YTMusicSearchSong>>(&res)?;
@@ -295,7 +295,7 @@ impl YTExplorer {
                     Ok(action)
                 })
             }
-            YTSearchType::Videos => {
+            YTSearchFilter::Videos => {
                 Box::new(move |res: String| -> Result<ContentManagerAction> {
                     // debug!("{res}");
                     let videos = serde_json::from_str::<Vec<YTMusicSearchVideo>>(&res)?;
@@ -352,12 +352,12 @@ impl Editable for YTExplorer {
                         YTEEditables::SEARCH_TERM => {
                             FriendlyID::String(e.to_string() + ": " + &self.search_term)
                         }
-                        YTEEditables::SEARCH_TYPE => {
-                            FriendlyID::String(e.to_string() + ": " + &self.search_type.to_string())
+                        YTEEditables::FILTER => {
+                            FriendlyID::String(e.to_string() + ": " + &self.filter.to_string())
                         }
                     }
                 }
-                Editables::SType(e) => e.into(),
+                Editables::SFilter(e) => e.into(),
             }
         }))
     }
@@ -404,7 +404,7 @@ impl Editable for YTExplorer {
                             },
                         ].into()
                     }
-                    YTEEditables::SEARCH_TYPE => {
+                    YTEEditables::FILTER => {
                         let mut index = SelectedIndex::default();
                         index.select(i);
                         ctx.push(index);
@@ -412,8 +412,8 @@ impl Editable for YTExplorer {
                     }
                 }
             }
-            Editables::SType(e) => {
-                self.search_type = e;
+            Editables::SFilter(e) => {
+                self.filter = e;
                 ContentManagerAction::PopContentStack
             }
         }
@@ -437,27 +437,27 @@ impl ContentProviderTrait for YTExplorer {
 #[derive(Clone, Copy, PartialEq, Eq, Debug,)]
 enum Editables {
     Main(YTEEditables),
-    SType(YTSearchType),
+    SFilter(YTSearchFilter),
 }
 impl From<YTEEditables> for Editables {
     fn from(e: YTEEditables) -> Self {
         Self::Main(e)
     }
 }
-impl From<YTSearchType> for Editables {
-    fn from(e: YTSearchType) -> Self {
-        Self::SType(e)
+impl From<YTSearchFilter> for Editables {
+    fn from(e: YTSearchFilter) -> Self {
+        Self::SFilter(e)
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum YTSearchType {
+pub enum YTSearchFilter {
     Albums,
     Songs,
     Videos,
     Playlists,
 }
-impl YTSearchType {
+impl YTSearchFilter {
     fn iter() -> &'static [Self] {
         &[
             Self::Albums,
@@ -476,12 +476,12 @@ impl YTSearchType {
         }
     }
 }
-impl Into<FriendlyID> for YTSearchType {
+impl Into<FriendlyID> for YTSearchFilter {
     fn into(self) -> FriendlyID {
         FriendlyID::String(format!("{self:#?}"))
     }
 }
-impl ToString for YTSearchType {
+impl ToString for YTSearchFilter {
     fn to_string(&self) -> String {
         format!("{self:#?}")
     }
@@ -492,7 +492,7 @@ impl ToString for YTSearchType {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum YTEEditables {
     SEARCH_TERM,
-    SEARCH_TYPE,
+    FILTER,
 }
 impl ToString for YTEEditables {
     fn to_string(&self) -> String {
@@ -504,7 +504,7 @@ impl ToString for YTEEditables {
 impl YTEEditables {
     fn iter() -> &'static [Self] {
         &[
-            Self::SEARCH_TYPE,
+            Self::FILTER,
             Self::SEARCH_TERM,
         ]
     }
