@@ -499,6 +499,9 @@ impl ContentManager {
         }
     }
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
+        self.active_song.map(|id| self.unregister(id.into()));
+        self.register(id.into());
+        
         self.player.stop().unwrap();
         let song = self.get_song(id);
         let play_action = song.play()?;
