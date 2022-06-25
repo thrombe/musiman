@@ -501,7 +501,7 @@ impl ContentManager {
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
         self.active_song.map(|id| self.unregister(id.into()));
         self.register(id.into());
-        
+
         self.player.stop().unwrap();
         let song = self.get_song(id);
         let play_action = song.play()?;
@@ -534,7 +534,7 @@ impl ContentManager {
             Some(id) => id,
             None => return Ok(()),
         };
-        if !self.increment_selection_on(id) {
+        if !self.decrement_selection_on(id) {
             return Ok(())
         }        
         let q = self.get_provider_mut(id);
