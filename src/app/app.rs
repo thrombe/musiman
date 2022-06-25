@@ -235,7 +235,14 @@ impl PlayerWidget {
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Min(0),
-                    Constraint::Length(song_info.len().try_into().unwrap())
+                    Constraint::Length(
+                        song_info
+                        .len()
+                        .try_into()
+                        .ok()
+                        .map(|a: u16| a.checked_add(1).unwrap()) // +1 for progress bar
+                        .unwrap()
+                    )
                 ].as_ref())
                 .split(inner_rect)
                 .into_iter();
