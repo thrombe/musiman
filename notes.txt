@@ -75,54 +75,23 @@
   /. there needs to be 2 different ids, one that can go in content_stack.stack, and another that can have a menu/edit.
     it does not make sense to do literally anything else on a song that can be done on a provider/notifier and stuff
 
-. behaviour:
-  . save state easily
-  . load state easily
-. plans:
-  \. save only the MainProvider
-    . can grab MainProvider id from content_stack[0]
-    . go through all ids in main_provider, keep 2 lists of ids, one for songs, another for song_providers.
-      go through all song_providers one by one and add its stuff to these lists. finally dump all of this in db
-    . disadvantage is that temporary stuff needs to tell if its worth saving or no
-  \. save all of the non temporary stuff
-    . this would need dropping everything from temp_content_providers including its exclusive songs before its saved
-    . or this would need another ContentManager for temp_songs
-      . and also would need to move all stuff that is moved to non_temporary
-    . a strategy to remove both temporary lists is to make ContentEntry save if its temporary or not.
-      . everything that is moved into something else which is not temp, has its state saved as non_temp
-      . but, add a temp song to something non-temp, then remove it from the non-temp. and now its only in the original
-        temp thing. so it will be saved but it should not be saved
-  . if ActionChannel + (custom Clone, Drop / Register ids)
-    . save all the main temp stuff in temp_content_providers and all its stuff in non_temp. just before saving,
-      drop temp_content_providers and execute the messages till there are none left. now just save everything
-      including MainProvider
-      . but now MainProvider has a few ids which are not active. so just replace these with new ones when MainProvider
-        gets loaded next time
-    . since all the main temp stuff is supposed to start in MainProvider, just yeet the temp_content_providers and save
-      everything in non_temp. now just drop the temp stuff from MainProvider before saving
-
-. behaviour:
-  . be able to instruct the ui part to show something in some specific way. like "dont show numbers here." or
+/. behaviour:
+  /. be able to instruct the ui part to show something in some specific way. like "dont show numbers here." or
     "highlight this one in blue"
-. plan:
-  . use custom types/enums wrappers and wrap the special formatted ones with these types
-    . pass these to app, which then uses the backend to render these
-    . this would no longer mean that the two parts are decoupled tho.
-    . but well what else can i do?
-    . the wrappers can maybe take multiple things, like maybe
+/. plan:
+  \. use custom types/enums wrappers and wrap the special formatted ones with these types
+    \. pass these to app, which then uses the backend to render these
+    \. this would no longer mean that the two parts are decoupled tho.
+    \. but well what else can i do?
+    \. the wrappers can maybe take multiple things, like maybe
       wrapper{texts: Vec<wrapper{text, format_type: highlighted}>, overallformat_type: numbered}
     \. maybe repurpose GetNames for this
-  . make all providers impliment a render method that directly uses the backend stuff to render stuff.
-    . but ui in providers this way (its not much better the other way anyway)
-  \. use the tui-rs stuff directly and send in the formatted text directly
-    . this means ui is also done in ContentManager
-    . maybe add a type that handles the ui here and try not to leak stuff outside it.
-    . also use enums to let the ui part handle both formatted and unformatted types
-
-. behaviour:
-  . multiline items (like songs with name, artist on different lines)
-. plan:
-  . ?
+  /. make all providers impliment a render method that directly uses the backend stuff to render stuff.
+    /. but ui in providers this way (its not much better the other way anyway)
+  /. use the tui-rs stuff directly and send in the formatted text directly
+    \. this means ui is also done in ContentManager
+    \. maybe add a type that handles the ui here and try not to leak stuff outside it.
+    \. also use enums to let the ui part handle both formatted and unformatted types
 
 /. behaviour:
   /. fire actions from ContentProviders and receive the results back
@@ -159,6 +128,37 @@
   /. use callback funcs to generate actions
   /. move the yt parsing logic to the providers
     /. even the python code should come from providers
+
+. behaviour:
+  . save state easily
+  . load state easily
+. plans:
+  \. save only the MainProvider
+    . can grab MainProvider id from content_stack[0]
+    . go through all ids in main_provider, keep 2 lists of ids, one for songs, another for song_providers.
+      go through all song_providers one by one and add its stuff to these lists. finally dump all of this in db
+    . disadvantage is that temporary stuff needs to tell if its worth saving or no
+  \. save all of the non temporary stuff
+    . this would need dropping everything from temp_content_providers including its exclusive songs before its saved
+    . or this would need another ContentManager for temp_songs
+      . and also would need to move all stuff that is moved to non_temporary
+    . a strategy to remove both temporary lists is to make ContentEntry save if its temporary or not.
+      . everything that is moved into something else which is not temp, has its state saved as non_temp
+      . but, add a temp song to something non-temp, then remove it from the non-temp. and now its only in the original
+        temp thing. so it will be saved but it should not be saved
+  . if ActionChannel + (custom Clone, Drop / Register ids)
+    . save all the main temp stuff in temp_content_providers and all its stuff in non_temp. just before saving,
+      drop temp_content_providers and execute the messages till there are none left. now just save everything
+      including MainProvider
+      . but now MainProvider has a few ids which are not active. so just replace these with new ones when MainProvider
+        gets loaded next time
+    . since all the main temp stuff is supposed to start in MainProvider, just yeet the temp_content_providers and save
+      everything in non_temp. now just drop the temp stuff from MainProvider before saving
+
+. behaviour:
+  . multiline items (like songs with name, artist on different lines)
+. plan:
+  . ?
 
 . behaviour:
   . work without any setup
@@ -230,9 +230,6 @@ plan:
       . filter known songs
   . multiple profiles with simple way to switch from cli args
     . profiles with different opts and different db
-  . keep a executor thread that is polled for checking completion on each main loop iteration
-    and do the thing required when it finally returns
-    . this way i dont have to use mutexes and iternal mutability for doing things on parallel
 
 
 . rust based yt api stuff
