@@ -142,7 +142,7 @@ impl BrowserWidget {
         Ok(true)
     }
 
-    fn render<'a, B: Backend>(&self, f: &mut Frame<B>, r: Rect, cm: &mut ContentManager, input: &[char], state: AppState) {
+    fn render<'a, B: Backend>(&self, f: &mut Frame<B>, r: Rect, cm: &mut ContentManager, input: &[char], input_cursor_pos: usize, state: AppState) {
         let selected_index = cm.get_selected_index().selected_index();
 
         let list = if let AppState::Typing = state {
@@ -151,7 +151,7 @@ impl BrowserWidget {
             if x as usize + input.len() < (pos.inner_rect.x + pos.inner_rect.width) as usize {
                 // TODO: show the right side of the text when typing if it dosent fit. like  "..olling<cursor>"
                 f.set_cursor(
-                    x + input.len() as u16,
+                    x + input_cursor_pos as u16,
                     // BAD: cannot figure out the exact y of the cursor (will need ListState.offset)
                     pos.inner_rect.y
                     .checked_add(selected_index.try_into().unwrap())
@@ -507,7 +507,7 @@ impl App {
 
         self.status_bar.render(f, status_rect);
         self.player_widget.render(f, right_rect, &mut self.content_manager)?;
-        self.browser_widget.render(f, left_rect, &mut self.content_manager, &self.input, self.state);
+        self.browser_widget.render(f, left_rect, &mut self.content_manager, &self.input, self.input_cursor_pos, self.state);
         
         Ok(())
     }
