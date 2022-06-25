@@ -77,9 +77,16 @@ pub struct YTMusicSearchVideo {
 }
 impl Into<Song> for YTMusicSearchVideo {
     fn into(self) -> Song {
+        let artist = self.artists
+        .iter()
+        .filter_map(|a| a.name.as_ref().map(|s| &s[..]))
+        .collect::<Vec<&str>>()
+        .join(", ");
         YtSong {
             title: self.title.unwrap(),
             id: self.video_id.unwrap(),
+            artist,
+            album: None,
         }.into()
     }
 }
@@ -126,9 +133,18 @@ pub struct YTMusicSearchSong {
 }
 impl Into<Song> for YTMusicSearchSong {
     fn into(self) -> Song {
+        let artist = self.artists
+        .as_ref()
+        .unwrap_or(&vec![])
+        .iter()
+        .filter_map(|a| a.name.as_ref().map(|s| &s[..]))
+        .collect::<Vec<&str>>()
+        .join(", ");
         YtSong {
             title: self.title.unwrap(),
             id: self.video_id.unwrap(),
+            artist,
+            album: self.album.map(|a| a.name).flatten(),
         }.into()
     }
 }

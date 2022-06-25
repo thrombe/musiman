@@ -40,6 +40,8 @@ use crate::{
 #[derive(Debug)]
 pub struct YtSong {
     pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
     pub id: String,
 }
 
@@ -187,6 +189,12 @@ impl SongTrait for YtSong {
 impl SongDisplay for YtSong {
     fn title(&self) -> &str {
         self.title.as_ref()
+    }
+    fn artist(&self) -> Option<&str> {
+        Some(self.artist.as_ref())
+    }
+    fn album(&self) -> Option<&str> {
+        self.album.as_ref().map(|s| &s[..])
     }
 }
 

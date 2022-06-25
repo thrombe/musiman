@@ -37,6 +37,8 @@ impl Into<Song> for YTDLPlaylistSong {
         YtSong {
             title: self.title.unwrap(),
             id: self.id.unwrap(),
+            artist: self.uploader.unwrap(),
+            album: None,
         }.into()
     }
 }
