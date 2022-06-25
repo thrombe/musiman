@@ -69,6 +69,7 @@ use crate::{
             YTMusicSearchVideo,
             YTMusicSearchSong,
             YTMusicSearchAlbum,
+            YTMusicSearchPlaylist,
         },
     },
 };
@@ -221,11 +222,14 @@ impl YTExplorer {
             ]),
         )
         .dbg_func(
-            "
-                with open('config/temp/video_search.log', 'r') as f:
-                    data = f.read()
-                return data
-            ",
+            format!(
+                "
+                    with open('config/temp/{filter}_search.log', 'r') as f:
+                        data = f.read()
+                    return data
+                ",
+                filter = self.search_type.ytmusic_filter(),
+            ),
             None,
         )
         .set_dbg_status(false)
@@ -250,7 +254,23 @@ impl YTExplorer {
                 })
             }
             YTSearchType::Playlists => {
-                todo!()
+                Box::new(move |res: String| {
+                    // debug!("{res}");
+                    let playlists = serde_json::from_str::<Vec<YTMusicSearchPlaylist>>(&res);
+                    // dbg!(&playlists);
+                    let content_providers = playlists?.into_iter().map(Into::into).collect();
+                    // dbg!(&content_providers);
+
+                    let action = vec![
+                        ContentManagerAction::LoadContentProvider {
+                            songs: Default::default(),
+                            content_providers,
+                            loader_id: self_id,
+                        },
+                        ContentManagerAction::RefreshDisplayContent,
+                    ].into();
+                    Ok(action)
+                })
             }
             YTSearchType::Songs => {
                 Box::new(move |res: String| -> Result<ContentManagerAction> {

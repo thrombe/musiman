@@ -4,6 +4,7 @@ pub mod main_provider;
 pub mod file_explorer;
 pub mod yt_explorer;
 pub mod ytalbum;
+pub mod ytplaylist;
 
 
 use crate::content::register::ID;

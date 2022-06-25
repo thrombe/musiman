@@ -7,6 +7,7 @@ use crate::{
 };
 
 use serde::{self, Serialize, Deserialize};
+use serde_aux::prelude::deserialize_number_from_string;
 
 use crate::{
     content::{
@@ -17,6 +18,7 @@ use crate::{
         providers::{
             ContentProvider,
             ytalbum::YTAlbum,
+            ytplaylist::YTPlaylist,
         },
     },
 };
@@ -74,6 +76,7 @@ pub struct YTMusicSearchVideo {
     pub title: Option<String>,
     pub video_id: Option<String>,
     pub artists: Vec<YTMusicSearchArtist>,
+    pub thumbnails: Vec<YTMusicSongThumbnail>,
 }
 impl Into<Song> for YTMusicSearchVideo {
     fn into(self) -> Song {
@@ -154,3 +157,29 @@ pub struct YTMusicSongSearchAlbum {
     pub id: Option<String>,
 }
 
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase"))]
+pub struct YTMusicSearchPlaylist {
+    pub title: Option<String>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub item_count: usize,
+    pub author: Option<String>,
+    pub browse_id: Option<String>,
+    pub thumbnails: Vec<YTMusicSongThumbnail>,
+}
+impl Into<ContentProvider> for YTMusicSearchPlaylist {
+    fn into(self) -> ContentProvider {
+        YTPlaylist::new_browse_id(self.title.unwrap(), self.browse_id.unwrap()).into()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct YTMusicPlaylist {
+    pub title: Option<String>,
+    pub thumbnails: Vec<YTMusicSongThumbnail>,
+    pub id: Option<String>,
+    pub privacy: Option<String>,
+    pub author: Option<YTMusicSearchArtist>,
+    pub tracks: Vec<YTMusicSearchVideo>,
+}

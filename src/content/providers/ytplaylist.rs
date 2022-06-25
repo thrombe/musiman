@@ -49,15 +49,15 @@ use crate::{
     },
     service::{
         yt::{
-            ytdl::YTDLPlaylist,
-            ytmusic::YTMusicAlbum,
+            // ytdl::YTDLPlaylist,
+            ytmusic::YTMusicPlaylist,
         },
         python::{
             action::PyAction,
             code::PyCodeBuilder,
             item::{
                 YtMusic,
-                Ytdl,
+                // Ytdl,
                 Json,
             },
         },
@@ -65,28 +65,28 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct YTAlbum {
+pub struct YTPlaylist {
     songs: Vec<SongID>,
     loaded: bool,
-    id: YTAlbumID,
+    id: YTPlaylistID,
     name: Cow<'static, str>,
     index: SelectedIndex,
 }
-impl YTAlbum {
-    pub fn new_playlist_id<T: Into<Cow<'static, str>>>(name: T, playlist_id: T) -> Self {
-        Self {
-            songs: Default::default(),
-            loaded: false,
-            id: YTAlbumID::PlaylistID(playlist_id.into()),
-            name: name.into(),
-            index: Default::default(),
-        }
-    }
+impl YTPlaylist {
+    // pub fn new_playlist_id<T: Into<Cow<'static, str>>>(name: T, playlist_id: T) -> Self {
+    //     Self {
+    //         songs: Default::default(),
+    //         loaded: false,
+    //         id: YTPlaylistID::PlaylistID(playlist_id.into()),
+    //         name: name.into(),
+    //         index: Default::default(),
+    //     }
+    // }
     pub fn new_browse_id<T: Into<Cow<'static, str>>>(name: T, browse_id: T) -> Self {
         Self {
             songs: Default::default(),
             loaded: false,
-            id: YTAlbumID::BrowseID(browse_id.into()),
+            id: YTPlaylistID::BrowseID(browse_id.into()),
             name: name.into(),
             index: Default::default(),
         }
@@ -94,12 +94,12 @@ impl YTAlbum {
 }
 
 #[derive(Debug, Clone)]
-enum YTAlbumID {
-    PlaylistID(Cow<'static, str>),
+enum YTPlaylistID {
+    // PlaylistID(Cow<'static, str>),
     BrowseID(Cow<'static, str>),
 }
 
-impl SongProvider for YTAlbum {
+impl SongProvider for YTPlaylist {
     fn add_song(&mut self, id: SongID) {
         self.songs.push(id)
     }
@@ -108,13 +108,14 @@ impl SongProvider for YTAlbum {
     }
 }
 
-impl Loadable for YTAlbum {
+impl Loadable for YTPlaylist {
     fn is_loaded(&self) -> bool {
         self.loaded
     }
     fn load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
         match &self.id {
-            YTAlbumID::BrowseID(browse_id) => {
+            YTPlaylistID::BrowseID(browse_id) => {
+                self.loaded = true;
                 vec![
                     PyAction::ExecCode {
                         code: PyCodeBuilder::new()
@@ -122,8 +123,8 @@ impl Loadable for YTAlbum {
                         .set_dbg_status(false)
                         .func(
                             format!("
-                                album_data = ytmusic.get_album('{browse_id}')
-                                data = json.dumps(album_data, indent=4)
+                                playlist_data = ytmusic.get_playlist('{browse_id}')
+                                data = json.dumps(playlist_data, indent=4)
                                 return data
                             "),
                             Some(vec![
@@ -133,49 +134,7 @@ impl Loadable for YTAlbum {
                         )
                         .dbg_func(
                             "
-                                with open('config/temp/get_album_playlist_id.log', 'r') as f:
-                                    data = f.read()
-                                return data
-                            ",
-                            None,
-                        )
-                        .build().unwrap(),
-                        callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
-                            // the data we get from here have songs not necessarily the music videos
-                            // but the data we get from the playlistId has the music videos
-                            // (music videos being the songs with album art rather than the ones with dances and stuff)
-                            // debug!("{res}");
-                            let ytm_album = serde_json::from_str::<YTMusicAlbum>(&res)?;
-                            let action = ContentManagerAction::ReplaceContentProvider {
-                                old_id: self_id,
-                                cp: ytm_album.into(),
-                            };
-                            Ok(action)
-                        })
-                    }.into(),
-                ].into()
-            }
-            YTAlbumID::PlaylistID(playlist_id) => {
-                self.loaded = true;
-                vec![
-                    PyAction::ExecCode {
-                        code: PyCodeBuilder::new()
-                        .threaded()
-                        .set_dbg_status(false)
-                        .func(
-                            format!("
-                                data = ytdl.extract_info('{playlist_id}', download=False)
-                                data = json.dumps(data, indent=4)
-                                return data
-                            "),
-                            Some(vec![
-                                Json::new("json").into(),
-                                Ytdl::new("ytdl").into(),
-                            ]),
-                        )
-                        .dbg_func(
-                            "
-                                with open('config/temp/get_playlist.log', 'r') as f:
+                                with open('config/temp/get_playlist_from_browse_id.log', 'r') as f:
                                     data = f.read()
                                 return data
                             ",
@@ -184,25 +143,69 @@ impl Loadable for YTAlbum {
                         .build().unwrap(),
                         callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
                             // debug!("{res}");
-                            let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
+                            let ytm_playlist = serde_json::from_str::<YTMusicPlaylist>(&res)?;
+                            dbg!(&ytm_playlist);
                             let action = vec![
                                 ContentManagerAction::LoadContentProvider {
-                                    loader_id: self_id,
-                                    songs: playlist.songs.into_iter().map(Into::into).collect(),
+                                    songs: ytm_playlist.tracks.into_iter().map(Into::into).collect(),
                                     content_providers: Default::default(),
+                                    loader_id: self_id,
                                 },
                                 ContentManagerAction::RefreshDisplayContent,
-                            ].into();
-                            Ok(action)
+                            ];
+                            Ok(action.into())
                         })
                     }.into(),
                 ].into()
             }
+            // YTPlaylistID::PlaylistID(playlist_id) => {
+            //     self.loaded = true;
+            //     vec![
+            //         PyAction::ExecCode {
+            //             code: PyCodeBuilder::new()
+            //             .threaded()
+            //             .set_dbg_status(false)
+            //             .func(
+            //                 format!("
+            //                     data = ytdl.extract_info('{playlist_id}', download=False)
+            //                     data = json.dumps(data, indent=4)
+            //                     return data
+            //                 "),
+            //                 Some(vec![
+            //                     Json::new("json").into(),
+            //                     Ytdl::new("ytdl").into(),
+            //                 ]),
+            //             )
+            //             .dbg_func(
+            //                 "
+            //                     with open('config/temp/?.log', 'r') as f:
+            //                         data = f.read()
+            //                     return data
+            //                 ",
+            //                 None,
+            //             )
+            //             .build().unwrap(),
+            //             callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
+            //                 // debug!("{res}");
+            //                 let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
+            //                 let action = vec![
+            //                     ContentManagerAction::LoadContentProvider {
+            //                         loader_id: self_id,
+            //                         songs: playlist.songs.into_iter().map(Into::into).collect(),
+            //                         content_providers: Default::default(),
+            //                     },
+            //                     ContentManagerAction::RefreshDisplayContent,
+            //                 ].into();
+            //                 Ok(action)
+            //             })
+            //         }.into(),
+            //     ].into()
+            // }
         }
     }
 }
 
-impl Provider for YTAlbum {
+impl Provider for YTPlaylist {
     fn get_selected_index(&self) -> &SelectedIndex {
         &self.index
     }
@@ -211,7 +214,7 @@ impl Provider for YTAlbum {
     }
 }
 
-impl<'b> Display<'b> for YTAlbum {
+impl<'b> Display<'b> for YTPlaylist {
     type DisplayContext = DisplayContext<'b>;
     fn display(&self, context: Self::DisplayContext) -> ListBuilder<'static> {
         let mut lb = ListBuilder::default();
@@ -244,6 +247,6 @@ impl<'b> Display<'b> for YTAlbum {
 }
 
 
-impl ContentProviderTrait for YTAlbum {
-    impliment_content_provider!(YTAlbum, SongProvider, Loadable, Provider, Display);
+impl ContentProviderTrait for YTPlaylist {
+    impliment_content_provider!(YTPlaylist, SongProvider, Loadable, Provider, Display);
 }
