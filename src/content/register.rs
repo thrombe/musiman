@@ -160,7 +160,13 @@ impl<T, P> ContentRegister<T, P>
     pub fn get(&self, id: P) -> Option<&T> {
         let id: ContentID<T> = id.into();
         match self.items.get(id.index) {
-            Some(Some(e)) =>  Some(&e.val),
+            Some(Some(e)) => {
+                if e.generation == id.generation {
+                    Some(&e.val)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -168,7 +174,13 @@ impl<T, P> ContentRegister<T, P>
     pub fn get_mut(&mut self, id: P) -> Option<&mut T> {
         let id: ContentID<T> = id.into();
         match self.items.get_mut(id.index) {
-            Some(Some(e)) => Some(&mut e.val),
+            Some(Some(e)) => {
+                if e.generation == id.generation {
+                    Some(&mut e.val)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
