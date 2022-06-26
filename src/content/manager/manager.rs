@@ -292,6 +292,38 @@ impl ContentManager {
 
 // methods for interacting with ContentProvider
 impl ContentManager {
+    pub fn get_main_provider(&self) -> &MainProvider {
+        self.get_raw_provider(self.content_stack.main_provider())
+    }
+    pub fn get_queue_provider(&self) -> &QueueProvider {
+        self.get_raw_provider(self.get_main_provider().queue_provider)
+    }
+    pub fn get_main_provider_mut(&mut self) -> &mut MainProvider {
+        self.get_raw_provider_mut(self.content_stack.main_provider())
+    }
+    pub fn get_queue_provider_mut(&mut self) -> &mut QueueProvider {
+        self.get_raw_provider_mut(self.get_main_provider().queue_provider)
+    }
+
+    /// will panic if id does not point to correct provider type
+    fn get_raw_provider<T: 'static>(&self, id: ContentProviderID) -> &T {
+        self.content_providers
+        .get(id)
+        .unwrap()
+        .as_any()
+        .downcast_ref()
+        .unwrap()
+    }
+    /// will panic if id does not point to correct provider type
+    fn get_raw_provider_mut<T: 'static>(&mut self, id: ContentProviderID) -> &mut T {
+        self.content_providers
+        .get_mut(id)
+        .unwrap()
+        .as_any_mut()
+        .downcast_mut()
+        .unwrap()
+    }
+
     pub fn enter_selected(&mut self) -> Result<()> {
         let state = self.content_stack.get_state_mut();
         match state {
@@ -304,7 +336,7 @@ impl ContentManager {
                         match content_id {
                             ID::Song(song_id) => {
                                 self.play_song(song_id)?;
-                                self.set_queue(id);
+                                self.set_queue(id, song_id);
                             }
                             ID::ContentProvider(id) => {
                                 ContentManagerAction::PushToContentStack { id: id.into() }.apply(self)?;
@@ -484,28 +516,72 @@ impl ContentManager {
 
 // methods related song to playback
 impl ContentManager {
-    pub fn set_queue(&mut self, id: ContentProviderID) {
-        self.active_queue = Some(id);
-        let mp_id = self.content_stack.main_provider();
+    pub fn set_queue(&mut self, id: ContentProviderID, song_id: SongID) {
+        let queue_index = self.get_queue_provider()
+        .providers()
+        .position(|q| *q == id);
+        let converted_queue_index = self.get_queue_provider()
+        .providers()
+        .cloned()
+        .map(|id| self.get_provider(id))
+        .map(|cp| cp.as_any().downcast_ref::<Queue>())
+        .filter_map(|cp| cp)
+        .position(|q| q.source_cp == id);
 
-        // FIX: find queue provider. think of a better soloution
-        let mp = self.get_provider(mp_id);
-        // for &cp_id in mp.providers().collect::<Vec<_>>() {
-            // let cp = self.get_provider_mut(cp_id);
-            // if cp.cp_type == ContentProviderType::Queues {
-            //     cp.add(id.into());
-            // }
-        // }
+        // if it already exists, do not make a new one
+        if let Some(queue_index) = queue_index
+        .map(|i| Some(i))
+        .unwrap_or(converted_queue_index)
+        {
+            let q_id = self.get_queue_provider()
+            .providers()
+            .skip(queue_index)
+            .next()
+            .map(|id| *id)
+            .unwrap();
+
+            let q = self.get_raw_provider_mut::<Queue>(q_id);
+            if let Some(song_index) = q.contains_song(song_id) {
+                q.index.select(song_index);
+                
+                self.get_queue_provider_mut()
+                .move_to_top(queue_index);
+
+                return;
+            }
+            // if the song is not in it, then create a new queue
+        }
+        
+        let mut q = {
+            let mut register = vec![];
+            let cp = self.get_provider(id);
+            let q = Queue::new(cp, id, |id: SongID| register.push(id)); // can't pass allocator func as self is immutably borrowed
+            register
+            .into_iter()
+            .for_each(|id| self.register(id.into()));
+            q
+        };
+
+        q.select_song(song_id);
+        let q_id = self.alloc_content_provider(q.into());
+        self.get_queue_provider_mut()
+        .add_queue(q_id)
+        .map(|id| self.unregister(id.into()));
+
+        self.register(q_id.into()); // saved in both queue provider and in active_queue
+        self.active_queue.map(|id| self.unregister(id.into()));
+        self.active_queue = Some(q_id);
     }
+
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
-        self.active_song.map(|id| self.unregister(id.into()));
         self.register(id.into());
+        self.active_song.map(|id| self.unregister(id.into()));
+        self.active_song = Some(id);
 
         self.player.stop().unwrap();
         let song = self.get_song(id);
         let play_action = song.play()?;
         let art_action = song.show_art()?;
-        self.active_song = Some(id);
         play_action.apply(self)?;
         art_action.apply(self)?;
         Ok(())
