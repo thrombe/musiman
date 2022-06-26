@@ -17,6 +17,7 @@ use crate::{
         stack::StateContext,
         register::ContentProviderID,
         providers::{
+            ContentProvider,
             traits::{
                 impliment_content_provider,
                 ContentProviderTrait,
@@ -26,6 +27,7 @@ use crate::{
             },
             file_explorer::FileExplorer,
             yt_explorer::YTExplorer,
+            queue_provider::QueueProvider,
         },
         display::{
             DisplayContext,
@@ -48,16 +50,23 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct MainProvider {
     providers: Vec<ContentProviderID>,
+    pub queue_provider: ContentProviderID,
+    // pub artist_provider: ContentProviderID,
     name: Cow<'static, str>,
     selected: SelectedIndex,
 }
+// pub struct MainProviderBuilder {}
 
-impl Default for MainProvider {
-    fn default() -> Self {
+impl MainProvider {
+    pub fn new(mut alloc: impl FnMut(ContentProvider) -> ContentProviderID) -> Self {
+        let queue_provider = alloc(QueueProvider::default().into());
+
         Self {
-            providers: Default::default(),
+            providers: vec![queue_provider],
             name: Cow::from("main"),
             selected: Default::default(),
+            queue_provider,
+            // artist_provider: alloc(),
         }
     }
 }
@@ -67,7 +76,6 @@ impl Default for MainProvider {
 enum MainProviderMenuOption {
     ADD_ARTIST_PROVIDER,
     ADD_PLAYLIST_PROVIDER,
-    ADD_QUEUE_PROVIDER,
     ADD_FILE_EXPLORER,
     ADD_YT_EXPLORER,
 }
@@ -91,7 +99,6 @@ impl Menu for MainProvider {
         match option {
             MainProviderMenuOption::ADD_ARTIST_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_PLAYLIST_PROVIDER => todo!(),
-            MainProviderMenuOption::ADD_QUEUE_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_FILE_EXPLORER => {
                 let path = "/home/issac/daata/phon-data/.musi/IsBac";
                 let mut fe = FileExplorer::default();
@@ -194,7 +201,6 @@ impl MainProvider {
             MainProviderMenuOption::ADD_PLAYLIST_PROVIDER,
             MainProviderMenuOption::ADD_FILE_EXPLORER,
             MainProviderMenuOption::ADD_YT_EXPLORER,
-            MainProviderMenuOption::ADD_QUEUE_PROVIDER,
         ].into_iter())
     }
 }

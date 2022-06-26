@@ -204,6 +204,23 @@ plan:
     . set cursor
   . do it completely in ListBuilder somehow
 
+behaviour:
+  . display trait but less code duplication in its implimentation
+plan:
+  . default trait implimentation using SongProvider::songs/CPProvider::providers
+   . can't do edit/menu this way tho
+  . simple Fn(Option<&Vec<SongId>>, Option<&Vec<ContentProviderID>>) -> _
+    . maybe these as associated functions and other CPs can borrow these functions
+
+behaviour:
+  . display but no unreachable!() calls
+plan:
+  . more display traits for ContentProviders for normal/edit/menu
+    \. auto display implimentation for combinations of these
+    \. like "impl Display for T where T: Edit + Menu"
+      \. different implimentations will collide
+    . impliment display for ContentProvider which uses self.as_edit() and stuff
+
 . plan
   . import relevent notes from thrombe/musimanager
   . a global settings

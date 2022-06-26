@@ -16,6 +16,9 @@ use crate::{
         providers::{
             ContentProvider,
             main_provider::MainProvider,
+            queue_provider::QueueProvider,
+            queue::Queue,
+            traits::CPProvider,
         },
         register::{
             ContentRegister,
@@ -212,7 +215,11 @@ impl ContentManager {
     pub fn new() -> Result<Self> {
         let dbh = DBHandler::try_load();
         let mut cp = ContentRegister::new();
-        let main_id = cp.alloc(MainProvider::default().into());
+        let main_id = {
+            let cp = &mut cp;
+            let main_provider = MainProvider::new(|item| cp.alloc(item));
+            cp.alloc(main_provider.into())
+        };
         let ch = Self {
             songs: ContentRegister::new(),
             content_providers: cp,
@@ -244,6 +251,7 @@ impl ContentManager {
         // dbg!(self.player.duration());
         // dbg!(self.player.position());
         // dbg!(self.player.progress());
+        dbg!(self.active_queue);
         dbg!(&self.image_handler);
         if self.active_song.is_some() {
             let s = self.get_song(self.active_song.unwrap()).as_display();

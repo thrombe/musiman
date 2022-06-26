@@ -5,6 +5,8 @@ pub mod file_explorer;
 pub mod yt_explorer;
 pub mod ytalbum;
 pub mod ytplaylist;
+pub mod queue_provider;
+pub mod queue;
 
 
 /// don't impliment clone on this. instead use ContentManager.clone_content_provider
