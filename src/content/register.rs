@@ -215,11 +215,16 @@ impl<T, P> ContentRegister<T, P>
     /// panics if index > len
     fn set(&mut self, item: T, index: usize) -> P {
         self.last_operation = Operation::Insert;
-        self.items.insert(index, Some(ContentEntry {
+        let entry = Some(ContentEntry {
             val: item,
             generation: self.generation,
             id_counter: 1,
-        }));
+        });
+        if self.items.len() > index {
+            self.items[index] = entry;
+        } else {
+            self.items.insert(index, entry);
+        }
         P::from(ContentID {
             index,
             generation: self.generation,
