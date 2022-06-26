@@ -72,7 +72,7 @@ pub struct ContentManager {
     pub app_action: AppAction,
 }
 
-
+// methods related to content register
 impl ContentManager {
     pub fn alloc_song(&mut self, s: Song) -> SongID {
         self.songs.alloc(s)
@@ -147,6 +147,7 @@ impl ContentManager {
     }
 }
 
+// methods related to display
 impl ContentManager {
     pub fn display(&self) -> ListBuilder<'static> {
         let state = self.content_stack.get_state();
@@ -261,7 +262,28 @@ impl ContentManager {
     pub fn poll_action(&mut self) -> Result<()> {
         self.parallel_handle.poll().apply(self)
     }
+    pub fn get_app_action(&mut self) -> AppAction {
+        std::mem::replace(&mut self.app_action, Default::default())
+    }
 
+    pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
+        self.content_providers.get(id).unwrap()
+    }
+
+    pub fn get_provider_mut(&mut self, id: ContentProviderID) -> &mut ContentProvider {
+        self.content_providers.get_mut(id).unwrap()
+    }
+
+    pub fn get_song(&self, id: SongID) -> &Song {
+        self.songs.get(id).unwrap()
+    }
+    pub fn get_song_mut(&mut self, id: SongID) -> &mut Song {
+        self.songs.get_mut(id).unwrap()
+    }
+}
+
+// methods for interacting with ContentProvider
+impl ContentManager {
     pub fn enter_selected(&mut self) -> Result<()> {
         let state = self.content_stack.get_state_mut();
         match state {
@@ -330,33 +352,6 @@ impl ContentManager {
         }
         self.app_action.queue(AppAction::UpdateDisplayContent);
         Ok(())
-    }
-
-    pub fn get_selected_index(&mut self) -> &mut SelectedIndex {
-        let id = self.content_stack.last();
-        let state = self.content_stack.get_state_mut();
-        match state {
-            ContentState::Normal => {
-                match id {
-                    GlobalProvider::ContentProvider(id) => {
-                        let cp = self.content_providers.get_mut(id).unwrap();
-                        cp.get_selected_index_mut()
-                    }
-                    GlobalProvider::Notifier => {
-                        todo!()
-                    }
-                }
-            }
-            ContentState::Edit {ctx, ..} => {
-                ctx.last_mut()
-            }
-            ContentState::Menu {ctx, ..} => {
-                ctx.last_mut()
-            }
-            ContentState::GlobalMenu(i) => {
-                i
-            }
-        }
     }
 
     pub fn open_menu_for_current(&mut self) -> Result<()> {
@@ -477,22 +472,10 @@ impl ContentManager {
         self.app_action.queue(AppAction::UpdateDisplayContent);
         Ok(())
     }    
+}
 
-    pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
-        self.content_providers.get(id).unwrap()
-    }
-
-    pub fn get_provider_mut(&mut self, id: ContentProviderID) -> &mut ContentProvider {
-        self.content_providers.get_mut(id).unwrap()
-    }
-
-    pub fn get_song(&self, id: SongID) -> &Song {
-        self.songs.get(id).unwrap()
-    }
-    pub fn get_song_mut(&mut self, id: SongID) -> &mut Song {
-        self.songs.get_mut(id).unwrap()
-    }
-
+// methods related song to playback
+impl ContentManager {
     pub fn set_queue(&mut self, id: ContentProviderID) {
         self.active_queue = Some(id);
         let mp_id = self.content_stack.main_provider();
@@ -555,9 +538,35 @@ impl ContentManager {
     pub fn seek_song(&mut self, t: f64) -> Result<()> {
         self.player.seek(t)
     }
+}
 
-    pub fn get_app_action(&mut self) -> AppAction {
-        std::mem::replace(&mut self.app_action, Default::default())
+// methods related to managing selectioins
+impl ContentManager {
+    pub fn get_selected_index(&mut self) -> &mut SelectedIndex {
+        let id = self.content_stack.last();
+        let state = self.content_stack.get_state_mut();
+        match state {
+            ContentState::Normal => {
+                match id {
+                    GlobalProvider::ContentProvider(id) => {
+                        let cp = self.content_providers.get_mut(id).unwrap();
+                        cp.get_selected_index_mut()
+                    }
+                    GlobalProvider::Notifier => {
+                        todo!()
+                    }
+                }
+            }
+            ContentState::Edit {ctx, ..} => {
+                ctx.last_mut()
+            }
+            ContentState::Menu {ctx, ..} => {
+                ctx.last_mut()
+            }
+            ContentState::GlobalMenu(i) => {
+                i
+            }
+        }
     }
 
     pub fn increment_selection(&mut self) { // TODO: maybe just pass the max limit of index to the content_stack when edit/menu instead of asking the providers (what if it changes tho)
