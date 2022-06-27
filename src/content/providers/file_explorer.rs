@@ -14,6 +14,7 @@ use tui::{
         Style,
     },
 };
+use lofty::Probe;
 
 use crate::{
     content::{
@@ -112,7 +113,7 @@ impl Loadable for FileExplorer {
         self.loaded
     }
 
-    fn load(&mut self, id: ContentProviderID) -> ContentManagerAction {
+    fn load(&mut self, id: ContentProviderID) -> ContentManagerAction { // TODO: make this return a Result and handle the unwraps
         self.loaded = true;
         let mut s = vec![];
         let mut sp = vec![];
@@ -129,17 +130,20 @@ impl Loadable for FileExplorer {
                     ..Default::default()
                 }.into());
             } else if e.is_file() {
-                let file = e.to_str().unwrap();
-                if [".m4a", ".mp3"].into_iter().filter(|ext| file.ends_with(ext)).next().is_some() {
-                    match TaggedFileSong::from_file(file.into()) {
-                        Ok(Some(song)) => {
-                            s.push(song.into());
+                let file_path = e.to_str().unwrap();
+                let file = Probe::open(file_path).unwrap(); // file open error
+                match file.guess_file_type() {
+                    Ok(_) => { // is some kinda song
+                        match TaggedFileSong::from_file_path(file_path.into()) {
+                            Ok(Some(song)) => {
+                                s.push(song.into());
+                            }
+                            _ => {
+                                s.push(UntaggedFileSong::from_file_path(file_path.into()).into())
+                            }    
                         }
-                        _ => {
-                            s.push(UntaggedFileSong::from_file(file.into()).into())
-                        }
-                        
                     }
+                    Err(_) => (),
                 }
             }
         });

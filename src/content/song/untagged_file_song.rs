@@ -39,7 +39,7 @@ pub struct UntaggedFileSong {
     path: Cow<'static, str>,
 }
 impl UntaggedFileSong {
-    pub fn from_file<'a>(path: Cow<'a, str>) -> Self {
+    pub fn from_file_path<'a>(path: Cow<'a, str>) -> Self {
         let song = Self {
             title: path.rsplit_terminator("/").next().unwrap().to_owned(),
             path: path.into_owned().into(),

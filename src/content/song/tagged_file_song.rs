@@ -46,7 +46,7 @@ pub struct TaggedFileSong {
     path: Cow<'static, str>,
 }
 impl TaggedFileSong {
-    pub fn from_file<'a>(path: Cow<'a, str>) -> Result<Option<Self>> {
+    pub fn from_file_path<'a>(path: Cow<'a, str>) -> Result<Option<Self>> {
         let tf = lofty::read_from_path(path.as_ref(), true)?;
         let _ = log_song(&path);
         let st: TaggedSong = tf.into();
