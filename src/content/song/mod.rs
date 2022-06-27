@@ -7,6 +7,7 @@ use std::ops::{
 
 pub mod traits;
 pub mod tagged_file_song;
+pub mod untagged_file_song;
 pub mod yt_song;
 
 use traits::SongTrait;

@@ -41,8 +41,8 @@ use crate::{
 #[derive(Debug)]
 pub struct TaggedFileSong {
     title: String,
-    album: String,
-    artist: String,
+    album: Option<String>,
+    artist: Option<String>,
     path: Cow<'static, str>,
 }
 impl TaggedFileSong {
@@ -53,17 +53,51 @@ impl TaggedFileSong {
         let title = st.title();
         let album = st.album();
         let artist = st.artist();
-        if title.is_some() && album.is_some() && artist.is_some() {
+        if title.is_some() {
             let song = Self {
                 path: path.into_owned().into(),
                 title: title.unwrap().to_owned(),
-                album: album.unwrap().to_owned(),
-                artist: artist.unwrap().to_owned(),
+                album: album.map(String::from),
+                artist: artist.map(String::from),
             };
             Ok(Some(song))
         } else {
             Ok(None)
         }
+    }
+
+    pub fn show_art_action(path: Cow<'static, str>) -> ContentManagerAction {
+        vec![
+            ContentManagerAction::ClearImage,
+            RustParallelAction::Callback {
+                callback: Box::new(move || {
+                    let tf = lofty::read_from_path(path.as_ref(), true)?;
+                    let tags = tf.primary_tag().context("no primary tag on the image")?;
+                    let pics = tags.pictures();
+                    let img = if pics.len() >= 1 {
+                        image::io::Reader::new(
+                            std::io::Cursor::new(
+                                pics[0].data().to_owned()
+                            )
+                        )
+                        .with_guessed_format()?
+                        .decode()?
+                    } else { // no image
+                        return Ok(RustParallelAction::ContentManagerAction {
+                            action: ContentManagerAction::None.into()
+                        });
+                    };
+                    let mut img = UnprocessedImage::Image {img};
+                    img.prepare_image()?;
+                    let action = RustParallelAction::ContentManagerAction {
+                        action: ContentManagerAction::UpdateImage {
+                            img,
+                        }.into(),
+                    }.into();
+                    Ok(action)
+                }),
+            }.into(),
+        ].into()
     }
 }
 
@@ -129,8 +163,6 @@ impl SongTrait for TaggedFileSong {
     fn get_showable_info(&self) -> Box<dyn Iterator<Item = Cow<'static, str>>> {
         Box::new([
             format!("title: {}", self.title),
-            format!("artist: {}", self.artist),
-            format!("album: {}", self.album),
         ].into_iter().map(Into::into))
     }
     fn get_uri(&self, callback: Func) -> Result<ContentManagerAction> {
@@ -143,39 +175,7 @@ impl SongTrait for TaggedFileSong {
     }
     fn show_art(&self) -> Result<ContentManagerAction> {
         let path = self.path.clone();
-        let callback = move || {
-            let tf = lofty::read_from_path(path.as_ref(), true)?;
-            let tags = tf.primary_tag().context("no primary tag on the image")?;
-            let pics = tags.pictures();
-            let img = if pics.len() >= 1 {
-                Ok(
-                    image::io::Reader::new(
-                        std::io::Cursor::new(
-                            pics[0].data().to_owned()
-                        )
-                    )
-                    .with_guessed_format()?
-                    .decode()?
-                )
-            } else {
-                Err(anyhow::anyhow!("no image"))
-            };
-            let mut img = UnprocessedImage::Image {img: img?};
-            img.prepare_image()?;
-            let action = RustParallelAction::ContentManagerAction {
-                action: ContentManagerAction::UpdateImage {
-                    img,
-                }.into(),
-            }.into();
-            Ok(action)
-        };
-        let action = vec![
-            ContentManagerAction::ClearImage,
-            RustParallelAction::Callback {
-                callback: Box::new(callback),
-            }.into(),
-        ].into();
-        Ok(action)
+        Ok(Self::show_art_action(path))
     }
 
     fn as_display(&self) -> &dyn super::traits::SongDisplay {
@@ -188,9 +188,9 @@ impl SongDisplay for TaggedFileSong {
         self.title.as_ref()
     }
     fn album(&self) -> Option<&str> {
-        Some(self.album.as_ref())
+        self.album.as_ref().map(String::as_str)
     }
     fn artist(&self) -> Option<&str> {
-        Some(self.artist.as_ref())
+        self.artist.as_ref().map(String::as_str)
     }
 }

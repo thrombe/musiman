@@ -100,7 +100,7 @@ impl Menu for MainProvider {
             MainProviderMenuOption::ADD_ARTIST_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_PLAYLIST_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_FILE_EXPLORER => {
-                let path = "/home/issac/daata/phon-data/.musi/IsBac";
+                let path = "/home/issac/daata/phon-data/.musi";
                 let mut fe = FileExplorer::default();
                 fe.name = Cow::from(format!("File Explorer: {dir}", dir = path.rsplit_terminator("/").next().unwrap()));
                 fe.path = Cow::from(path);

@@ -1,4 +1,10 @@
 
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+    error,
+};
 
 use std::borrow::Cow;
 use tui::{
@@ -11,7 +17,10 @@ use tui::{
 
 use crate::{
     content::{
-        song::tagged_file_song::TaggedFileSong,
+        song::{
+            tagged_file_song::TaggedFileSong,
+            untagged_file_song::UntaggedFileSong,
+        },
         manager::action::ContentManagerAction,
         register::{
             SongID,
@@ -121,10 +130,15 @@ impl Loadable for FileExplorer {
                 }.into());
             } else if e.is_file() {
                 let file = e.to_str().unwrap();
-                if file.ends_with(".m4a") {
-                    match TaggedFileSong::from_file(file.into()).unwrap() { // BAD: unwrap
-                        Some(song) => s.push(song.into()),
-                        None => (),
+                if [".m4a", ".mp3"].into_iter().filter(|ext| file.ends_with(ext)).next().is_some() {
+                    match TaggedFileSong::from_file(file.into()) {
+                        Ok(Some(song)) => {
+                            s.push(song.into());
+                        }
+                        _ => {
+                            s.push(UntaggedFileSong::from_file(file.into()).into())
+                        }
+                        
                     }
                 }
             }
