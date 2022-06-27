@@ -83,17 +83,11 @@ impl TaggedFileSong {
                         .with_guessed_format()?
                         .decode()?
                     } else { // no image
-                        return Ok(RustParallelAction::ContentManagerAction {
-                            action: ContentManagerAction::None.into()
-                        });
+                        return Ok(ContentManagerAction::None.into());
                     };
                     let mut img = UnprocessedImage::Image {img};
                     img.prepare_image()?;
-                    let action = RustParallelAction::ContentManagerAction {
-                        action: ContentManagerAction::UpdateImage {
-                            img,
-                        }.into(),
-                    }.into();
+                    let action = ContentManagerAction::UpdateImage {img}.into();
                     Ok(action)
                 }),
             }.into(),

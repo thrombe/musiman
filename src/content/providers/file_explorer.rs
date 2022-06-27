@@ -15,6 +15,7 @@ use tui::{
     },
 };
 use lofty::Probe;
+use anyhow::Result;
 
 use crate::{
     content::{
@@ -22,7 +23,10 @@ use crate::{
             tagged_file_song::TaggedFileSong,
             untagged_file_song::UntaggedFileSong,
         },
-        manager::action::ContentManagerAction,
+        manager::action::{
+            ContentManagerAction,
+            RustParallelAction,
+        },
         register::{
             SongID,
             ContentProviderID,
@@ -113,41 +117,59 @@ impl Loadable for FileExplorer {
         self.loaded
     }
 
-    fn load(&mut self, id: ContentProviderID) -> ContentManagerAction { // TODO: make this return a Result and handle the unwraps
+    fn load(&mut self, id: ContentProviderID) -> ContentManagerAction {
         self.loaded = true;
-        let mut s = vec![];
-        let mut sp = vec![];
-        std::fs::read_dir(self.path.as_ref())
-        .unwrap()
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .for_each(|e| {
-            if e.is_dir() {
-                let dir = e.to_str().unwrap();
-                sp.push(FileExplorer {
-                    name: Cow::from(dir.rsplit_terminator("/").next().unwrap().to_owned()),
-                    path: Cow::from(dir.to_owned()),
-                    ..Default::default()
-                }.into());
-            } else if e.is_file() {
-                let file_path = e.to_str().unwrap();
-                let file = Probe::open(file_path).unwrap(); // file open error
-                match file.guess_file_type() {
-                    Ok(_) => { // is some kinda song
-                        match TaggedFileSong::from_file_path(file_path.into()) {
-                            Ok(Some(song)) => {
-                                s.push(song.into());
+        let path = self.path.clone();
+        RustParallelAction::Callback {
+            callback: Box::new(move || {
+                let mut s = vec![];
+                let mut sp = vec![];
+                std::fs::read_dir(path.as_ref())?
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .map(|e| {
+                    if e.is_dir() {
+                        let dir = e.to_str().unwrap();
+                        sp.push(FileExplorer {
+                            name: Cow::from(dir.rsplit_terminator("/").next().unwrap().to_owned()),
+                            path: Cow::from(dir.to_owned()),
+                            ..Default::default()
+                        }.into());
+                    } else if e.is_file() {
+                        let file_path = e.to_str().unwrap();
+                        let file = Probe::open(file_path)?; // file open error
+                        match file.guess_file_type() {
+                            Ok(_) => { // is some kinda song
+                                match TaggedFileSong::from_file_path(file_path.into()) {
+                                    Ok(Some(song)) => {
+                                        s.push(song.into());
+                                    }
+                                    _ => {
+                                        s.push(UntaggedFileSong::from_file_path(file_path.into()).into())
+                                    }
+                                }
                             }
-                            _ => {
-                                s.push(UntaggedFileSong::from_file_path(file_path.into()).into())
-                            }    
+                            Err(_) => (),
                         }
                     }
-                    Err(_) => (),
-                }
-            }
-        });
-        ContentManagerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id}
+                    Ok(())
+                })
+                .for_each(|res: Result<()>| { // ignore errors from files that failed to read
+                    match res {
+                        Ok(_) => (),
+                        Err(err) => {
+                            error!("{err}")
+                        }
+                    }
+                });
+                // .collect::<Result<_>>()?;
+                let action: ContentManagerAction = vec![
+                    ContentManagerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id},
+                    ContentManagerAction::RefreshDisplayContent,
+                ].into();
+                Ok(action.into())
+            }),
+        }.into()
     }
 }
 

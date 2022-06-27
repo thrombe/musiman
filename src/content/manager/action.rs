@@ -310,6 +310,11 @@ pub enum RustParallelAction {
         action: Box<ContentManagerAction>,
     },
 }
+impl From<ContentManagerAction> for RustParallelAction {
+    fn from(a: ContentManagerAction) -> Self {
+        Self::ContentManagerAction { action: Box::new(a) }
+    }
+}
 
 impl RustParallelAction {
     fn run(self, send: Sender<ContentManagerAction>) -> Result<()> {

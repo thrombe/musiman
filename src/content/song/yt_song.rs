@@ -165,9 +165,7 @@ impl SongTrait for YtSong {
                     callback: Box::new(|| {
                         let mut img = UnprocessedImage::Url(best_thumbnail_url);
                         img.prepare_image()?;
-                        let action = RustParallelAction::ContentManagerAction {
-                            action: ContentManagerAction::UpdateImage { img }.into(),
-                        };
+                        let action = ContentManagerAction::UpdateImage { img }.into();
                         Ok(action)
                     }),
                 }.into(),
