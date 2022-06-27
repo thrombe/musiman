@@ -192,7 +192,7 @@ impl SongDisplay for YtSong {
         Some(self.artist.as_ref())
     }
     fn album(&self) -> Option<&str> {
-        self.album.as_ref().map(|s| &s[..])
+        self.album.as_ref().map(String::as_str)
     }
 }
 

@@ -315,6 +315,12 @@ impl From<ContentManagerAction> for RustParallelAction {
         Self::ContentManagerAction { action: Box::new(a) }
     }
 }
+impl From<Vec<ContentManagerAction>> for RustParallelAction {
+    fn from(a: Vec<ContentManagerAction>) -> Self {
+        let a: ContentManagerAction = a.into();
+        a.into()
+    }
+}
 
 impl RustParallelAction {
     fn run(self, send: Sender<ContentManagerAction>) -> Result<()> {

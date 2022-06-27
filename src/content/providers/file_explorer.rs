@@ -163,11 +163,11 @@ impl Loadable for FileExplorer {
                     }
                 });
                 // .collect::<Result<_>>()?;
-                let action: ContentManagerAction = vec![
+                let action = vec![
                     ContentManagerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id},
                     ContentManagerAction::RefreshDisplayContent,
                 ].into();
-                Ok(action.into())
+                Ok(action)
             }),
         }.into()
     }
