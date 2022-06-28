@@ -16,6 +16,8 @@ use tui::{
 };
 use lofty::Probe;
 use anyhow::Result;
+use tokio_stream::StreamExt;
+use futures::stream::FuturesUnordered;
 
 use crate::{
     content::{
@@ -124,45 +126,80 @@ impl Loadable for FileExplorer {
             callback: Box::new(move || {
                 let mut s = vec![];
                 let mut sp = vec![];
-                std::fs::read_dir(path.as_ref())?
-                .filter_map(|e| e.ok())
-                .map(|e| e.path())
-                .map(|e| {
-                    if e.is_dir() {
-                        let dir = e.to_str().unwrap();
-                        sp.push(FileExplorer {
-                            name: Cow::from(dir.rsplit_terminator("/").next().unwrap().to_owned()),
-                            path: Cow::from(dir.to_owned()),
-                            ..Default::default()
-                        }.into());
-                    } else if e.is_file() {
-                        let file_path = e.to_str().unwrap();
-                        let file = Probe::open(file_path)?; // file open error
-                        match file.guess_file_type() {
-                            Ok(_) => { // is some kinda song
-                                match TaggedFileSong::from_file_path(file_path.into()) {
-                                    Ok(Some(song)) => {
-                                        s.push(song.into());
-                                    }
-                                    _ => {
-                                        s.push(UntaggedFileSong::from_file_path(file_path.into()).into())
-                                    }
-                                }
+
+                // let handle = tokio::runtime::Runtime::new().unwrap();
+                let handle = tokio::runtime::Builder::new_multi_thread()
+                .max_blocking_threads(20)
+                .build().unwrap();
+                handle.block_on(async {
+                    let fut = FuturesUnordered::new();
+                    tokio_stream::wrappers::ReadDirStream::new(tokio::fs::read_dir(path.as_ref()).await?)
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .map(|e| {
+                        if e.is_dir() {
+                            let dir = e.to_str().unwrap();
+                            sp.push(FileExplorer {
+                                name: Cow::from(dir.rsplit_terminator("/").next().unwrap().to_owned()),
+                                path: Cow::from(dir.to_owned()),
+                                ..Default::default()
+                            }.into());
+                        } else if e.is_file() {
+                            let file_path = e.to_str().unwrap().to_owned();
+                            let file = {
+                                tokio::task::spawn_blocking(move || {
+                                    (Probe::open(file_path.clone()), file_path.clone()) // file open error
+                                })
+                            };
+                            return Some(file)
+                        }
+                        None
+                    })
+                    .filter_map(|e| e)
+                    .map(|e| {
+                        fut.push(e);
+                        Ok(())
+                    })
+                    .collect::<Result<()>>().await?;
+                    let fut2 = FuturesUnordered::new();
+                    fut.map(|e| {
+                        let (e, file_path) = e?;
+                        let e = match e {
+                            Ok(s) => {
+                                s
                             }
-                            Err(_) => (),
+                            Err(err) => { // ignore errors from files that failed to read
+                                error!("{err}");
+                                return Ok(())
+                            }
+                        };
+                        if e.guess_file_type().is_ok() {
+                            fut2.push(tokio::task::spawn_blocking(|| {
+                                (
+                                    TaggedFileSong::from_file_path(file_path.clone().into()),
+                                    UntaggedFileSong::from_file_path(file_path.into()),
+                                )
+                            }));
                         }
-                    }
-                    Ok(())
-                })
-                .for_each(|res: Result<()>| { // ignore errors from files that failed to read
-                    match res {
-                        Ok(_) => (),
-                        Err(err) => {
-                            error!("{err}")
+                        Ok(())
+                    })
+                    .collect::<Result<()>>().await?;
+                    fut2.map(|e| {
+                        let (e, ee) = e?;
+                        match e? {
+                            Some(song) => {
+                                s.push(song.into());
+                            }
+                            None => {
+                                s.push(ee.into())
+                            }
                         }
-                    }
-                });
-                // .collect::<Result<_>>()?;
+                        Ok(())
+                    })
+                    .collect::<Result<()>>().await?;
+                    Ok::<(), anyhow::Error>(())
+                })?;
+
                 let action = vec![
                     ContentManagerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id},
                     ContentManagerAction::RefreshDisplayContent,
