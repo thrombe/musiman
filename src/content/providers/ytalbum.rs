@@ -112,8 +112,8 @@ impl Loadable for YTAlbum {
     fn is_loaded(&self) -> bool {
         self.loaded
     }
-    fn load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
-        match &self.id {
+    fn load(&mut self, self_id: ContentProviderID) -> Result<ContentManagerAction> {
+        let action = match &self.id {
             YTAlbumID::BrowseID(browse_id) => {
                 vec![
                     PyAction::ExecCode {
@@ -139,7 +139,7 @@ impl Loadable for YTAlbum {
                             ",
                             None,
                         )
-                        .build().unwrap(),
+                        .build()?,
                         callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
                             // the data we get from here have songs not necessarily the music videos
                             // but the data we get from the playlistId has the music videos
@@ -181,7 +181,7 @@ impl Loadable for YTAlbum {
                             ",
                             None,
                         )
-                        .build().unwrap(),
+                        .build()?,
                         callback: Box::new(move |res: String| -> Result<ContentManagerAction> {
                             // debug!("{res}");
                             let playlist = serde_json::from_str::<YTDLPlaylist>(&res)?;
@@ -198,7 +198,8 @@ impl Loadable for YTAlbum {
                     }.into(),
                 ].into()
             }
-        }
+        };
+        Ok(action)
     }
 }
 

@@ -116,12 +116,12 @@ impl Loadable for FileExplorer {
         self.loaded
     }
 
-    fn load(&mut self, id: ContentProviderID) -> ContentManagerAction {
+    fn load(&mut self, id: ContentProviderID) -> Result<ContentManagerAction> {
         self.loaded = true;
         let path = self.path.clone();
         let mut s = vec![];
         let mut sp = vec![];
-        std::fs::read_dir(path.as_ref()).unwrap()
+        std::fs::read_dir(path.as_ref())?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .map(|e| {
@@ -164,7 +164,7 @@ impl Loadable for FileExplorer {
             ContentManagerAction::LoadContentProvider {songs: s, content_providers: sp, loader_id: id},
             ContentManagerAction::RefreshDisplayContent,
         ].into();
-        action
+        Ok(action)
     }
 }
 

@@ -10,6 +10,7 @@ use std::{
     fmt::Debug,
     any::Any,
 };
+use anyhow::Result;
 
 use crate::{
     content::{
@@ -155,14 +156,14 @@ pub trait ContentProviderTrait
 
 
 pub trait Loadable {
-    fn maybe_load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
+    fn maybe_load(&mut self, self_id: ContentProviderID) -> Result<ContentManagerAction> {
         if self.is_loaded() {
-            ContentManagerAction::None
+            Ok(ContentManagerAction::None)
         } else {
             self.load(self_id)
         }
     }
-    fn load(&mut self, self_id: ContentProviderID) -> ContentManagerAction;
+    fn load(&mut self, self_id: ContentProviderID) -> Result<ContentManagerAction>;
     fn is_loaded(&self) -> bool;
 }
 

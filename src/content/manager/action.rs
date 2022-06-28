@@ -136,7 +136,7 @@ impl ContentManagerAction {
             Self::TryLoadContentProvider {loader_id} => {
                 let cp = ch.get_provider_mut(loader_id).as_loadable();
                 if let Some(cp) = cp {
-                    let action = cp.maybe_load(loader_id);
+                    let action = cp.maybe_load(loader_id)?;
                     action.apply(ch)?;
                 }
             }

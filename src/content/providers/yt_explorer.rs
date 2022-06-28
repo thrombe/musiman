@@ -7,7 +7,7 @@ use crate::{
 };
 
 use std::borrow::Cow;
-
+use anyhow::Result;
 use tui::{
     text::Span,
     style::{
@@ -514,8 +514,8 @@ impl Loadable for YTExplorer {
         self.loaded
     }
 
-    fn load(&mut self, _: ContentProviderID) -> ContentManagerAction {
-        ContentManagerAction::OpenEditForCurrent
+    fn load(&mut self, _: ContentProviderID) -> Result<ContentManagerAction> {
+        Ok(ContentManagerAction::OpenEditForCurrent)
     }
 }
 

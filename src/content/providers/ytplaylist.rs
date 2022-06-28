@@ -112,8 +112,8 @@ impl Loadable for YTPlaylist {
     fn is_loaded(&self) -> bool {
         self.loaded
     }
-    fn load(&mut self, self_id: ContentProviderID) -> ContentManagerAction {
-        match &self.id {
+    fn load(&mut self, self_id: ContentProviderID) -> Result<ContentManagerAction> {
+        let action = match &self.id {
             YTPlaylistID::BrowseID(browse_id) => {
                 self.loaded = true;
                 vec![
@@ -201,7 +201,8 @@ impl Loadable for YTPlaylist {
             //         }.into(),
             //     ].into()
             // }
-        }
+        };
+        Ok(action)
     }
 }
 
