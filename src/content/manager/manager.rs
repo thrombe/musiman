@@ -10,6 +10,11 @@ use crate::{
 
 use musiplayer::Player;
 use anyhow::Result;
+use tokio::sync::mpsc::{
+    unbounded_channel,
+    UnboundedReceiver,
+    UnboundedSender,
+};
 
 use crate::{
     content::{
@@ -72,7 +77,9 @@ pub struct ContentManager {
     pub active_song: Option<SongID>,
 
     pub parallel_handle: ParallelHandle,
-    pub app_action: AppAction,
+
+    pub app_action_sender: UnboundedSender<AppAction>, // just so it can be received in async
+    pub app_action_receiver: UnboundedReceiver<AppAction>
 }
 
 // methods related to content register
@@ -220,6 +227,7 @@ impl ContentManager {
             let main_provider = MainProvider::new(|item| cp.alloc(item));
             cp.alloc(main_provider.into())
         };
+        let (sender, receiver) = unbounded_channel();
         let ch = Self {
             songs: ContentRegister::new(),
             content_providers: cp,
@@ -233,7 +241,8 @@ impl ContentManager {
             active_queue: None,
             active_song: None,
             parallel_handle: Default::default(),
-            app_action: Default::default(),
+            app_action_sender: sender,
+            app_action_receiver: receiver,
         };
         Ok(ch)
     }
@@ -265,13 +274,6 @@ impl ContentManager {
             }
             _ => (),
         }
-    }
-
-    pub fn poll_action(&mut self) -> Result<()> {
-        self.parallel_handle.poll().apply(self)
-    }
-    pub fn get_app_action(&mut self) -> AppAction {
-        std::mem::replace(&mut self.app_action, Default::default())
     }
 
     pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
@@ -390,7 +392,7 @@ impl ContentManager {
                 todo!()
             }
         }
-        self.app_action.queue(AppAction::UpdateDisplayContent);
+        ContentManagerAction::RefreshDisplayContent.apply(self)?;
         Ok(())
     }
 
@@ -450,7 +452,7 @@ impl ContentManager {
                 todo!()
             }
         }
-        self.app_action.queue(AppAction::UpdateDisplayContent);
+        ContentManagerAction::RefreshDisplayContent.apply(self)?;
         Ok(())
     }    
 
@@ -509,7 +511,7 @@ impl ContentManager {
                 todo!()
             }
         }
-        self.app_action.queue(AppAction::UpdateDisplayContent);
+        ContentManagerAction::RefreshDisplayContent.apply(self)?;
         Ok(())
     }    
 }

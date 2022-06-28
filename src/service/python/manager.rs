@@ -27,6 +27,11 @@ use std::{
         },
     }
 };
+use tokio::sync::mpsc::{
+    unbounded_channel,
+    UnboundedReceiver,
+    UnboundedSender,
+};
 
 use crate::{
     content::manager::{
@@ -50,13 +55,13 @@ pub struct PyActionEntry {
 #[derive(Debug)]
 pub struct PyManager {
     sender: Sender<PyAction>,
-    receiver: Receiver<ContentManagerAction>,
+    receiver: UnboundedReceiver<ContentManagerAction>,
     thread: JoinHandle<Result<()>>, // FIX: communicate the crash in this thread to the user
 }
 
 impl PyManager {
     pub fn new() -> Result<Self> {
-        let (a_sender, a_receiver) = mpsc::channel();
+        let (a_sender, a_receiver) = unbounded_channel();
         let (yt_sender, yt_receiver) = mpsc::channel();
 
         let thread = Self::init_thread(a_sender, yt_receiver);
@@ -68,9 +73,9 @@ impl PyManager {
         })
     }
 
-    pub fn poll(&mut self) -> ContentManagerAction {
+    pub async fn recv(&mut self) -> ContentManagerAction {
         if self.thread.is_finished() {
-            let (a_sender, a_receiver) = mpsc::channel();
+            let (a_sender, a_receiver) = unbounded_channel();
             let (yt_sender, yt_receiver) = mpsc::channel();
             self.receiver = a_receiver;
             self.sender = yt_sender;
@@ -83,7 +88,7 @@ impl PyManager {
                 }
             }
         }
-        match self.receiver.try_recv().ok() {
+        match self.receiver.recv().await {
             Some(a) => {
                 dbg!("action received");
                 a
@@ -97,7 +102,7 @@ impl PyManager {
         self.sender.send(action).ok().context("send error")
     }
 
-    fn init_thread(sender: Sender<ContentManagerAction>, receiver: Receiver<PyAction>) -> JoinHandle<Result<()>> {
+    fn init_thread(sender: UnboundedSender<ContentManagerAction>, receiver: Receiver<PyAction>) -> JoinHandle<Result<()>> {
         let thread = thread::spawn(move || -> Result<()> {
             pyo3::prepare_freethreaded_python();
             let p = pyo3::Python::acquire_gil(); 

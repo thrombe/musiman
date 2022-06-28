@@ -22,7 +22,7 @@ use crate::{
 mod traits;
 mod block;
 #[cfg(feature = "sixel")]
-mod sixel;
+pub mod sixel;
 
 
 #[derive(Debug, Clone, Copy)]

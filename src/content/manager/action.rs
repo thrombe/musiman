@@ -11,12 +11,16 @@ use anyhow::Result;
 use derivative::Derivative;
 use std::{
     thread,
-    sync::mpsc::{
-        self,
-        Receiver,
-        Sender,
-    },
     fmt::Debug,
+    borrow::Cow,
+};
+use tokio::{
+    sync::mpsc::{
+        unbounded_channel,
+        UnboundedReceiver,
+        UnboundedSender,
+    },
+    select,
 };
 
 
@@ -117,6 +121,10 @@ pub enum ContentManagerAction {
     Unregister {
         ids: Vec<ID>,
     },
+    LogTimeSince {
+        instant: std::time::Instant,
+        message: Cow<'static, str>,
+    },
     None,
 }
 
@@ -173,7 +181,7 @@ impl ContentManagerAction {
 
                 Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch)?;
 
-                ch.app_action.queue(AppAction::UpdateDisplayContent);
+                ContentManagerAction::RefreshDisplayContent.apply(ch)?;
             }
             Self::PushToContentStack { id } => {
                 dbg!(id);
@@ -187,9 +195,9 @@ impl ContentManagerAction {
                 }
             }
             Self::EnableTyping { content, callback, loader } => {
-                ch.app_action.queue(
+                ch.app_action_sender.send(
                     AppAction::EnableTyping {content, callback, loader}
-                );
+                )?;
             }
             Self::PopContentStack => {
                 match ch.content_stack.pop() {
@@ -209,14 +217,14 @@ impl ContentManagerAction {
                 ch.parallel_handle.run(action);
             }
             Self::RefreshDisplayContent => {
-                ch.app_action.queue(AppAction::UpdateDisplayContent);
+                ch.app_action_sender.send(AppAction::UpdateDisplayContent)?;
             }
             Self::UpdateImage {img} => {
                 ch.image_handler.set_image(img);
             }
             Self::ClearImage => {
                 ch.image_handler.clear_image();
-                ch.app_action.queue(AppAction::Redraw);
+                ch.app_action_sender.send(AppAction::Redraw)?;
             }
             Self::PlaySongURI {uri} => {
                 ch.player.play(uri)?;
@@ -229,6 +237,10 @@ impl ContentManagerAction {
             }
             Self::Unregister {ids} => {
                 ids.into_iter().for_each(|id| ch.unregister(id.into()));
+            }
+            Self::LogTimeSince { message, instant } => {
+                let duration = std::time::Instant::now().duration_since(instant).as_secs_f64();
+                debug!("{message}: {duration}");
             }
         }
         Ok(())
@@ -246,13 +258,13 @@ impl ContentManagerAction {
 
 pub struct ParallelHandle {
     handles: Vec<thread::JoinHandle<Result<()>>>,
-    receiver: Receiver<ContentManagerAction>,
-    sender: Sender<ContentManagerAction>,
+    receiver: UnboundedReceiver<ContentManagerAction>,
+    sender: UnboundedSender<ContentManagerAction>,
     yt_man: PyManager,
 }
 impl Default for ParallelHandle {
     fn default() -> Self {
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = unbounded_channel();
         Self {
             yt_man: PyManager::new().unwrap(),
             handles: Default::default(),
@@ -286,13 +298,12 @@ impl ParallelHandle {
         }
     }
 
-    pub fn poll(&mut self) -> ContentManagerAction {
-        match self.receiver.try_recv().ok() {
-            Some(a) => {
-                dbg!("action received");
-                a
-            },
-            None => self.yt_man.poll(),
+    pub async fn recv(&mut self) -> ContentManagerAction {
+        let a1 = self.receiver.recv();
+        let a2 = self.yt_man.recv();
+        select! {
+            a1 = a1 => a1.unwrap(),
+            a2 = a2 => a2,
         }
     }
 }
@@ -323,7 +334,7 @@ impl From<Vec<ContentManagerAction>> for RustParallelAction {
 }
 
 impl RustParallelAction {
-    fn run(self, send: Sender<ContentManagerAction>) -> Result<()> {
+    fn run(self, send: UnboundedSender<ContentManagerAction>) -> Result<()> {
         match self {
             Self::Callback {callback} => {
                 callback()?.run(send)?;

@@ -35,7 +35,6 @@ use crossterm::{
     },
 };
 use anyhow::Result;
-// use tokio;
 
 use crate::{
     app::app::App,
@@ -43,9 +42,7 @@ use crate::{
 };
 
 
-// #[tokio::main]
-// async fn main() -> Result<()> {
-pub fn run() -> Result<()> {
+pub async fn run() -> Result<()> {
     init_logger().expect("failed to init logger");
 
     // yt_manager::test().unwrap();
@@ -72,7 +69,7 @@ pub fn run() -> Result<()> {
 
     // create app and run it
     let app = App::load()?;
-    app.run_app(&mut terminal)?;
+    app.run_app(&mut terminal).await?;
 
     restore_terminal(&mut terminal)?;
 

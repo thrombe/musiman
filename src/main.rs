@@ -17,7 +17,8 @@ pub use service::log::{
 
 use anyhow::Result;
 
-fn main() -> Result<()> {
-    app::run::run()
+#[tokio::main]
+async fn main() -> Result<()> {
+    app::run::run().await
 }
 

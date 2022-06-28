@@ -15,10 +15,12 @@ log = "0.4.17"
 fern = "0.6.1"
 lofty = "0.6.3"
 
-# tokio = {version = "1.18", features = ["rt-multi-thread", "time", "full", "fs"]}
+tokio = { version = "1.18", features = ["rt-multi-thread", "time", "full", "fs"] }
+tokio-stream = { version="0.1.9", features = ["fs"] }
+futures = "0.3.21"
 
 tui = "0.18"
-crossterm = "0.23"
+crossterm = { version = "0.23", features = ["event-stream"] }
 unicode-width = "0.1.9"
 termion = "1.5.6"
 image = "0.24"

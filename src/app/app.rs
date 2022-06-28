@@ -6,6 +6,7 @@ use crate::{
     error,
 };
 
+use tokio::select;
 use tui::{
     backend::Backend,
     widgets::{
@@ -39,7 +40,7 @@ use tui::{
 };
 use crossterm::{
     event::{
-        self,
+        EventStream,
         Event,
         KeyCode,
         KeyEvent,
@@ -49,6 +50,10 @@ use crossterm::{
 // use unicode_width::UnicodeWidthStr; // string.width() -> gives correct width (including cjk chars) (i assume)
 use anyhow::Result;
 use std::borrow::Cow;
+use futures::{
+    StreamExt,
+    FutureExt,
+};
 
 use crate::{
     content::manager::{
@@ -293,7 +298,6 @@ impl PlayerWidget {
     }
 
     fn update(&mut self, ch: &mut ContentManager) -> Result<()> {
-        ch.poll_action()?;
         if ch.player.is_finished()? {
             ch.next_song()?;
         }
@@ -317,9 +321,6 @@ impl StatusBar {
                 Span::styled("e", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(" to start editing."),
             ]),
-            // Spans::from(vec![
-            //     Span::raw("lol"),
-            // ]),
             ],
             Style::default().add_modifier(Modifier::RAPID_BLINK),
         );
@@ -376,10 +377,21 @@ impl App {
         Ok(a)
     }
 
-    pub fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
+    pub async fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
         terminal.draw(|f| self.render(f).unwrap())?;
+        let mut reader = EventStream::new();
+        let _ = crate::image::printer::sixel::is_sixel_supported(); // for some reason this does not behave well when tokio does its stuff (maybe cus Write on stdout). so cache it (lazy_static)
         loop {
-            self.handle_events()?;
+            let event = reader.next().fuse();
+            let action = self.content_manager.parallel_handle.recv();
+            let app_action = self.content_manager.app_action_receiver.recv();
+            let sleep = tokio::time::sleep(std::time::Duration::from_secs_f64(0.5));
+            select! {
+                ev = event => self.handle_events(ev.unwrap()?)?,
+                action = action => action.apply(&mut self.content_manager)?,
+                app_action = app_action => app_action.unwrap().apply(&mut self)?,
+                _ = sleep => (),
+            }
             self.update()?;
             if self.redraw_needed {
                 self.redraw_needed = false;
@@ -396,16 +408,11 @@ impl App {
 
     fn update(&mut self) -> Result<()> {
         self.player_widget.update(&mut self.content_manager)?;
-        let action = self.content_manager.get_app_action();
-        action.apply(self)?;
         Ok(())
     }
     
-    fn handle_events(&mut self) -> Result<()> {
-        if !event::poll(std::time::Duration::from_millis(500))? { // read does not block as poll returned true
-            return Ok(())
-        }
-        match event::read()? {
+    fn handle_events(&mut self, event: Event) -> Result<()> {
+        match event {
             Event::Key(key) => {
                 let event_handled = match self.state {
                     AppState::Typing => {

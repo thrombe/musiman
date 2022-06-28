@@ -5,7 +5,7 @@ use crate::{
     debug,
 };
 
-mod printer;
+pub mod printer;
 mod config;
 
 use anyhow::Result;
