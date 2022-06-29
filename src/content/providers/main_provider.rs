@@ -44,6 +44,7 @@ use crate::{
             Line,
         },
     },
+    service::config::config,
 };
 
 
@@ -64,7 +65,7 @@ impl MainProvider {
         Self {
             providers: vec![
                 queue_provider,
-                alloc(FileExplorer::new("/home/issac/daata/phon-data/.musi".into()).into()),
+                alloc(FileExplorer::new(config().file_explorer_default_path.to_str().unwrap().into()).into()),
                 alloc(YTExplorer::new().into()),
                 ],
             name: Cow::from("main"),
@@ -108,7 +109,7 @@ impl Menu for MainProvider {
                     ContentManagerAction::PopContentStack,
                     ContentManagerAction::AddCPToCPAndContentStack {
                         id: self_id,
-                        cp: FileExplorer::new("/home/issac/daata/phon-data/.musi".into()).into()
+                        cp: FileExplorer::new(config().file_explorer_default_path.to_str().unwrap().into()).into()
                     },
                 ].into()
             }

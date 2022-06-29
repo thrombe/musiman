@@ -26,6 +26,8 @@ use std::{
     collections::HashMap,
 };
 
+use crate::service::config::config;
+
 
 pub struct PyHandle {
     map: HashMap<TypeId, Py<PyAny>>,
@@ -84,7 +86,7 @@ impl YtMusic {
 }
 impl PyItem for YtMusic {
     fn get_item(&self, py: Python) -> Result<Py<PyAny>> {
-        let headers_path = "/home/issac/0Git/musimanager/db/headers_auth.json";
+        let headers_path = config().ytmusic_cookies_path.as_ref().unwrap().to_str().unwrap();
         let ytmusic = py
         .import("ytmusicapi")?
         .getattr("YTMusic")?
@@ -111,8 +113,8 @@ impl Ytdl {
 }
 impl PyItem for Ytdl {
     fn get_item(&self, py: Python) -> Result<Py<PyAny>> {
-        let ext = "m4a";
-        let path = "/home/issac/Music/";
+        let ext = config().prefered_song_ext.as_str();
+        let path = config().music_path.to_str().unwrap();
         let code = format!("{{
             'format': 'bestaudio',
             'postprocessors': [{{
