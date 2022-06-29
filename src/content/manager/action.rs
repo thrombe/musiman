@@ -95,6 +95,9 @@ pub enum ContentManagerAction {
     PushToContentStack {
         id: GlobalProvider,
     },
+    MaybePushToContentStack {
+        id: GlobalProvider,
+    },
     EnableTyping {
         content: String,
         #[derivative(Debug="ignore")]
@@ -115,6 +118,7 @@ pub enum ContentManagerAction {
         uri: String,
     },
     OpenEditForCurrent,
+    OpenEditFor {id: ID},
     Callback {
         callback: ContentManagerCallback,
     },
@@ -168,19 +172,13 @@ impl ContentManagerAction {
                 let loaded_id = ch.alloc_content_provider(cp);
                 let loader = ch.get_provider_mut(id);
                 loader.as_provider_mut().unwrap().add_provider(loaded_id);
-
-                Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch)?;
             }
             Self::AddCPToCPAndContentStack {id, cp} => {
                 let loaded_id = ch.alloc_content_provider(cp);
                 let loader = ch.get_provider_mut(id);
                 loader.as_provider_mut().unwrap().add_provider(loaded_id);
 
-                ch.content_stack.push(loaded_id);
-                ch.register(loaded_id.into());
-
-                Self::TryLoadContentProvider { loader_id: loaded_id }.apply(ch)?;
-
+                ContentManagerAction::PushToContentStack {id: loaded_id.into()}.apply(ch)?;
                 ContentManagerAction::RefreshDisplayContent.apply(ch)?;
             }
             Self::PushToContentStack { id } => {
@@ -193,6 +191,12 @@ impl ContentManagerAction {
                     }
                     _ => (),
                 }
+            }
+            Self::MaybePushToContentStack { id } => {
+                if ch.content_stack.last() == id {
+                    ch.content_stack.pop();
+                }
+                Self::PushToContentStack { id }.apply(ch)?;
             }
             Self::EnableTyping { content, callback, loader } => {
                 ch.app_action_sender.send(
@@ -231,6 +235,9 @@ impl ContentManagerAction {
             }
             Self::OpenEditForCurrent => {
                 ch.open_edit_for_current()?;
+            }
+            Self::OpenEditFor { id } => {
+                ch.open_edit_for(id)?;
             }
             Self::Callback {callback} => {
                 callback.call(ch)?;

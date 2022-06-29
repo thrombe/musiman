@@ -62,7 +62,11 @@ impl MainProvider {
         let queue_provider = alloc(QueueProvider::default().into());
 
         Self {
-            providers: vec![queue_provider],
+            providers: vec![
+                queue_provider,
+                alloc(FileExplorer::new("/home/issac/daata/phon-data/.musi".into()).into()),
+                alloc(YTExplorer::new().into()),
+                ],
             name: Cow::from("main"),
             selected: Default::default(),
             queue_provider,
@@ -100,15 +104,11 @@ impl Menu for MainProvider {
             MainProviderMenuOption::ADD_ARTIST_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_PLAYLIST_PROVIDER => todo!(),
             MainProviderMenuOption::ADD_FILE_EXPLORER => {
-                let path = "/home/issac/daata/phon-data/.musi";
-                let mut fe = FileExplorer::default();
-                fe.name = Cow::from(format!("File Explorer: {dir}", dir = path.rsplit_terminator("/").next().unwrap()));
-                fe.path = Cow::from(path);
                 vec![
                     ContentManagerAction::PopContentStack,
                     ContentManagerAction::AddCPToCPAndContentStack {
                         id: self_id,
-                        cp: fe.into()
+                        cp: FileExplorer::new("/home/issac/daata/phon-data/.musi".into()).into()
                     },
                 ].into()
             }

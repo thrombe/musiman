@@ -29,13 +29,16 @@ use crate::{
         register::{
             SongID,
             ContentProviderID,
+            ID,
         },
         providers::{
+            ContentProvider,
             traits::{
                 impliment_content_provider,
                 ContentProviderTrait,
                 Loadable,
                 Provider,
+                Editable,
                 SongProvider,
                 CPProvider,
             },
@@ -44,6 +47,7 @@ use crate::{
             DisplayContext,
             DisplayState,
         },
+        stack::StateContext,
     },
     app::{
         app::SelectedIndex,
@@ -66,6 +70,39 @@ pub struct FileExplorer {
     selected: SelectedIndex,
     pub path: Cow<'static, str>,
     loaded: bool,
+    child: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Editables {
+    Path
+}
+
+impl FileExplorer {
+    fn editables(&self, _: &StateContext) -> Box<dyn Iterator<Item = Editables>> {
+        Box::new([Editables::Path].into_iter())
+    }
+
+    pub fn new(path: Cow<'static, str>) -> Self {
+        let mut fe = FileExplorer::default();
+        fe.name = Cow::from(format!("File Explorer: {dir}", dir = path.rsplit_terminator("/").next().unwrap()));
+        fe.path = Cow::from(path);
+        fe
+    }
+
+    fn pop_all_ids(&mut self) -> Vec<ID> {
+        let songs = std::mem::replace(&mut self.songs, Default::default());
+        let providers = std::mem::replace(&mut self.providers, Default::default());
+        songs
+        .into_iter()
+        .map(Into::into)
+        .chain(
+            providers
+            .into_iter()
+            .map(Into::into)
+        )
+        .collect()
+    }
 }
 
 impl Default for FileExplorer {
@@ -77,6 +114,7 @@ impl Default for FileExplorer {
             selected: Default::default(),
             path: "".into(),
             loaded: false,
+            child: false,
         }
     }
 }
@@ -130,13 +168,14 @@ impl Loadable for FileExplorer {
                 sp.push(FileExplorer {
                     name: Cow::from(dir.rsplit_terminator("/").next().unwrap().to_owned()),
                     path: Cow::from(dir.to_owned()),
+                    child: true,
                     ..Default::default()
                 }.into());
             } else if e.is_file() {
                 let file_path = e.to_str().unwrap();
                 let file = Probe::open(file_path)?; // file open error
                 match file.guess_file_type() {
-                    Ok(_) => { // is some kinda song
+                    Ok(_) => { // FIX: this does not mean this is some kinda song???
                         match TaggedFileSong::from_file_path(file_path.into()) {
                             Ok(Some(song)) => {
                                 s.push(song.into());
@@ -175,15 +214,15 @@ impl<'b> Display<'b> for FileExplorer {
         lb.title(Span::raw(self.get_name()));
 
         lb.items = match context.state {
-            DisplayState::Normal => { // BAD: code directly copied from yt_explorer. find a way to not duplicate code maybe using ContentProvider.ids() ??
-                let items = self.songs
+            DisplayState::Normal => {
+                let more_items = self.songs
                 .iter()
                 .map(|id| context.songs.get(*id).unwrap())
                 .map(|s| s.as_display().title())
                 .map(String::from)
                 .map(Span::from);
                 
-                let more_items = self.providers
+                let items = self.providers
                 .iter()
                 .map(|id| {
                     context.providers
@@ -205,8 +244,24 @@ impl<'b> Display<'b> for FileExplorer {
                 })
                 .collect()
             }
+            DisplayState::Edit(ctx) => {
+                self.editables(ctx)
+                .map(|e| {
+                    match e {
+                        Editables::Path => {
+                            format!("{e:#?}: {path}", path=&self.path)
+                        }
+                    }
+                })
+                .map(Span::from)
+                .map(Line::new)
+                .map(|line| Item {
+                    text: vec![line],
+                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0))),
+                })
+                .collect()
+            }
             DisplayState::Menu(_) => unreachable!(),
-            DisplayState::Edit(_) => unreachable!(),
         };
 
         lb
@@ -216,6 +271,56 @@ impl<'b> Display<'b> for FileExplorer {
     }
 }
 
+impl Editable for FileExplorer {
+    fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction {
+        let i = ctx.last().selected_index();
+        let e = self.editables(ctx).skip(i).next().unwrap();
+        match e {
+            Editables::Path => {
+                let mut index = SelectedIndex::default();
+                index.select(i);
+                ctx.push(index);
+                vec![
+                    ContentManagerAction::EnableTyping {
+                        content: self.path.as_ref().to_owned(),
+                        loader: self_id.into(),
+                        callback: Box::new(move |me: &mut ContentProvider, content: String| {
+                            let cp = me.as_any_mut().downcast_mut::<Self>().unwrap();
+                            let ids = cp.pop_all_ids();
+                            *me = Self::new(content.into()).into();
+                            vec![
+                                ContentManagerAction::Unregister {
+                                    ids,
+                                },
+                                ContentManagerAction::PopContentStack, // typing
+                                ContentManagerAction::PopContentStack, // edit
+                                ContentManagerAction::MaybePushToContentStack {id: self_id.into()},
+                            ].into()
+                        }),
+                    },
+                ].into()
+            }
+        }
+    }
+    fn num_editables(&self, ctx: &StateContext) -> usize {
+        self.editables(ctx).count()
+    }
+}
+
 impl ContentProviderTrait for FileExplorer {
+    fn as_editable(&self) -> Option<&dyn Editable> {
+        if self.child {
+            None
+        } else {
+            Some(self)
+        }
+    }
+    fn as_editable_mut(&mut self) -> Option<&mut dyn Editable> {
+        if self.child {
+            None
+        } else {
+            Some(self)
+        }        
+    }
     impliment_content_provider!(FileExplorer, Provider, SongProvider, CPProvider, Loadable, Display);
 }

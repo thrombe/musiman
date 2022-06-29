@@ -378,6 +378,7 @@ impl App {
     }
 
     pub async fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
+        AppAction::UpdateDisplayContent.apply(&mut self)?;
         terminal.draw(|f| self.render(f).unwrap())?;
         let mut reader = EventStream::new();
         let _ = crate::image::printer::sixel::is_sixel_supported(); // for some reason this does not behave well when tokio does its stuff (maybe cus Write on stdout). so cache it (lazy_static)

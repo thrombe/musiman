@@ -173,7 +173,7 @@ pub trait Menu {
 }
 
 pub trait Editable {
-    fn select_editable(&mut self, ctx: &mut StateContext, self_if: ContentProviderID) -> ContentManagerAction;
+    fn select_editable(&mut self, ctx: &mut StateContext, self_id: ContentProviderID) -> ContentManagerAction;
     fn num_editables(&self, ctx: &StateContext) -> usize;
 }
 

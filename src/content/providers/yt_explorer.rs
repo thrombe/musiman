@@ -460,6 +460,7 @@ impl Editable for YTExplorer {
                                         },
                                         ContentManagerAction::PopContentStack, // typing
                                         ContentManagerAction::PopContentStack, // edit
+                                        ContentManagerAction::MaybePushToContentStack {id: self_id.into()},
                                         cp.get_search_action(self_id),
                                     ].into()
                                 }),
@@ -500,6 +501,7 @@ impl Editable for YTExplorer {
                             ContentManagerAction::PopContentStack, // typing
                             ContentManagerAction::PopContentStack, // edit
                             ContentManagerAction::PopContentStack, // edit
+                            ContentManagerAction::MaybePushToContentStack {id: self_id.into()},
                             cp.get_url_action(self_id, e, content),
                         ].into()
                     }),
@@ -514,8 +516,11 @@ impl Loadable for YTExplorer {
         self.loaded
     }
 
-    fn load(&mut self, _: ContentProviderID) -> Result<ContentManagerAction> {
-        Ok(ContentManagerAction::OpenEditForCurrent)
+    fn load(&mut self, self_id: ContentProviderID) -> Result<ContentManagerAction> {
+        Ok(vec![
+            ContentManagerAction::PopContentStack,
+            ContentManagerAction::OpenEditFor {id: self_id.into()},
+        ].into())
     }
 }
 
