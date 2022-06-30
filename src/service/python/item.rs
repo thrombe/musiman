@@ -86,12 +86,18 @@ impl YtMusic {
 }
 impl PyItem for YtMusic {
     fn get_item(&self, py: Python) -> Result<Py<PyAny>> {
-        let headers_path = config().ytmusic_cookies_path.as_ref().unwrap().to_str().unwrap();
+        let headers_path = config()
+        .ytmusic_cookies_path
+        .as_ref()
+        .map(|path| path.to_str())
+        .map(Option::unwrap);
+        
         let ytmusic = py
         .import("ytmusicapi")?
         .getattr("YTMusic")?
         .call1((headers_path,))?
         .extract()?;
+
         Ok(ytmusic)
     }
     fn type_id(&self) -> TypeId {
