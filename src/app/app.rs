@@ -393,6 +393,9 @@ impl App {
                 app_action = app_action => app_action.unwrap().apply(&mut self)?,
                 _ = sleep => (),
             }
+            let _ = self.content_manager.app_action_receiver // to make sure not to render without updating content
+            .try_recv()
+            .map(|e| e.apply(&mut self));
             self.update()?;
             if self.redraw_needed {
                 self.redraw_needed = false;
