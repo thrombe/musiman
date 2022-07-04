@@ -86,6 +86,7 @@ pub struct YTExplorer {
     songs: Vec<SongID>,
     providers: Vec<ContentProviderID>,
     name: Cow<'static, str>,
+    #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     selected: SelectedIndex,
     loaded: bool,
     search_term: String,

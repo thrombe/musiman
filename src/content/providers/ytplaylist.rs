@@ -71,6 +71,7 @@ pub struct YTPlaylist {
     loaded: bool,
     id: YTPlaylistID,
     name: Cow<'static, str>,
+    #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     index: SelectedIndex,
 }
 impl YTPlaylist {

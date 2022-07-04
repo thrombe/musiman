@@ -54,6 +54,7 @@ use crate::{
 pub struct Queue {
     pub songs: Vec<SongID>,
     pub name: Cow<'static, str>,
+    #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     pub index: SelectedIndex,
     pub source_cp: ContentProviderID,
 }

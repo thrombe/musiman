@@ -68,6 +68,7 @@ pub struct FileExplorer {
     songs: Vec<SongID>,
     providers: Vec<ContentProviderID>,
     pub name: Cow<'static, str>,
+    #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     selected: SelectedIndex,
     pub path: Cow<'static, str>,
     loaded: bool,

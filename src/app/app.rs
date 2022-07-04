@@ -6,7 +6,6 @@ use crate::{
     error,
 };
 
-use serde::{Serialize, Deserialize};
 use tokio::select;
 use tui::{
     backend::Backend,
@@ -76,21 +75,6 @@ use crate::{
 pub struct SelectedIndex {
     index: ListState,
 }
-impl Serialize for SelectedIndex { // FIX: implimenting serialize and deserialize should not be needed for these. just ignore it from the structs
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer {
-        todo!()
-    }
-}
-impl<'de> Deserialize<'de> for SelectedIndex {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
-        todo!()
-    }
-}
-
 impl Default for SelectedIndex {
     fn default() -> Self {
         Self::new()

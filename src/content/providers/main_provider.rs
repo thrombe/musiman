@@ -55,6 +55,7 @@ pub struct MainProvider {
     pub queue_provider: ContentProviderID,
     // pub artist_provider: ContentProviderID,
     name: Cow<'static, str>,
+    #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     selected: SelectedIndex,
 }
 // pub struct MainProviderBuilder {}

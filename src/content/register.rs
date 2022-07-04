@@ -114,9 +114,7 @@ enum Operation {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ContentRegister<T, P>
-// where T: Serialize + for<'pe> Deserialize<'pe>,
-{
+pub struct ContentRegister<T, P> {
     items: Vec<Option<ContentEntry<T>>>,
     
     // allocator
@@ -124,6 +122,7 @@ pub struct ContentRegister<T, P>
     generation: u64,
     last_operation: Operation,
 
+    #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     _phantom: PhantomData<P>,
 }
 
@@ -260,6 +259,8 @@ struct ContentEntry<T> {
 pub struct ContentID<T> {
     index: usize,
     generation: u64,
+
+    #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     _phantom: PhantomData<T>,
 }
 impl<T> Clone for ContentID<T> {

@@ -218,6 +218,7 @@ impl ContentManager {
     }
 }
 
+// TODO: need to be very careful while saving state. all ids not in the db should be deallocated before saving, or bad bad (id_counter can be > 1 even if there is just 1 id to it in the db)
 impl ContentManager {
     pub fn new() -> Result<Self> {
         let dbh = DBHandler::try_load();
@@ -289,6 +290,10 @@ impl ContentManager {
         // }
 
         debug!("{}", serde_yaml::to_string(&self.songs).unwrap());
+        let a = serde_yaml::to_string(&self.content_providers).unwrap();
+        debug!("{}", &a);
+        let b = serde_yaml::from_str::<ContentRegister<ContentProvider, ContentProviderID>>(&a);
+        dbg!(b)
     }
 
     pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
