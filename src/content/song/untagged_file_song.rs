@@ -14,6 +14,7 @@ use std::{
 use anyhow::{
     Result,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     content::{
@@ -33,7 +34,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct UntaggedFileSong {
     title: String,
     path: Cow<'static, str>,
@@ -48,6 +49,7 @@ impl UntaggedFileSong {
     }
 }
 
+#[typetag::serde]
 impl SongTrait for UntaggedFileSong {
     fn is_online(&self) -> bool {
         false

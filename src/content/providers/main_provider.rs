@@ -10,6 +10,7 @@ use tui::{
         Color,
     },
 };
+use serde::{Serialize, Deserialize};
 
 use crate::{
     content::{
@@ -48,7 +49,7 @@ use crate::{
 };
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MainProvider {
     providers: Vec<ContentProviderID>,
     pub queue_provider: ContentProviderID,
@@ -190,6 +191,7 @@ impl<'b> Display<'b> for MainProvider {
     }
 }
 
+#[typetag::serde]
 impl ContentProviderTrait for MainProvider {
     impliment_content_provider!(MainProvider, Provider, Menu, CPProvider, Display);
 }

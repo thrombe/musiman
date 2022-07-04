@@ -67,7 +67,7 @@ impl PyAction {
             dict.set_item("res", pyd).unwrap();
             dict
         });
-        py.run(&code.code, dict, None)?;
+        py.run(&code.code, dict, None)?; // android has problems creating threads from python it seems
         Ok(())
     }
 

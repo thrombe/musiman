@@ -16,6 +16,7 @@ use tui::{
 };
 use lofty::Probe;
 use anyhow::Result;
+use serde::{Serialize, Deserialize};
 
 use crate::{
     content::{
@@ -62,7 +63,7 @@ use crate::{
 };
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileExplorer {
     songs: Vec<SongID>,
     providers: Vec<ContentProviderID>,
@@ -307,6 +308,7 @@ impl Editable for FileExplorer {
     }
 }
 
+#[typetag::serde]
 impl ContentProviderTrait for FileExplorer {
     fn as_editable(&self) -> Option<&dyn Editable> {
         if self.child {

@@ -7,6 +7,7 @@ use crate::{
 };
 
 use std::{marker::PhantomData, fmt::Debug};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     content::{
@@ -16,7 +17,7 @@ use crate::{
 };
 
 macro_rules! to_from_content_id {
-    ($e:ident, $t: ident) => {
+    ($e:ident, $t:ident) => {
         impl std::convert::From<ContentID<$t>> for $e {
             fn from(id: ContentID<$t>) -> Self {
                 Self::from_id(id)
@@ -28,7 +29,7 @@ macro_rules! to_from_content_id {
     };
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SongID {
     id: ContentID<Song>,
 }
@@ -40,7 +41,7 @@ impl SongID {
 to_from_content_id!(SongID, Song);
 
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContentProviderID {
     id: ContentID<ContentProvider>,
 }
@@ -105,15 +106,17 @@ where T: Into<ContentProviderID>
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 enum Operation {
     Insert,
     Remove,
     None,
 }
 
-#[derive(Debug)]
-pub struct ContentRegister<T, P> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContentRegister<T, P>
+// where T: Serialize + for<'pe> Deserialize<'pe>,
+{
     items: Vec<Option<ContentEntry<T>>>,
     
     // allocator
@@ -245,7 +248,7 @@ impl<T, P> ContentRegister<T, P>
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct ContentEntry<T> {
     val: T,
     generation: u64,
@@ -253,7 +256,7 @@ struct ContentEntry<T> {
 }
 
 // TODO: maybe impliment some RC to auto yeet unneeded content
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ContentID<T> {
     index: usize,
     generation: u64,

@@ -66,6 +66,7 @@ impl<T> From<T> for super::ContentProvider
 
 // ? this requirement is quite dangerous time waster. can it be enforced?
 // the macro must be called on all the traits, else those implimentations will not be used
+#[typetag::serde(tag = "type")]
 pub trait ContentProviderTrait
     where
         Self: std::fmt::Debug + Send + Sync + CPClone + Any,

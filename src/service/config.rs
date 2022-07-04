@@ -55,7 +55,7 @@ impl Default for Config {
             file_explorer_default_path: expand_path("~/"),
             ytmusic_cookies_path: None,
             prefered_song_ext: "mp3".into(),
-            music_path: dirs::audio_dir().unwrap(),
+            music_path: dirs::audio_dir().unwrap(), // FIX: not available in termux ??
         }
     }
 }

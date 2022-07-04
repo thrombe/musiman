@@ -260,20 +260,35 @@ impl ContentManager {
         // dbg!(self.player.duration());
         // dbg!(self.player.position());
         // dbg!(self.player.progress());
-        dbg!(self.active_queue);
-        dbg!(&self.image_handler);
-        if self.active_song.is_some() {
-            let s = self.get_song(self.active_song.unwrap()).as_display();
-            dbg!(s.title(), s.artist(), s.album());
-        }
-        let id = self.content_stack.last();
-        match id {
-            GlobalProvider::ContentProvider(id) => {
-                let cp = self.get_provider(id);
-                dbg!(cp);
-            }
-            _ => (),
-        }
+        // dbg!(self.active_queue);
+        // dbg!(&self.image_handler);
+
+        // (0..self.content_stack.len())
+        // .map(|i| self.content_stack.get(i))
+        // .filter_map(|id| {
+        //     match id {
+        //         GlobalProvider::Notifier => None,
+        //         GlobalProvider::ContentProvider(id) => Some(id),
+        //     }
+        // })
+        // .map(|id| self.get_provider(id))
+        // .map(|cp| cp.get_selected_index())
+        // .for_each(|e| dbg!(e));
+
+        // if self.active_song.is_some() {
+        //     let s = self.get_song(self.active_song.unwrap()).as_display();
+        //     dbg!(s.title(), s.artist(), s.album());
+        // }
+        // let id = self.content_stack.last();
+        // match id {
+        //     GlobalProvider::ContentProvider(id) => {
+        //         let cp = self.get_provider(id);
+        //         dbg!(cp);
+        //     }
+        //     _ => (),
+        // }
+
+        debug!("{}", serde_yaml::to_string(&self.songs).unwrap());
     }
 
     pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {

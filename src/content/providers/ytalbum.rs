@@ -15,6 +15,7 @@ use tui::{
     },
     text::Span,
 };
+use serde::{Serialize, Deserialize};
 
 use crate::{
     content::{
@@ -64,7 +65,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YTAlbum {
     songs: Vec<SongID>,
     loaded: bool,
@@ -93,7 +94,7 @@ impl YTAlbum {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum YTAlbumID {
     PlaylistID(Cow<'static, str>),
     BrowseID(Cow<'static, str>),
@@ -244,7 +245,7 @@ impl<'b> Display<'b> for YTAlbum {
     }
 }
 
-
+#[typetag::serde]
 impl ContentProviderTrait for YTAlbum {
     impliment_content_provider!(YTAlbum, SongProvider, Loadable, Provider, Display);
 }

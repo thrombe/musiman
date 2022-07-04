@@ -14,6 +14,7 @@ use std::{
 use anyhow::{
     Result,
 };
+use typetag;
 
 use crate::{
     content::{
@@ -37,6 +38,8 @@ where T: SongTrait + 'static
         Self::new(Box::new(s))
     }
 }
+
+#[typetag::serde(tag = "type")]
 pub trait SongTrait: Send + Sync + Debug {
     fn play(&self) -> Result<ContentManagerAction>;
     // song might have to get the uri from the interwebs, so cant directly retrun a string

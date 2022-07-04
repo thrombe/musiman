@@ -15,6 +15,7 @@ use tui::{
         Style,
     },
 };
+use serde::{Serialize, Deserialize};
 
 use crate::{
     content::{
@@ -46,7 +47,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueProvider {
     providers: Vec<ContentProviderID>,
     name: Cow<'static, str>,
@@ -137,7 +138,7 @@ impl CPProvider for QueueProvider {
     }
 }
 
-
+#[typetag::serde]
 impl ContentProviderTrait for QueueProvider {
     impliment_content_provider!(QueueProvider, Provider, CPProvider, Display);
 }

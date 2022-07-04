@@ -20,6 +20,7 @@ use lofty::{
     ItemKey,
     AudioFile,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     image::UnprocessedImage,
@@ -38,7 +39,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TaggedFileSong {
     title: String,
     album: Option<String>,
@@ -151,6 +152,7 @@ fn log_song(path: &str) -> Result<()> {
 }
 
 
+#[typetag::serde]
 impl SongTrait for TaggedFileSong {
     fn is_online(&self) -> bool {
         false

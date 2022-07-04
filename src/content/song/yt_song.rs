@@ -10,6 +10,7 @@ use anyhow::{
     Result,
     Context,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     content::{
@@ -37,7 +38,7 @@ use crate::{
     image::UnprocessedImage,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct YtSong {
     pub title: String,
     pub artist: String,
@@ -86,6 +87,7 @@ impl YtSong {
     }
 }
 
+#[typetag::serde]
 impl SongTrait for YtSong {
     fn is_online(&self) -> bool {
         true

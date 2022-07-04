@@ -15,6 +15,7 @@ use tui::{
     },
     text::Span,
 };
+use serde::{Serialize, Deserialize};
 
 use crate::{
     content::{
@@ -49,7 +50,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Queue {
     pub songs: Vec<SongID>,
     pub name: Cow<'static, str>,
@@ -148,6 +149,7 @@ impl<'b> Display<'b> for Queue {
 }
 
 
+#[typetag::serde]
 impl ContentProviderTrait for Queue {
     impliment_content_provider!(Queue, SongProvider, Provider, Display);
 }

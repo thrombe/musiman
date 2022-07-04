@@ -15,6 +15,7 @@ use tui::{
         Style,
     },
 };
+use serde::{Serialize, Deserialize};
 
 use crate::{
     content::{
@@ -80,7 +81,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YTExplorer {
     songs: Vec<SongID>,
     providers: Vec<ContentProviderID>,
@@ -524,6 +525,7 @@ impl Loadable for YTExplorer {
     }
 }
 
+#[typetag::serde]
 impl ContentProviderTrait for YTExplorer {
     impliment_content_provider!(YTExplorer, Provider, Loadable, Editable, SongProvider, CPProvider, Display);
 }
@@ -550,7 +552,7 @@ impl From<YTUrl> for Editables {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum YTSearchFilter {
     Albums,
     Songs,

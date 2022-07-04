@@ -160,10 +160,10 @@
 . plan:
   . ?
 
-. behaviour:
-  . work without any setup
-. plan:
-  . ytmusicapi has a non-signin thing. see if it can be used, else disable it
+/. behaviour:
+  /. work without any setup
+/. plan:
+  /. ytmusicapi has a non-signin thing. see if it can be used, else disable it
   /. add a default printer and a builder that chooses a backend that is valid for the terminal
 
 todo:
