@@ -53,28 +53,40 @@ use crate::{
 pub struct MainProvider {
     providers: Vec<ContentProviderID>,
     pub queue_provider: ContentProviderID,
+
     // pub artist_provider: ContentProviderID,
     name: Cow<'static, str>,
+
+    // https://serde.rs/attr-default.html
+    // https://serde.rs/attr-skip-serializing.html
     #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     selected: SelectedIndex,
 }
 // pub struct MainProviderBuilder {}
 
 impl MainProvider {
-    pub fn new(mut alloc: impl FnMut(ContentProvider) -> ContentProviderID) -> Self {
+    pub fn new(mut alloc: impl FnMut(ContentProvider) -> ContentProviderID, register: impl FnMut(ContentProviderID)) -> Self {
         let queue_provider = alloc(QueueProvider::default().into());
 
-        Self {
-            providers: vec![
-                queue_provider,
-                alloc(FileExplorer::new(config().file_explorer_default_path.to_str().unwrap().into()).into()),
-                alloc(YTExplorer::new().into()),
-                ],
+        let mut mp = Self {
+            providers: Default::default(),
             name: Cow::from("main"),
             selected: Default::default(),
             queue_provider,
             // artist_provider: alloc(),
-        }
+        };
+
+        mp.load(alloc, register);
+        mp
+    }
+
+    pub fn load(&mut self, mut alloc: impl FnMut(ContentProvider) -> ContentProviderID, mut register: impl FnMut(ContentProviderID)) {
+        register(self.queue_provider);
+        self.providers = vec![
+            self.queue_provider,
+            alloc(FileExplorer::new(config().file_explorer_default_path.to_str().unwrap().into()).into()),
+            alloc(YTExplorer::new().into()),
+        ];
     }
 }
 

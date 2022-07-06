@@ -371,14 +371,15 @@ impl App {
             browser_widget: BrowserWidget::new(),
             player_widget: PlayerWidget::new(),
 
-            content_manager: ContentManager::load()?,
+            content_manager: ContentManager::try_load()?
+            .unwrap_or(ContentManager::new()?),
             redraw_needed: false,
         };
         Ok(a)
     }
 
-    pub async fn run_app<B: Backend>(mut self, terminal: &mut Terminal<B>) -> Result<()> {
-        AppAction::UpdateDisplayContent.apply(&mut self)?;
+    pub async fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
+        AppAction::UpdateDisplayContent.apply(self)?;
         terminal.draw(|f| self.render(f).unwrap())?;
         let mut reader = EventStream::new();
         #[cfg(feature = "sixel")]
@@ -391,12 +392,12 @@ impl App {
             select! {
                 ev = event => self.handle_events(ev.unwrap()?)?,
                 action = action => action.apply(&mut self.content_manager)?,
-                app_action = app_action => app_action.unwrap().apply(&mut self)?,
+                app_action = app_action => app_action.unwrap().apply(self)?,
                 _ = sleep => (),
             }
             let _ = self.content_manager.app_action_receiver // to make sure not to render without updating content
             .try_recv()
-            .map(|e| e.apply(&mut self));
+            .map(|e| e.apply(self));
             self.update()?;
             if self.redraw_needed {
                 self.redraw_needed = false;

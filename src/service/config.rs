@@ -40,6 +40,7 @@ struct ConfigBuilder {
     ytmusic_cookies_path: MaybePath,
     prefered_song_ext: MaybeString,
     music_path: MaybePath,
+    db_path: MaybePath,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -48,6 +49,7 @@ pub struct Config {
     pub ytmusic_cookies_path: MaybePath,
     pub prefered_song_ext: String,
     pub music_path: PathBuf,
+    pub db_path: PathBuf, // TODO: have a general config path and have this relative to that
 }
 impl Default for Config {
     fn default() -> Self {
@@ -56,6 +58,7 @@ impl Default for Config {
             ytmusic_cookies_path: None,
             prefered_song_ext: "mp3".into(),
             music_path: dirs::audio_dir().unwrap(), // FIX: not available in termux ??
+            db_path: dirs::config_dir().unwrap().join("musiman/db.yaml")
         }
     }
 }
@@ -78,7 +81,11 @@ impl From<ConfigBuilder> for Config {
 
             music_path: cb.music_path
             .map(expand_path)
-            .unwrap_or(def.music_path)
+            .unwrap_or(def.music_path),
+
+            db_path: cb.db_path
+            .map(expand_path)
+            .unwrap_or(def.db_path),
         }
     }
 }
@@ -91,5 +98,16 @@ fn expand_path<T: Into<PathBuf>>(path: T) -> PathBuf {
         PathBuf::from(path)
     };
     let _ = path.to_str().unwrap(); // extra check for early crash
-    path.canonicalize().unwrap()
+    match path.canonicalize() {
+        Ok(path) => path,
+        Err(err) => {
+            match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    error!("path {} does not exist", path.to_str().unwrap());
+                    path
+                }
+                _ => panic!("{err}"),
+            }
+        }
+    }
 }

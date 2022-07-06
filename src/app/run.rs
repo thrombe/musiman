@@ -68,10 +68,11 @@ pub async fn run() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // create app and run it
-    let app = App::load()?;
-    app.run_app(&mut terminal).await?;
+    let mut app = App::load().unwrap(); // no throwing error, as it would not call restore_terminal
+    app.run_app(&mut terminal).await.unwrap();
 
     restore_terminal(&mut terminal)?;
+    app.content_manager.save()?;
 
     Ok(())
 }

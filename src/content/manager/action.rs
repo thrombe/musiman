@@ -206,7 +206,7 @@ impl ContentManagerAction {
             Self::PopContentStack => {
                 match ch.content_stack.pop() {
                     Some(id) => {
-                        ch.unregister(id.into());
+                        ch.unregister(id);
                     }
                     None => (),
                 }
@@ -243,7 +243,7 @@ impl ContentManagerAction {
                 callback.call(ch)?;
             }
             Self::Unregister {ids} => {
-                ids.into_iter().for_each(|id| ch.unregister(id.into()));
+                ids.into_iter().for_each(|id| ch.unregister(id));
             }
             Self::LogTimeSince { message, instant } => {
                 let duration = std::time::Instant::now().duration_since(instant).as_secs_f64();

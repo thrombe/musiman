@@ -221,6 +221,24 @@ plan:
       \. different implimentations will collide
     . impliment display for ContentProvider which uses self.as_edit() and stuff
 
+behaviour:
+  . no accidents with ContentRegister
+    . no dangling ids
+    . no memory leaks
+plan:
+  . all ids that need to be saved inside something is wrapped in a non Copy type that can only be created by ContentRegister
+    . it can be enforced that only the wrapped are saved as the struct fields will have the wrapped type (song: Wrapped<SongID>)
+    . impliment a drop on this type so it logs error if dropped (idk if this will work as i assume)
+    . this id should not be dropped, instead it should be converted back into the non-wrapped version
+    . a wrapped id can provide non wrapped ids for passing into other functions
+
+behaviour:
+  . better behaved queues
+    . for example, file explorer loads all songs again from disk even if they are in queue. + playing a song from a folder creates a new
+      queue after every restart
+plan:
+  . ??
+
 . plan
   . import relevent notes from thrombe/musimanager
   . a global settings

@@ -64,7 +64,6 @@ use crate::{
 pub struct ContentManager {
     songs: ContentRegister<Song, SongID>,
     content_providers: ContentRegister<ContentProvider, ContentProviderID>,
-    db_handler: DBHandler,
 
     pub content_stack: ContentStack,
     yanker: Yanker,
@@ -124,7 +123,8 @@ impl ContentManager {
         }
     }
     
-    pub fn unregister(&mut self, id: GlobalContent) {
+    pub fn unregister<T: Into<GlobalContent>>(&mut self, id: T) {
+        let id = id.into();
         dbg!("unregister id", id);
         match id {
             GlobalContent::ID(id) => {
@@ -138,12 +138,12 @@ impl ContentManager {
                             Some(cp) => {
                                 if let Some(cp) = cp.as_song_provider() {
                                     for &s_id in cp.songs() {
-                                        let _ = self.unregister(s_id.into());
+                                        let _ = self.unregister(s_id);
                                     }
                                 }
                                 if let Some(cp) = cp.as_provider() {
                                     for &cp_id in cp.providers() {
-                                        let _ = self.unregister(cp_id.into());
+                                        let _ = self.unregister(cp_id);
                                     }
                                 }
                             }
@@ -221,18 +221,18 @@ impl ContentManager {
 // TODO: need to be very careful while saving state. all ids not in the db should be deallocated before saving, or bad bad (id_counter can be > 1 even if there is just 1 id to it in the db)
 impl ContentManager {
     pub fn new() -> Result<Self> {
-        let dbh = DBHandler::try_load();
-        let mut cp = ContentRegister::new();
+        let mut cr = ContentRegister::new();
         let main_id = {
-            let cp = &mut cp;
-            let main_provider = MainProvider::new(|item| cp.alloc(item));
+            let cp = &mut cr;
+            let mut ids = vec![];
+            let main_provider = MainProvider::new(|item| cp.alloc(item), |id| ids.push(id));
+            ids.into_iter().for_each(|id| cp.register(id));
             cp.alloc(main_provider.into())
         };
         let (sender, receiver) = unbounded_channel();
         let ch = Self {
             songs: ContentRegister::new(),
-            content_providers: cp,
-            db_handler: dbh,
+            content_providers: cr,
             content_stack: ContentStack::new(main_id),
             yanker: Yanker::new(),
             edit_manager: EditManager::new(),
@@ -248,9 +248,63 @@ impl ContentManager {
         Ok(ch)
     }
 
-    // TODO: temporary implimentation
-    pub fn load() -> Result<Self> {
-        Self::new()
+    pub fn try_load() -> Result<Option<Self>> {
+        let cm = match DBHandler::try_load()? {
+            Some(mut db) => {
+                let mut mp = db.content_providers
+                .get_mut(db.main_provider)
+                .unwrap()
+                .as_any_mut()
+                .downcast_mut::<MainProvider>()
+                .unwrap()
+                .clone();
+                let mut ids = vec![];
+                mp.load(|item| db.content_providers.alloc(item), |id| ids.push(id));
+                ids.into_iter().for_each(|id| db.content_providers.register(id));
+                *db.content_providers
+                .get_mut(db.main_provider)
+                .unwrap() = mp.into();
+                Some(Self {
+                    songs: db.songs,
+                    content_providers: db.content_providers,
+                    content_stack: ContentStack::new(db.main_provider),
+
+                    ..Self::new()?
+                })
+            }
+            None => {
+                None
+            }
+        };
+        Ok(cm)
+    }
+
+    pub fn save(mut self) -> Result<()> {
+        (0..self.content_stack.len()-1)
+        .filter_map(|_| self.content_stack.pop())
+        .collect::<Vec<_>>()
+        .into_iter()
+        .for_each(|id| self.unregister(id));
+
+        self.active_song.map(|id| self.unregister(id));
+        self.active_queue.map(|id| self.unregister(id));
+
+        self.get_main_provider()
+        .providers()
+        .cloned()
+        .collect::<Vec<_>>()
+        .into_iter()
+        .for_each(|id| self.unregister(id));
+        
+        let mp = self.content_stack.main_provider();
+        let songs = self.songs;
+        let cps = self.content_providers;
+        DBHandler {
+            main_provider: mp,
+            songs,
+            content_providers: cps,
+        }.save()?;
+        Ok(())
     }
 
     pub fn debug_current(&mut self) {
@@ -588,16 +642,16 @@ impl ContentManager {
         let q_id = self.alloc_content_provider(q.into());
         self.get_queue_provider_mut()
         .add_queue(q_id)
-        .map(|id| self.unregister(id.into()));
+        .map(|id| self.unregister(id));
 
         self.register(q_id.into()); // saved in both queue provider and in active_queue
-        self.active_queue.map(|id| self.unregister(id.into()));
+        self.active_queue.map(|id| self.unregister(id));
         self.active_queue = Some(q_id);
     }
 
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
         self.register(id.into());
-        self.active_song.map(|id| self.unregister(id.into()));
+        self.active_song.map(|id| self.unregister(id));
         self.active_song = Some(id);
 
         self.player.stop().unwrap();
