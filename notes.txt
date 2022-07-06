@@ -239,6 +239,20 @@ behaviour:
 plan:
   . ??
 
+behaviour:
+  . set markers on stuff
+plan:
+  . pass everyting in content to providers and let them handle how to display what marker
+    . advantages:
+      . more flexible
+  . store id and some info about marker placement in Item and let the type adding the marker just push the marker
+    . advantages:
+      . all providers do not have to impliment how to add all the markers
+        . ig the code duplication still needs to be handled. doing that smartly should solve this problem too
+    . disadvantages:
+      . less flexible
+      . unsorted markers for same types in even for same provider
+
 . plan
   . import relevent notes from thrombe/musimanager
   . a global settings

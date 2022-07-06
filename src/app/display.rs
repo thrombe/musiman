@@ -1,4 +1,11 @@
 
+#[allow(unused_imports)]
+use crate::{
+    dbg,
+    debug,
+    error,
+};
+
 use std::borrow::Cow;
 use tui::{
     style::{
@@ -164,14 +171,18 @@ impl<'a> Item<'a> {
     fn text(&self, width: u16, selected: bool) -> Text<'a> {
         if selected {
             match &self.selected_text {
-                SelectedText::Style(styles) => {
-                    let mut spans: Text = self.text
+                SelectedText::Style(style) => {
+                    let spans: Text = self.text
                     .iter()
-                    .map(|l| l.spans(width))
+                    .map(|l| {
+                        let mut spans = l.spans(width);
+                        spans.0.iter_mut()
+                        .for_each(|s| s.style = style.clone());
+                        spans
+                    })
                     .collect::<Vec<_>>()
-                    .into()
-                    ;
-                    spans.patch_style(styles.clone());
+                    .into();
+                    // spans.patch_style(style.clone());
                     spans
                 }
                 SelectedText::Lines(text) => {
@@ -194,10 +205,10 @@ impl<'a> Item<'a> {
 
 #[derive(Debug, Clone)]
 pub struct Line<'a> {
-    main_text: Spans<'a>, // spans is a single line in tui::text::Text
-    secondary_text: Option<Spans<'a>>,
-    main_text_alignment: Alignment, // the alignment of secondary text should be the opposite to that of main text
-    markers: Vec<Marker<'a>>,    
+    pub main_text: Spans<'a>, // spans is a single line in tui::text::Text
+    pub secondary_text: Option<Spans<'a>>,
+    pub main_text_alignment: Alignment, // the alignment of secondary text should be the opposite to that of main text
+    pub markers: Vec<Marker<'a>>,
 }
 impl<'a> Line<'a> {
     pub fn new<T: Into<Spans<'a>>>(main_text: T) -> Self {
@@ -209,18 +220,35 @@ impl<'a> Line<'a> {
         }
     }
 
+    pub fn overwrite_style(&mut self, s: Style) {
+        self.main_text.0.iter_mut().for_each(|span| span.style = s.clone());
+        self.secondary_text.as_mut().map(|spans| spans.0.iter_mut().for_each(|span| span.style = s.clone()));
+        self.markers.iter_mut().for_each(|m| m.symbol.style = s.clone());
+    }
+
     fn spans(&self, width: u16) -> Spans<'a> {
         match self.main_text_alignment {
             Alignment::Left => {
-                for marker in self.markers.iter() {
-                    todo!()
-                }
-                match self.secondary_text {
+                let mut spans = match self.secondary_text {
                     Some(_) => todo!(),
                     None => {
                         self.main_text.clone()
                     }
+                };
+                if self.markers.len() > 0 {
+                    spans.0.insert(0, " ".into());
                 }
+                for marker in self.markers.iter() {
+                    match marker.pos {
+                        MarkerPos::Left => {
+                            spans.0.insert(0, marker.symbol.clone());
+                        }
+                        MarkerPos::Right => {
+                            todo!()
+                        }
+                    }
+                }
+                spans
             }
             Alignment::Centered => todo!(),
             Alignment::Right => todo!(),

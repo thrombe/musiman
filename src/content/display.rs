@@ -10,6 +10,7 @@ use crate::{
         song::Song,
         providers::ContentProvider,
     },
+    service::editors::Yanker,
 };
 
 use super::stack::StateContext;
@@ -18,7 +19,8 @@ use super::stack::StateContext;
 pub struct DisplayContext<'a> {
     pub state: DisplayState<'a>,
     pub songs: &'a ContentRegister<Song, SongID>,
-    pub providers: &'a ContentRegister<ContentProvider, ContentProviderID>
+    pub providers: &'a ContentRegister<ContentProvider, ContentProviderID>,
+    pub yanker: &'a Yanker,
 }
 
 

@@ -66,7 +66,7 @@ pub struct ContentManager {
     content_providers: ContentRegister<ContentProvider, ContentProviderID>,
 
     pub content_stack: ContentStack,
-    yanker: Yanker,
+    pub yanker: Yanker,
     edit_manager: EditManager,
     pub image_handler: ImageHandler,
     pub player: Player, // FIX: memory leak somewhere maybe. (the ram usage keeps increasing) // https://github.com/sdroege/gstreamer-rs/blob/main/examples/src/bin/play.rs
@@ -211,6 +211,7 @@ impl ContentManager {
             state,
             songs: &self.songs,
             providers: &self.content_providers,
+            yanker: &self.yanker,
         })
     }
     fn display_song(&self, id: SongID, state: DisplayState) -> ListBuilder<'static> {
@@ -587,7 +588,29 @@ impl ContentManager {
         }
         ContentManagerAction::RefreshDisplayContent.apply(self)?;
         Ok(())
-    }    
+    }
+
+    pub fn toggle_yank_selected(&mut self) -> Result<()> {
+        let state = self.content_stack.get_state();
+        match state {
+            ContentState::Menu { .. } => (),
+            ContentState::Edit { .. } => (),
+            ContentState::GlobalMenu(_) => (),
+            ContentState::Normal => {
+                let id = self.content_stack.last();
+                match id {
+                    GlobalProvider::Notifier => (),
+                    GlobalProvider::ContentProvider(id) => {
+                        let cp = self.get_provider(id);
+                        let selected_id = cp.get_selected();
+                        self.yanker.toggle_yank(selected_id, id);
+                        ContentManagerAction::RefreshDisplayContent.apply(self)?;
+                    },
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 // methods related song to playback

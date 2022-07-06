@@ -130,6 +130,9 @@ impl BrowserWidget {
             KeyCode::Char('E') => {
                 ch.open_edit_for_current()?;
             }
+            KeyCode::Char('y') => {
+                ch.toggle_yank_selected()?;
+            }
             KeyCode::Up => {
                 ch.decrement_selection();
             }
