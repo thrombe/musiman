@@ -58,11 +58,8 @@ use crate::{
             Item,
             SelectedText,
             ListBuilder,
-            Marker,
-            MarkerPos,
         },
     },
-    service::editors::Yanker,
 };
 
 
@@ -220,48 +217,8 @@ impl<'b> Display<'b> for FileExplorer {
 
         lb.items = match context.state {
             DisplayState::Normal => {
-                let more_items = self.songs
-                .iter()
-                .map(|&id| {
-                    let song = context.songs.get(id).unwrap();
-                    let title = song.as_display().title();
-                    let mut line = Line::new(Span::from(title.to_owned()));
-                    let mut selected_line = line.clone();
-                    selected_line.overwrite_style(Style::default().fg(Color::Rgb(200, 200, 0)));
-                    if context.yanker.yanked_items.contains(&id.into()) {
-                        let marker = Marker {symbol: Yanker::marker_symbol(), pos: MarkerPos::Left};
-                        line.markers.push(marker.clone());
-                        selected_line.markers.push(marker);
-                    }
-                    Item {
-                        text: vec![line],
-                        selected_text: SelectedText::Lines(vec![selected_line]),
-                    }
-                });
-                
-                let items = self.providers
-                .iter()
-                .map(|&id| {
-                    let name = context.providers
-                    .get(id)
-                    .unwrap()
-                    .as_display()
-                    .get_name();
-                    let mut line = Line::new(Span {content: name, style: Default::default()});
-                    let mut selected_line = line.clone();
-                    selected_line.overwrite_style(Style::default().fg(Color::Rgb(200, 200, 0)));
-                    if context.yanker.yanked_items.contains(&id.into()) {
-                        let marker = Marker {symbol: Yanker::marker_symbol(), pos: MarkerPos::Left};
-                        line.markers.push(marker.clone());
-                        selected_line.markers.push(marker);
-                    }
-                    Item {
-                        text: vec![line],
-                        selected_text: SelectedText::Lines(vec![selected_line]),
-                    }
-                });
-
-                items.chain(more_items)
+                self.ids()
+                .map(|id| context.display_item(id))
                 .collect()
             }
             DisplayState::Edit(ctx) => {

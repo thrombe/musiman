@@ -10,10 +10,6 @@ use std::borrow::Cow;
 
 use tui::{
     text::Span,
-    style::{
-        Color,
-        Style,
-    },
 };
 use serde::{Serialize, Deserialize};
 
@@ -40,9 +36,6 @@ use crate::{
         display::{
             Display,
             ListBuilder,
-            Item,
-            Line,
-            SelectedText,
         },
     },
 };
@@ -88,24 +81,8 @@ impl<'b> Display<'b> for QueueProvider {
 
         lb.items = match context.state {
             DisplayState::Normal => {
-                self.providers
-                .iter()
-                .map(|id| {
-                    context.providers
-                    .get(*id)
-                    .unwrap()
-                    .as_display()
-                    .get_name()
-                })
-                .map(|c| Span {
-                    content: c,
-                    style: Default::default(),
-                })
-                .map(Line::new)
-                .map(|line| Item {
-                    text: vec![line],
-                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0)))
-                })
+                self.ids()
+                .map(|id| context.display_item(id))
                 .collect()
             }
             

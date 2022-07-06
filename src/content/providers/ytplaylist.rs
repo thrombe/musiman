@@ -9,10 +9,6 @@ use crate::{
 use anyhow::Result;
 use std::borrow::Cow;
 use tui::{
-    style::{
-        Color,
-        Style
-    },
     text::Span,
 };
 use serde::{Serialize, Deserialize};
@@ -43,9 +39,6 @@ use crate::{
         display::{
             Display,
             ListBuilder,
-            Line,
-            SelectedText,
-            Item,
         },
     },
     service::{
@@ -224,18 +217,9 @@ impl<'b> Display<'b> for YTPlaylist {
         lb.title(Span::raw(self.get_name()));
 
         lb.items = match context.state {
-            DisplayState::Normal => { // BAD: partially copied from yt_explorer
-                self.songs
-                .iter()
-                .map(|id| context.songs.get(*id).unwrap())
-                .map(|s| s.as_display().title())
-                .map(String::from)
-                .map(Span::from)
-                .map(Line::new)
-                .map(|line| Item {
-                    text: vec![line],
-                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0)))
-                })
+            DisplayState::Normal => {
+                self.ids()
+                .map(|id| context.display_item(id))
                 .collect()
             }
             DisplayState::Menu(_) => unreachable!(),

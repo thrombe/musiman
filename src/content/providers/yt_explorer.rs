@@ -115,33 +115,8 @@ impl<'b> Display<'b> for YTExplorer {
 
         lb.items = match context.state {
             DisplayState::Normal => {
-                let items = self.songs
-                .iter()
-                .map(|id| context.songs.get(*id).unwrap())
-                .map(|s| s.as_display().title())
-                .map(String::from)
-                .map(Span::from);
-                
-                let more_items = self.providers
-                .iter()
-                .map(|id| {
-                    context.providers
-                    .get(*id)
-                    .unwrap()
-                    .as_display()
-                    .get_name()
-                })
-                .map(|c| Span {
-                    content: c,
-                    style: Default::default(),
-                });
-
-                items.chain(more_items)
-                .map(Line::new)
-                .map(|line| Item {
-                    text: vec![line],
-                    selected_text: SelectedText::Style(Style::default().fg(Color::Rgb(200, 200, 0)))
-                })
+                self.ids()
+                .map(|id| context.display_item(id))
                 .collect()
             }
             
