@@ -616,6 +616,7 @@ impl ContentManager {
 // methods related song to playback
 impl ContentManager {
     pub fn set_queue(&mut self, id: ContentProviderID, song_id: SongID) {
+        dbg!("maybe setting queue");
         let queue_index = self.get_queue_provider()
         .providers()
         .position(|q| *q == id);
@@ -646,6 +647,11 @@ impl ContentManager {
                 self.get_queue_provider_mut()
                 .move_to_top(queue_index);
 
+                self.register(q_id.into());
+                self.active_queue.map(|id| self.unregister(id));
+                self.active_queue = Some(q_id);
+                dbg!(self.active_queue);        
+
                 return;
             }
             // if the song is not in it, then create a new queue
@@ -668,8 +674,10 @@ impl ContentManager {
         .map(|id| self.unregister(id));
 
         self.register(q_id.into()); // saved in both queue provider and in active_queue
+
         self.active_queue.map(|id| self.unregister(id));
         self.active_queue = Some(q_id);
+        dbg!(self.active_queue);
     }
 
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
