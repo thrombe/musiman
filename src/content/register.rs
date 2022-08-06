@@ -55,7 +55,7 @@ impl ContentProviderID {
 to_from_content_id!(ContentProviderID, ContentProvider);
 
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ID {
     Song(SongID),
     ContentProvider(ContentProviderID),

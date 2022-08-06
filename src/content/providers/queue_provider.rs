@@ -114,6 +114,9 @@ impl CPProvider for QueueProvider {
     fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
         Box::new(self.providers.iter())
     }
+    fn providers_mut(&mut self) -> &mut Vec<ContentProviderID> {
+        &mut self.providers
+    }
 }
 
 #[typetag::serde]

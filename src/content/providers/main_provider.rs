@@ -49,6 +49,7 @@ use crate::{
 };
 
 
+// https://play.rust-lang.org/?version=stable&mode=debug&edition=2015&gist=146d926f9829419f60e3302131ba9709
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MainProvider {
     providers: Vec<ContentProviderID>,
@@ -105,6 +106,9 @@ impl CPProvider for MainProvider {
     }
     fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
         Box::new(self.providers.iter())
+    }
+    fn providers_mut(&mut self) -> &mut Vec<ContentProviderID> {
+        &mut self.providers
     }
 }
 

@@ -27,7 +27,10 @@ use crate::{
             SongID,
         },
     },
-    service::config::config,
+    service::{
+        editors::EditManager,
+        config::config,
+    },
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -35,6 +38,7 @@ pub struct DBHandler {
     pub songs: ContentRegister<Song, SongID>,
     pub content_providers: ContentRegister<ContentProvider, ContentProviderID>,
     pub main_provider: ContentProviderID,
+    pub edit_manager: EditManager,
 }
 
 impl DBHandler {

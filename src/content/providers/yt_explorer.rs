@@ -397,6 +397,9 @@ impl SongProvider for YTExplorer {
     fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
         Box::new(self.songs.iter())
     }
+    fn songs_mut(&mut self) -> &mut Vec<SongID> {
+        &mut self.songs
+    }
 }
 impl CPProvider for YTExplorer {
     fn add_provider(&mut self, id: ContentProviderID) {
@@ -404,6 +407,9 @@ impl CPProvider for YTExplorer {
     }
     fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
         Box::new(self.providers.iter())
+    }
+    fn providers_mut(&mut self) -> &mut Vec<ContentProviderID> {
+        &mut self.providers
     }
 }
 impl Editable for YTExplorer {

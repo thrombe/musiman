@@ -35,7 +35,7 @@ serde_yaml = "0.8"
 typetag = "0.2.0"
 
 [dependencies.reqwest]
-version = "0.11.10"
+version = "0.11"
 features = ["blocking"]
 
 [dependencies.musiplayer]
@@ -63,6 +63,9 @@ optional = true
 [features]
 sixel = ["sixel-sys"]
 default = ["sixel"]
+
+[target.'cfg(all(any(target_os = "windows", target_os = "linux"), target_arch = "x86_64"))'.dependencies]
+sixel-sys = "0.3.1"
 
 
 [profile.release]

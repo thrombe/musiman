@@ -56,9 +56,12 @@ use futures::{
 };
 
 use crate::{
-    content::manager::{
-        manager::ContentManager,
-        action::ContentManagerAction,
+    content::{
+        manager::{
+            manager::ContentManager,
+            action::ContentManagerAction,
+        },
+        stack::ContentState,
     },
     app::{
         action::AppAction,
@@ -66,6 +69,7 @@ use crate::{
             ListBuilder,
         },
     },
+    service::editors::YankType,
 };
 
 
@@ -132,6 +136,31 @@ impl BrowserWidget {
             }
             KeyCode::Char('y') => {
                 ch.toggle_yank_selected()?;
+            }
+            KeyCode::Char('X') => {
+                let action = ch.edit_manager.apply_yank(YankType::Cut);
+                action.apply(ch)?;
+            }
+            KeyCode::Char('P') => {
+               if let None = ch.edit_manager.yanker { // ? is this check necessary?
+                    if let ContentState::Normal = ch.content_stack.get_state() {
+                        let index = ch.get_selected_index().selected_index();
+                        let action = ch.edit_manager.try_paste(ch.content_stack.last(), Some(index));
+                        action.apply(ch)?;
+                    }
+               }
+            }
+            KeyCode::Char('Z') => {
+                ch.edit_manager.redo_last_undo().apply(ch)?;
+            }
+            KeyCode::Char('z') => {
+                ch.edit_manager.undo_last_edit().apply(ch)?;
+            }
+            KeyCode::Esc => {
+                match ch.edit_manager.yanker.take() {
+                    Some(_) => ContentManagerAction::RefreshDisplayContent.apply(ch)?,
+                    None => return Ok(false),
+                }
             }
             KeyCode::Up => {
                 ch.decrement_selection();

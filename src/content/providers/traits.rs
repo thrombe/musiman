@@ -178,14 +178,43 @@ pub trait Editable {
     fn num_editables(&self, ctx: &StateContext) -> usize;
 }
 
-pub trait SongProvider {
+pub trait SongProvider: ContentProviderTrait {
     fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a>;
     fn add_song(&mut self, id: SongID);
+    fn songs_mut(&mut self) -> &mut Vec<SongID>; // any other option??
+
+    fn remove_song(&mut self, id: SongID) -> Option<SongID> {
+        let index = self.songs().position(|&i| i == id);
+        match index {
+            Some(index) => {
+                if self.ids().position(|i| i == ID::from(id)).unwrap() <= self.get_selected_index().selected_index() {
+                    self.selection_decrement();
+                }
+                Some(self.songs_mut().remove(index))
+            }
+            None => None,
+        }
+    }
 }
 
-pub trait CPProvider {
+pub trait CPProvider: ContentProviderTrait {
     fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a>;
     fn add_provider(&mut self, id: ContentProviderID);
+
+    fn providers_mut(&mut self) -> &mut Vec<ContentProviderID>;
+
+    fn remove_provider(&mut self, id: ContentProviderID) -> Option<ContentProviderID> {
+        let index = self.providers().position(|&i| i == id);
+        match index {
+            Some(index) => {
+                if self.ids().position(|i| i == ID::from(id)).unwrap() <= self.get_selected_index().selected_index() {
+                    self.selection_decrement();
+                }
+                Some(self.providers_mut().remove(index))
+            }
+            None => None,
+        }
+    }
 }
 
 pub trait Provider {

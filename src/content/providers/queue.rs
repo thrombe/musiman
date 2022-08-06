@@ -47,7 +47,7 @@ pub struct Queue {
     pub name: Cow<'static, str>,
     #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     pub index: SelectedIndex,
-    pub source_cp: ContentProviderID,
+    pub source_cp: ContentProviderID, // weak
 }
 impl Queue {
     /// panics is cp is not a SongProvider
@@ -92,6 +92,9 @@ impl SongProvider for Queue {
     }
     fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
         Box::new(self.songs.iter())
+    }
+    fn songs_mut(&mut self) -> &mut Vec<SongID> {
+        &mut self.songs
     }
 }
 

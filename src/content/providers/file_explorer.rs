@@ -135,9 +135,11 @@ impl SongProvider for FileExplorer {
     fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
         Box::new(self.songs.iter())
     }
-
     fn add_song(&mut self, id: SongID) {
         self.songs.push(id);
+    }
+    fn songs_mut(&mut self) -> &mut Vec<SongID> {
+        &mut self.songs
     }
 }
 
@@ -145,10 +147,12 @@ impl CPProvider for FileExplorer {
     fn providers<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContentProviderID> + 'a> {
         Box::new(self.providers.iter())
     }
-
     fn add_provider(&mut self, id: ContentProviderID) {
         self.providers.push(id);
-    }    
+    }
+    fn providers_mut(&mut self) -> &mut Vec<ContentProviderID> {
+        &mut self.providers
+    }
 }
 
 impl Loadable for FileExplorer {
@@ -177,7 +181,8 @@ impl Loadable for FileExplorer {
                 let file_path = e.to_str().unwrap();
                 let file = Probe::open(file_path)?; // file open error
                 match file.guess_file_type() {
-                    Ok(_) => { // FIX: this does not mean this is some kinda song???
+                    Ok(fpt) => { // FIX: this does not mean this is some kinda song???
+                        dbg!(fpt.file_type());
                         match TaggedFileSong::from_file_path(file_path.into()) {
                             Ok(Some(song)) => {
                                 s.push(song.into());

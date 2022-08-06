@@ -77,6 +77,17 @@ pub enum ContentManagerAction {
         content_providers: Vec<ContentProvider>,
         loader_id: ContentProviderID,
     },
+    RemoveFromProvider {
+        #[derivative(Debug="ignore")]
+        ids: Vec<ID>,
+        from: ContentProviderID,
+    },
+    AddToProvider {
+        #[derivative(Debug="ignore")]
+        ids: Vec<ID>,
+        to: ContentProviderID,
+        pos: Option<usize>,
+    },
     TryLoadContentProvider {
         loader_id: ContentProviderID,
     },
@@ -125,6 +136,9 @@ pub enum ContentManagerAction {
     Unregister {
         ids: Vec<ID>,
     },
+    Register {
+        ids: Vec<ID>,
+    },
     LogTimeSince {
         instant: std::time::Instant,
         message: Cow<'static, str>,
@@ -163,6 +177,38 @@ impl ContentManagerAction {
                 .into_iter()
                 .for_each(|c| cp.as_provider_mut().unwrap().add_provider(c));
             }
+            Self::RemoveFromProvider { from, ids } => { // (un)registering handled on caller's side
+                let cp = ch.get_provider_mut(from);
+                ids
+                .into_iter()
+                .for_each(|id| {
+                    let id = match id {
+                        ID::Song(id) => {
+                            cp.as_song_provider_mut().unwrap().remove_song(id).map(ID::Song)
+                        }
+                        ID::ContentProvider(id) => {
+                            cp.as_provider_mut().unwrap().remove_provider(id).map(ID::ContentProvider)
+                        }
+                    };
+                    if let None = id {
+                        error!("id {id:#?} cannot remove an id that does not exist in provider");
+                    }
+                });
+            }
+            Self::AddToProvider { ids, to ,  pos} => { // (un)registering handled on caller's side
+                // FIX: add the stuff at pos index
+                let cp = ch.get_provider_mut(to);
+                for id in ids {
+                    match id {
+                        ID::Song(id) => { // FIX: provider might not be a songprovider/cpprovider
+                            cp.as_song_provider_mut().unwrap().add_song(id);
+                        }
+                        ID::ContentProvider(id) => {
+                            cp.as_provider_mut().unwrap().add_provider(id);
+                        }
+                    }
+                }
+            }
             Self::ReplaceContentProvider {old_id, cp} => {
                 let p = ch.get_provider_mut(old_id);
                 *p = cp;
@@ -184,7 +230,7 @@ impl ContentManagerAction {
             Self::PushToContentStack { id } => {
                 dbg!(id);
                 ch.content_stack.push(id);
-                ch.register(id.into());
+                ch.register(id);
                 match id {
                     GlobalProvider::ContentProvider(id) => {
                         Self::TryLoadContentProvider { loader_id: id }.apply(ch)?;
@@ -244,6 +290,9 @@ impl ContentManagerAction {
             }
             Self::Unregister {ids} => {
                 ids.into_iter().for_each(|id| ch.unregister(id));
+            }
+            Self::Register { ids } => {
+                ids.into_iter().for_each(|id| ch.register(id));
             }
             Self::LogTimeSince { message, instant } => {
                 let duration = std::time::Instant::now().duration_since(instant).as_secs_f64();

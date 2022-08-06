@@ -101,6 +101,9 @@ impl SongProvider for YTPlaylist {
     fn songs<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SongID> + 'a> {
         Box::new(self.songs.iter())
     }
+    fn songs_mut(&mut self) -> &mut Vec<SongID> {
+        &mut self.songs
+    }
 }
 
 impl Loadable for YTPlaylist {

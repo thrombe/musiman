@@ -39,7 +39,7 @@ pub struct DisplayContext<'a> {
     pub state: DisplayState<'a>,
     pub songs: &'a ContentRegister<Song, SongID>,
     pub providers: &'a ContentRegister<ContentProvider, ContentProviderID>,
-    pub yanker: &'a Yanker,
+    pub yanker: Option<&'a Yanker>,
 }
 
 impl<'a> DisplayContext<'a> {
@@ -75,7 +75,12 @@ impl<'a> DisplayContext<'a> {
     }
 
     pub fn apply_markers<'b, T: Into<ID>>(&self, mut line: Line<'b>, id: T, pos: MarkerPos) -> Line<'b> {
-        if self.yanker.yanked_items.contains(&id.into()) {
+        let id = id.into();
+        if self.yanker
+        .as_ref()
+        .map(|y| y.yanked_items.iter().cloned().map(|(i, _)| i).collect::<Vec<_>>().contains(&id))
+        .unwrap_or(false)
+        {
             let marker = Marker {symbol: Yanker::marker_symbol(), pos};
             line.markers.push(marker);
         }

@@ -66,8 +66,7 @@ pub struct ContentManager {
     content_providers: ContentRegister<ContentProvider, ContentProviderID>,
 
     pub content_stack: ContentStack,
-    pub yanker: Yanker,
-    edit_manager: EditManager,
+    pub edit_manager: EditManager,
     pub image_handler: ImageHandler,
     pub player: Player, // FIX: memory leak somewhere maybe. (the ram usage keeps increasing) // https://github.com/sdroege/gstreamer-rs/blob/main/examples/src/bin/play.rs
     notifier: Notifier,
@@ -107,7 +106,8 @@ impl ContentManager {
         self.alloc_content_provider(cp.into())
     }
 
-    pub fn register(&mut self, id: GlobalContent) {
+    pub fn register<T: Into<GlobalContent>>(&mut self, id: T) {
+        let id = id.into();
         match id {
             GlobalContent::ID(id) => {
                 match id {
@@ -211,7 +211,7 @@ impl ContentManager {
             state,
             songs: &self.songs,
             providers: &self.content_providers,
-            yanker: &self.yanker,
+            yanker: self.edit_manager.yanker.as_ref(),
         })
     }
     fn display_song(&self, id: SongID, state: DisplayState) -> ListBuilder<'static> {
@@ -235,7 +235,6 @@ impl ContentManager {
             songs: ContentRegister::new(),
             content_providers: cr,
             content_stack: ContentStack::new(main_id),
-            yanker: Yanker::new(),
             edit_manager: EditManager::new(),
             image_handler: Default::default(),
             player: Player::new()?,
@@ -269,6 +268,7 @@ impl ContentManager {
                     songs: db.songs,
                     content_providers: db.content_providers,
                     content_stack: ContentStack::new(db.main_provider),
+                    edit_manager: db.edit_manager,
 
                     ..Self::new()?
                 })
@@ -300,18 +300,22 @@ impl ContentManager {
         let mp = self.content_stack.main_provider();
         let songs = self.songs;
         let cps = self.content_providers;
+        // self.edit_manager.yanker.take();
+        let edit_manager = self.edit_manager;
         DBHandler {
             main_provider: mp,
             songs,
             content_providers: cps,
+            edit_manager,
         }.save()?;
         Ok(())
     }
 
-    pub fn debug_current(&mut self) {
+    pub fn debug_current(&self) {
         // dbg!(&self.content_providers);
-        dbg!(&self.content_stack);
-        dbg!(&self.player);
+        // dbg!(&self.content_stack);
+        dbg!(&self.edit_manager);
+        // dbg!(&self.player);
         // dbg!(self.player.is_finished());
         // dbg!(self.player.duration());
         // dbg!(self.player.position());
@@ -344,11 +348,11 @@ impl ContentManager {
         //     _ => (),
         // }
 
-        debug!("{}", serde_yaml::to_string(&self.songs).unwrap());
-        let a = serde_yaml::to_string(&self.content_providers).unwrap();
-        debug!("{}", &a);
-        let b = serde_yaml::from_str::<ContentRegister<ContentProvider, ContentProviderID>>(&a);
-        dbg!(b)
+        // debug!("{}", serde_yaml::to_string(&self.songs).unwrap());
+        // let a = serde_yaml::to_string(&self.content_providers).unwrap();
+        // debug!("{}", &a);
+        // let b = serde_yaml::from_str::<ContentRegister<ContentProvider, ContentProviderID>>(&a);
+        // dbg!(b)
     }
 
     pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
@@ -603,7 +607,16 @@ impl ContentManager {
                     GlobalProvider::ContentProvider(id) => {
                         let cp = self.get_provider(id);
                         let selected_id = cp.get_selected();
-                        self.yanker.toggle_yank(selected_id, id);
+                        let index = cp.get_selected_index().selected_index();
+                        let index = Some(index);
+                        match self.edit_manager.yanker.as_mut() {
+                            Some(y) => y.toggle_yank(selected_id, id, index),
+                            None => {
+                                let mut y = Yanker::new(id);
+                                y.toggle_yank(selected_id, id, index);
+                                self.edit_manager.yanker = Some(y);
+                            }
+                        }
                         ContentManagerAction::RefreshDisplayContent.apply(self)?;
                     },
                 }
@@ -647,10 +660,10 @@ impl ContentManager {
                 self.get_queue_provider_mut()
                 .move_to_top(queue_index);
 
-                self.register(q_id.into());
+                self.register(q_id);
                 self.active_queue.map(|id| self.unregister(id));
                 self.active_queue = Some(q_id);
-                dbg!(self.active_queue);        
+                dbg!(self.active_queue);
 
                 return;
             }
@@ -663,7 +676,7 @@ impl ContentManager {
             let q = Queue::new(cp, id, |id: SongID| register.push(id)); // can't pass allocator func as self is immutably borrowed
             register
             .into_iter()
-            .for_each(|id| self.register(id.into()));
+            .for_each(|id| self.register(id));
             q
         };
 
@@ -673,15 +686,14 @@ impl ContentManager {
         .add_queue(q_id)
         .map(|id| self.unregister(id));
 
-        self.register(q_id.into()); // saved in both queue provider and in active_queue
-
+        self.register(q_id); // saved in both queue provider and in active_queue
         self.active_queue.map(|id| self.unregister(id));
         self.active_queue = Some(q_id);
         dbg!(self.active_queue);
     }
 
     pub fn play_song(&mut self, id: SongID) -> Result<()> {
-        self.register(id.into());
+        self.register(id);
         self.active_song.map(|id| self.unregister(id));
         self.active_song = Some(id);
 
