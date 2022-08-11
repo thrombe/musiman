@@ -122,7 +122,7 @@ pub trait ContentProviderTrait
     fn selection_increment(&mut self) -> bool {
         let num_items = self.get_size();
         let i = self.get_selected_index_mut();
-        if i.selected_index() < num_items-1 {
+        if i.selected_index()+1 < num_items {
             i.select(i.selected_index()+1);
             true
         } else {
