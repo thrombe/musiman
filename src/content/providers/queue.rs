@@ -21,16 +21,21 @@ use crate::{
                 SongProvider,
                 Provider,
                 ContentProviderTrait,
+                YankContext,
+                YankDest,
+                SongYankDest,
             },
         },
         register::{
             SongID,
             ContentProviderID,
+            ID,
         },
         display::{
             DisplayContext,
             DisplayState,
         },
+        manager::action::ContentManagerAction,
     },
     app::{
         app::SelectedIndex,
@@ -38,6 +43,11 @@ use crate::{
             Display,
             ListBuilder,
         },
+    },
+    service::editors::{
+        Yanker,
+        YankedContentType,
+        Edit,
     },
 };
 
@@ -134,8 +144,37 @@ impl<'b> Display<'b> for Queue {
     }
 }
 
+impl YankDest<SongID> for Queue {
+    fn try_paste(&mut self, items: Vec<SongID>, start_index: Option<usize>, self_id: ContentProviderID) -> ContentManagerAction {
+        let num_items = self.songs.len();
+        vec![
+            ContentManagerAction::YankCallback {
+                callback: Box::new(move |mut ctx: YankContext| {
+                    items.iter().cloned().for_each(|id| {
+                        ctx.register(id); // for being stored in the Queue
+                        ctx.register(id); // for being stored in Edit
+                    });
+                    let mut yank = Yanker::new(self_id); // garbaage yanked_from
+                    yank.content_type = YankedContentType::Song;
+                    yank.yanked_items = items.into_iter()
+                    .enumerate()
+                    .map(|(i, id)| (ID::Song(id), start_index.map(|j| j+i).unwrap_or(num_items + i)))
+                    .collect();
+                    vec![
+                        ContentManagerAction::PasteIntoProvider { yank: yank.clone(), yanked_to: self_id, paste_pos: start_index },
+                        ContentManagerAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: self_id, paste_pos: start_index } },
+                        ContentManagerAction::RefreshDisplayContent,
+                    ].into()
+                }),
+            },
+        ].into()
+    }
+    fn dest_vec_mut(&mut self) -> Option<&mut Vec<SongID>> {
+        Some(&mut self.songs)
+    }
+}
 
 #[typetag::serde]
 impl ContentProviderTrait for Queue {
-    impliment_content_provider!(Queue, SongProvider, Provider, Display);
+    impliment_content_provider!(Queue, SongProvider, Provider, Display, SongYankDest);
 }

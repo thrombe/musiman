@@ -39,8 +39,9 @@ pub enum YankedContentType {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Yanker { // all ids here are weak (but not enforced to be weak)
-    pub yanked_items: Vec<(ID, Option<usize>)>,
-    content_type: YankedContentType,
+    // FIX: there be problems if multiple copies of the same thing is present in the provider, and it is removed. the item might not be removed from the correct index
+    pub yanked_items: Vec<(ID, usize)>,
+    pub content_type: YankedContentType,
     yanked_from: ContentProviderID, // not allowed to yank stuff from multiple places
 }
 
@@ -60,7 +61,7 @@ impl Yanker {
         }
     }
 
-    fn yank_song(&mut self, id: SongID, provider_id: ContentProviderID, index: Option<usize>) {
+    fn yank_song(&mut self, id: SongID, provider_id: ContentProviderID, index: usize) {
         if provider_id != self.yanked_from || self.content_type != YankedContentType::Song {
             self.yanked_items.clear();
             self.content_type = YankedContentType::Song;
@@ -69,7 +70,7 @@ impl Yanker {
         self.yanked_items.push((id.into(), index));
     }
 
-    fn yank_content_provider(&mut self, id: ContentProviderID, provider_id: ContentProviderID, index: Option<usize>) {
+    fn yank_content_provider(&mut self, id: ContentProviderID, provider_id: ContentProviderID, index: usize) {
         if provider_id != self.yanked_from || self.content_type != YankedContentType::ContentProvider {
             self.yanked_items.clear();
             self.content_type = YankedContentType::ContentProvider;
@@ -83,7 +84,7 @@ impl Yanker {
         Span { content: Cow::Borrowed("█"), style: Style::default().fg(Color::Green) }
     }
 
-    pub fn toggle_yank(&mut self, id: ID, provider_id: ContentProviderID, index: Option<usize>) {
+    pub fn toggle_yank(&mut self, id: ID, provider_id: ContentProviderID, index: usize) {
         if provider_id == self.yanked_from {
             let old_len = self.yanked_items.len();
             self.yanked_items.retain(|(y_id, _)| id != *y_id);
@@ -95,6 +96,28 @@ impl Yanker {
         match id {
             ID::Song(id) => self.yank_song(id, provider_id, index),
             ID::ContentProvider(id) => self.yank_content_provider(id, provider_id, index),
+        }
+    }
+
+    pub fn yanked_songs(&self) -> Option<Vec<(SongID, usize)>> {
+        match self.content_type {
+            YankedContentType::Song => Some(self.yanked_items.iter().cloned().map(|(id, i)| match id {
+                ID::Song(id) => (id, i),
+                ID::ContentProvider(_) => unreachable!(),
+            }).collect()),
+            YankedContentType::ContentProvider => None,
+            YankedContentType::None => None,
+        }
+    }
+
+    pub fn yanked_providers(&self) -> Option<Vec<(ContentProviderID, usize)>> {
+        match self.content_type {
+            YankedContentType::ContentProvider => Some(self.yanked_items.iter().cloned().map(|(id, i)| match id {
+                ID::ContentProvider(id) => (id, i),
+                ID::Song(_) => unreachable!(),
+            }).collect()),
+            YankedContentType::Song => None,
+            YankedContentType::None => None,
         }
     }
 }
@@ -143,7 +166,7 @@ impl EditManager {
         ].into()
     }
 
-    pub fn undo_last_edit(&mut self) -> ContentManagerAction{
+    pub fn undo_last_edit(&mut self) -> ContentManagerAction {
         if self.edit_stack.is_empty() {return None.into()}
         let undo = self.edit_stack.pop().unwrap();
         match &undo {
@@ -173,13 +196,15 @@ impl EditManager {
         action
     }
 
+    pub fn push_edit(&mut self, edit: Edit) {
+        self.edit_stack.push(edit);
+    }
+
     pub fn try_paste(&mut self, id: GlobalProvider, pos: Option<usize>) -> ContentManagerAction {
         if let Some(Edit::Yanked { .. }) = self.edit_stack.last() {
             if let GlobalProvider::ContentProvider(id) = id {
-                if let Edit::Yanked { yank, yank_type } = self.edit_stack.last().cloned().unwrap() {
-                    let edit = Edit::Pasted { yank, yank_type, yanked_to: id, paste_pos: pos }; // FIX: no gurantee that the provider can store these
-                    self.edit_stack.push(edit);
-                    return self.edit_stack.last().unwrap().apply();
+                if let Edit::Yanked { yank, .. } = self.edit_stack.last().cloned().unwrap() {
+                    return ContentManagerAction::TryPasteIntoProvider {yank, yanked_to: id, paste_pos: pos};
                 }
             }
         }
@@ -191,7 +216,6 @@ impl EditManager {
 pub enum Edit {
     Pasted {
         yank: Yanker,
-        yank_type: YankType,
         yanked_to: ContentProviderID,
         paste_pos: Option<usize>,
     },
@@ -216,7 +240,7 @@ impl Edit {
                     YankType::Cut => {
                         vec![
                             ContentManagerAction::Register {ids: items.clone()}, // for being stored in undo_stack
-                            ContentManagerAction::AddToProvider {ids: items, to: yank.yanked_from, pos: None},
+                            ContentManagerAction::InsertIntoProvider {yank: yank.clone(), yanked_to: yank.yanked_from},
                             ContentManagerAction::RefreshDisplayContent,
                         ].into()
                     },
@@ -249,10 +273,10 @@ impl Edit {
                     },
                 }
             },
-            Self::Pasted { yank, yanked_to, paste_pos, .. } => {
+            Self::Pasted { yank, yanked_to, paste_pos  } => {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>();
                 vec![
-                    ContentManagerAction::AddToProvider { ids: items.clone(), to: *yanked_to, pos: paste_pos.to_owned()},
+                    ContentManagerAction::PasteIntoProvider {yank: yank.clone(), yanked_to: *yanked_to, paste_pos: *paste_pos},
                     ContentManagerAction::Register {ids: items}, // for being saved in the provider
                     ContentManagerAction::RefreshDisplayContent,
                 ].into()
@@ -271,7 +295,7 @@ impl Edit {
         ContentManagerAction::Unregister { ids: items }
     }
 
-    fn apply(&self) -> ContentManagerAction {
+    pub fn apply(&self) -> ContentManagerAction {
         match self {
             Self::Yanked { yank, yank_type } => {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect();
@@ -287,10 +311,10 @@ impl Edit {
                     }
                 }
             }
-            Self::Pasted { yank, yanked_to, paste_pos, .. } => {
+            Self::Pasted { yank, yanked_to, paste_pos } => {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>();
                 vec![
-                    ContentManagerAction::AddToProvider { ids: items.clone(), to: *yanked_to, pos: paste_pos.to_owned()},
+                    ContentManagerAction::TryPasteIntoProvider {yank: yank.clone(), yanked_to: *yanked_to, paste_pos: *paste_pos},
                     ContentManagerAction::Register {ids: items.clone()}, // for being stored in the provider
                     ContentManagerAction::Register {ids: items}, // for being stored in Edit::Pasted
                     ContentManagerAction::RefreshDisplayContent,

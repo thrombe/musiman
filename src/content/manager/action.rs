@@ -26,7 +26,10 @@ use tokio::{
 
 use crate::{
     content::{
-        providers::ContentProvider,
+        providers::{
+            traits::YankContext,
+            ContentProvider,
+        },
         manager::{
             manager::ContentManager,
             callback::ContentManagerCallback,
@@ -42,9 +45,15 @@ use crate::{
         AppAction,
         TypingCallback,
     },
-    service::python::{
-        action::PyAction,
-        manager::PyManager,
+    service::{
+        python::{
+            action::PyAction,
+            manager::PyManager,
+        },
+        editors::{
+            Yanker,
+            Edit,
+        }
     },
     image::UnprocessedImage,
 };
@@ -82,11 +91,41 @@ pub enum ContentManagerAction {
         ids: Vec<ID>,
         from: ContentProviderID,
     },
-    AddToProvider {
+    // PasteIntoProvider {
+    //     #[derivative(Debug="ignore")]
+    //     ids: Vec<ID>,
+    //     to: ContentProviderID,
+    //     pos: Option<usize>,
+    // },
+    TryPasteIntoProvider {
         #[derivative(Debug="ignore")]
-        ids: Vec<ID>,
-        to: ContentProviderID,
-        pos: Option<usize>,
+        yank: Yanker,
+        yanked_to: ContentProviderID,
+        paste_pos: Option<usize>,
+    },
+    // TryInsertIntoProvider {
+    //     #[derivative(Debug="ignore")]
+    //     yank: Yanker,
+    //     yanked_to: ContentProviderID,
+    // },
+    PasteIntoProvider {
+        #[derivative(Debug="ignore")]
+        yank: Yanker,
+        yanked_to: ContentProviderID,
+        paste_pos: Option<usize>,
+    },
+    InsertIntoProvider {
+        #[derivative(Debug="ignore")]
+        yank: Yanker,
+        yanked_to: ContentProviderID,
+    },
+    PushEdit {
+        #[derivative(Debug="ignore")]
+        edit: Edit,
+    },
+    YankCallback {
+        #[derivative(Debug="ignore")]
+        callback: Box<dyn FnOnce(YankContext) -> ContentManagerAction + 'static + Send + Sync>,
     },
     TryLoadContentProvider {
         loader_id: ContentProviderID,
@@ -184,10 +223,16 @@ impl ContentManagerAction {
                 .for_each(|id| {
                     let id = match id {
                         ID::Song(id) => {
-                            cp.as_song_provider_mut().unwrap().remove_song(id).map(ID::Song)
+                            cp.as_song_provider_mut()
+                            .unwrap()
+                            .remove_song(id)
+                            .map(ID::Song)
                         }
                         ID::ContentProvider(id) => {
-                            cp.as_provider_mut().unwrap().remove_provider(id).map(ID::ContentProvider)
+                            cp.as_provider_mut()
+                            .unwrap()
+                            .remove_provider(id)
+                            .map(ID::ContentProvider)
                         }
                     };
                     if let None = id {
@@ -195,20 +240,138 @@ impl ContentManagerAction {
                     }
                 });
             }
-            Self::AddToProvider { ids, to ,  pos} => { // (un)registering handled on caller's side
-                // FIX: add the stuff at pos index
-                let cp = ch.get_provider_mut(to);
-                for id in ids {
-                    match id {
-                        ID::Song(id) => { // FIX: provider might not be a songprovider/cpprovider
-                            cp.as_song_provider_mut().unwrap().add_song(id);
-                        }
-                        ID::ContentProvider(id) => {
-                            cp.as_provider_mut().unwrap().add_provider(id);
-                        }
-                    }
-                }
+            Self::TryPasteIntoProvider { yank, yanked_to, paste_pos } => {
+                yank.yanked_songs()
+                .map(|items| {
+                    ch.get_provider_mut(yanked_to)
+                    .as_song_yank_dest_mut()
+                    .map(|y| y.try_paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos, yanked_to))
+                })
+                .unwrap_or(None.into())
+                .unwrap_or(None.into())
+                .apply(ch)?;
+                
+                yank.yanked_providers()
+                .map(|items| {
+                    items.iter().cloned()
+                    .for_each(|(id, _)| {
+                        let _ = ch.get_provider_mut(id) // BAD: ignored errors
+                        .as_loadable()
+                        .map(|cp| 
+                            cp.maybe_load(id)
+                            .ok()
+                        )
+                        .unwrap_or(None.into())
+                        .unwrap_or(None.into())
+                        .apply(ch);
+                    });
+
+                    ch.get_provider_mut(yanked_to)
+                    .as_provider_yank_dest_mut()
+                    .map(|y| y.try_paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos, yanked_to))
+                })
+                .unwrap_or(None.into())
+                .unwrap_or(None.into())
+                .apply(ch)?;
             }
+            Self::PushEdit { edit } => {
+                ch.edit_manager.push_edit(edit);
+            }
+            // Self::TryInsertIntoProvider { yank, yanked_to } => {
+            //     yank.yanked_songs()
+            //     .map(|items|
+            //         ch.get_provider_mut(yanked_to)
+            //         .as_song_yank_dest_mut()
+            //         .map(|y| y.try_insert(items))
+            //     )
+            //     .unwrap_or(None.into())
+            //     .unwrap_or(None.into())
+            //     .apply(ch)?;
+                
+            //     yank.yanked_providers()
+            //     .map(|items|
+            //         ch.get_provider_mut(yanked_to)
+            //         .as_provider_yank_dest_mut()
+            //         .map(|y| y.try_insert(items))
+            //     )
+            //     .unwrap_or(None.into())
+            //     .unwrap_or(None.into())
+            //     .apply(ch)?;
+            // }
+            Self::PasteIntoProvider { yank, yanked_to, paste_pos } => { // TODO: maybe crash instead of map
+                yank.yanked_songs()
+                .map(|items|
+                    ch.get_provider_mut(yanked_to)
+                    .as_song_yank_dest_mut()
+                    .map(|y| y.paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos))
+                );
+                
+                let a = yank.yanked_providers()
+                .map(|items|
+                    ch.get_provider_mut(yanked_to)
+                    .as_provider_yank_dest_mut()
+                    .map(|y| y.paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos))
+                );
+                dbg!(a);
+            }
+            Self::InsertIntoProvider { yank, yanked_to } => { // TODO: maybe crash instead of map
+                yank.yanked_songs()
+                .map(|items|
+                    ch.get_provider_mut(yanked_to)
+                    .as_song_yank_dest_mut()
+                    .map(|y| y.insert(items))
+                );
+                
+                yank.yanked_providers()
+                .map(|items|
+                    ch.get_provider_mut(yanked_to)
+                    .as_provider_yank_dest_mut()
+                    .map(|y| y.insert(items))
+                );
+            }
+            Self::YankCallback { callback } => {
+                callback(YankContext::new(ch)).apply(ch)?;
+            }
+            // Self::TryPasteIntoProvider { yank, yank_type, yanked_to, paste_pos } => {
+            //     let cp = ch.get_provider(yanked_to);
+            //     if yank.yanked_items
+            //     .iter()
+            //     .map(|&(id, _)| id)
+            //     .map(|id| {
+            //         match id {
+            //             ID::Song(id) => {
+            //                 let item = ch.get_song(id);
+            //                 cp.as_song_yank_dest()
+            //                .map(|y| y.can_be_pasted(item))
+            //                 .unwrap_or(false)
+            //             }
+            //             ID::ContentProvider(id) => {
+            //                 let item = ch.get_provider(id);
+            //                 cp.as_provider_yank_dest()
+            //                 .map(|y| y.can_be_pasted(item))
+            //                 .unwrap_or(false)
+            //             }
+            //         }
+            //     })
+            //     .all(|e| e) {
+            //         let edit = Edit::Pasted { yank, yank_type, yanked_to, paste_pos };
+            //         edit.apply().apply(ch)?;
+            //         ch.edit_manager.push_edit(edit);
+            //     }
+            // }
+            // Self::PasteIntoProvider { ids, to ,  pos} => { // (un)registering handled on caller's side
+            //     let cp = ch.get_provider_mut(to);
+            //     for id in ids {
+            //         match id {
+            //             ID::Song(id) => {
+            //                 cp.as_song_yank_dest_mut().unwrap().paste(id, pos).map(ID::Song)
+            //             }
+            //             ID::ContentProvider(id) => {
+            //                 cp.as_provider_yank_dest_mut().unwrap().paste(id, pos)
+            //             }
+            //         }
+            //     }
+            // }
             Self::ReplaceContentProvider {old_id, cp} => {
                 let p = ch.get_provider_mut(old_id);
                 *p = cp;

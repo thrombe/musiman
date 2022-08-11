@@ -608,7 +608,6 @@ impl ContentManager {
                         let cp = self.get_provider(id);
                         let selected_id = cp.get_selected();
                         let index = cp.get_selected_index().selected_index();
-                        let index = Some(index);
                         match self.edit_manager.yanker.as_mut() {
                             Some(y) => y.toggle_yank(selected_id, id, index),
                             None => {

@@ -19,9 +19,15 @@ use crate::{
             ContentProviderID,
             SongID,
             ID,
+            GlobalContent,
         },
-        manager::action::ContentManagerAction,
+        manager::{
+            action::ContentManagerAction,
+            manager::ContentManager,
+        },
         display::DisplayContext,
+        song::Song,
+        providers::ContentProvider,
     },
     app::{
         app::SelectedIndex,
@@ -49,7 +55,7 @@ impl Clone for Box<dyn ContentProviderTrait> {
 }
 
 
-impl<T> From<T> for super::ContentProvider
+impl<T> From<T> for ContentProvider
     where T: ContentProviderTrait + 'static
 {
     fn from(t: T) -> Self {
@@ -73,7 +79,12 @@ pub trait ContentProviderTrait
 {
     fn as_song_provider(&self) -> Option<&dyn SongProvider> {None}
     fn as_song_provider_mut(&mut self) -> Option<&mut dyn SongProvider> {None}
-    
+
+    fn as_song_yank_dest(&self) -> Option<&dyn SongYankDest> {None}
+    fn as_song_yank_dest_mut(&mut self) -> Option<&mut dyn SongYankDest> {None}
+
+    fn as_provider_yank_dest(&self) -> Option<&dyn CPYankDest> {None}
+    fn as_provider_yank_dest_mut(&mut self) -> Option<&mut dyn CPYankDest> {None}
 
     fn as_provider(&self) -> Option<&dyn CPProvider> {None}
     fn as_provider_mut(&mut self) -> Option<&mut dyn CPProvider> {None}
@@ -222,6 +233,53 @@ pub trait Provider {
     fn get_selected_index(&self) -> &SelectedIndex;
 }
 
+pub struct YankContext<'a>(&'a mut ContentManager);
+impl<'a> YankContext<'a> {
+    pub fn new(inner: &'a mut ContentManager) -> Self {YankContext(inner)}
+    pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {self.0.get_provider(id)}
+    pub fn get_provider_mut(&mut self, id: ContentProviderID) -> &mut ContentProvider {self.0.get_provider_mut(id)}
+    pub fn alloc_provider(&mut self, provider: ContentProvider) -> ContentProviderID {self.0.alloc_content_provider(provider)}
+    pub fn register<T: Into<GlobalContent>>(&mut self, id: T) {self.0.register(id)}
+}
+
+/// the items might be copied and modified when pasted (only in try_* methods). some other things might trigger on paste too
+/// the paste might even be rejected // TODO: how do i communicate the rejections back? is it even needed tho?
+pub trait YankDest<T> {
+    fn dest_vec_mut(&mut self) -> Option<&mut Vec<T>> {None} // for default implimentations of paste and insert, else they panic
+
+    /// all items are pasted one after the other starting at the mentioned index, else appended at the last
+    fn try_paste(&mut self, items: Vec<T>, start_index: Option<usize>, self_id: ContentProviderID) -> ContentManagerAction;
+    fn paste(&mut self, items: Vec<T>, start_index: Option<usize>) {
+        let vecc = self.dest_vec_mut().unwrap();
+        let len = vecc.len();
+        items.into_iter()
+        .enumerate()
+        .map(|(i, id)| (start_index.map(|j| j+i).unwrap_or(len+i), id))
+        .for_each(|(i, id)| vecc.insert(i, id));
+    }
+
+    /// each item will be at the associated index once the entire operation is done
+    // fn try_insert(&mut self, items: Vec<(T, usize)>) -> ContentManagerAction;
+    fn insert(&mut self, items: Vec<(T, usize)>) {
+        let vecc = self.dest_vec_mut().unwrap();
+        let mut items = items.into_iter().peekable();
+        let mut old_items = std::mem::replace(vecc, vec![]).into_iter().peekable();
+        while items.peek().is_some() || old_items.peek().is_some() {
+            if let Some(&(_, index)) = items.peek() {
+                if vecc.len() == index || old_items.peek().is_none() {
+                    vecc.push(items.next().unwrap().0);
+                    continue;
+                }
+            }
+            vecc.push(old_items.next().unwrap());
+        }
+    }
+}
+
+pub trait SongYankDest: YankDest<SongID> {}
+impl<T: YankDest<SongID>> SongYankDest for T {}
+pub trait CPYankDest: YankDest<ContentProviderID> {}
+impl<T: YankDest<ContentProviderID>> CPYankDest for T {}
 
 #[macro_export]
 macro_rules! _impliment_content_provider {
@@ -255,8 +313,16 @@ macro_rules! _impliment_content_provider {
     ($t:ident, Display) => {
         fn as_display(&self) -> &dyn Display<DisplayContext = DisplayContext> {self}
     };
+    ($t:ident, SongYankDest) => {
+        fn as_song_yank_dest(&self) -> Option<&dyn SongYankDest> {Some(self)}
+        fn as_song_yank_dest_mut(&mut self) -> Option<&mut dyn SongYankDest> {Some(self)}
+    };
+    ($t:ident, CPYankDest) => {
+        fn as_provider_yank_dest(&self) -> Option<&dyn CPYankDest> {Some(self)}
+        fn as_provider_yank_dest_mut(&mut self) -> Option<&mut dyn CPYankDest> {Some(self)}
+    };
     ($t:ident, $r:tt, $($e:tt), +) => {
-        impliment_content_provider!($t, $r); // wtf, it does not recognise _impliment_content_provider
+        impliment_content_provider!($t, $r); // it does not recognise _impliment_content_provider as it is defined only in this module
         $(
             impliment_content_provider!($t, $e);
         )+

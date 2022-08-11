@@ -17,6 +17,8 @@ use crate::{
     content::{
         register::{
             ContentProviderID,
+            SongID,
+            ID,
         },
         providers::{
             traits::{
@@ -24,11 +26,18 @@ use crate::{
                 ContentProviderTrait,
                 Provider,
                 CPProvider,
+                YankDest,
+                CPYankDest,
+                YankContext,
             },
+            queue::Queue,
         },
         display::{
             DisplayContext,
             DisplayState,
+        },
+        manager::{
+            action::ContentManagerAction,
         },
     },
     app::{
@@ -37,6 +46,11 @@ use crate::{
             Display,
             ListBuilder,
         },
+    },
+    service::editors::{
+        Yanker,
+        Edit,
+        YankedContentType,
     },
 };
 
@@ -119,7 +133,53 @@ impl CPProvider for QueueProvider {
     }
 }
 
+impl YankDest<ContentProviderID> for QueueProvider {
+    fn try_paste(&mut self, items: Vec<ContentProviderID>, start_index: Option<usize>, self_id: ContentProviderID) -> ContentManagerAction {
+        let num_items = self.providers.len();
+        vec![
+            ContentManagerAction::YankCallback {
+                callback: Box::new(move |mut ctx: YankContext| {
+                    let items = items.into_iter()
+                    .filter_map(|id| {
+                        let e = ctx.get_provider(id);
+                        if e.as_any().downcast_ref::<Queue>().is_some() {
+                            ctx.register(id); // for being saved in QueueProvider
+                            Some(id)
+                        } else {
+                            if e.as_song_provider().map(|cp| cp.songs().count()).unwrap_or(0) == 0 {
+                                None
+                            } else {
+                                let mut songs = vec![];
+                                let q = Queue::new(e, id, |id: SongID| {songs.push(id)}).into();
+                                songs.into_iter().for_each(|id| ctx.register(id));
+                                Some(ctx.alloc_provider(q))
+                            }
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                    items.iter().cloned().for_each(|id| ctx.register(id)); // for being stored in Edit
+                    let mut yank = Yanker::new(self_id); // garbaage yanked_from
+                    yank.content_type = YankedContentType::ContentProvider;
+                    yank.yanked_items = items.into_iter()
+                    .enumerate()
+                    .map(|(i, id)| (ID::ContentProvider(id), start_index.map(|j| j+i).unwrap_or(num_items + i)))
+                    .collect();
+                    vec![
+                        ContentManagerAction::PasteIntoProvider { yank: yank.clone(), yanked_to: self_id, paste_pos: start_index },
+                        ContentManagerAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: self_id, paste_pos: start_index } },
+                        ContentManagerAction::RefreshDisplayContent,
+                    ].into()
+                }),
+            },
+        ].into()
+    }
+    fn dest_vec_mut(&mut self) -> Option<&mut Vec<ContentProviderID>> {
+        Some(&mut self.providers)
+    }
+}
+
 #[typetag::serde]
 impl ContentProviderTrait for QueueProvider {
-    impliment_content_provider!(QueueProvider, Provider, CPProvider, Display);
+    impliment_content_provider!(QueueProvider, Provider, CPProvider, Display, CPYankDest);
 }

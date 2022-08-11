@@ -306,10 +306,13 @@ plan:
     . this needs to be a general, flexible and powerful system
     . examples
       . pasting non-Queue providers in QueueProvider should convert them into Queue.
+      . pasting a bunch of songs in QueueProvider or anywhere which cannot contain songs can ask for a prompt to create a
+        new Provider that can contain songs inside that Provider
       . pasting providers into something that can only store songs -> unravel the provider's songs into the destination provider
       . pasting online songs in FileExplorer downloads and saves them
       . pasting songs in FileExplorer moves them in the FS (option to turn it off)
       . pasting songs from other providers and stuff into ArtistProvider should add it to the tracking system like in thrombe/musimanager
+    . doing this means that new ids will be created for new songs/providers. so will need more work with the undo system
   /. undoing and redoing should also handle the selections
     /. selections + undo yank -> should result in previous yank selections being restored. but what to do with current selections?
       /. just yeet current selections
@@ -343,6 +346,10 @@ plan:
   . play song something like ./mess/symphonia-rodio-test
   . symphonia does not support qpus tho
     . maybe try ffmpeg for everything then?
+      . https://crates.io/crates/ffmpeg-next
+      . https://crates.io/crates/ffmpeg
+      . https://crates.io/crates/rusty_ffmpeg
+      . https://crates.io/crates/stainless_ffmpeg
 
 behaviour:
   . faster file_explorer stuff

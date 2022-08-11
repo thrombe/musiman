@@ -136,20 +136,34 @@ impl BrowserWidget {
             }
             KeyCode::Char('y') => {
                 ch.toggle_yank_selected()?;
+                ch.increment_selection();
             }
             KeyCode::Char('X') => {
+                if ch.edit_manager.yanker.is_none() {
+                    ch.toggle_yank_selected()?;
+                    ch.increment_selection();
+                }
                 let action = ch.edit_manager.apply_yank(YankType::Cut);
                 action.apply(ch)?;
             }
-            KeyCode::Char('P') => {
-               if let None = ch.edit_manager.yanker { // ? is this check necessary?
-                    if let ContentState::Normal = ch.content_stack.get_state() {
-                        let index = ch.get_selected_index().selected_index();
-                        let action = ch.edit_manager.try_paste(ch.content_stack.last(), Some(index));
-                        action.apply(ch)?;
-                    }
-               }
-            }
+            KeyCode::Char('v') => {
+                if let None = ch.edit_manager.yanker { // ? is this check necessary?
+                     if let ContentState::Normal = ch.content_stack.get_state() {
+                         let index = ch.get_selected_index().selected_index();
+                         let action = ch.edit_manager.try_paste(ch.content_stack.last(), Some(index));
+                         action.apply(ch)?;
+                     }
+                }
+             }
+             KeyCode::Char('V') => {
+                if let None = ch.edit_manager.yanker { // ? is this check necessary?
+                     if let ContentState::Normal = ch.content_stack.get_state() {
+                         let index = ch.get_selected_index().selected_index();
+                         let action = ch.edit_manager.try_paste(ch.content_stack.last(), Some(index+1));
+                         action.apply(ch)?;
+                     }
+                }
+             }
             KeyCode::Char('Z') => {
                 ch.edit_manager.redo_last_undo().apply(ch)?;
             }
