@@ -450,9 +450,9 @@ impl YankAction {
                 
                 let b = yank.yanked_providers()
                 .map(|items| {
-                    items.iter().cloned()
-                    .for_each(|(id, _)| {
-                        let _ = ch.get_provider_mut(id) // BAD: ignored errors
+                    let e = items.iter().cloned()
+                    .map(|(id, _)| {
+                        ch.get_provider_mut(id)
                         .as_loadable()
                         .map(|cp| 
                             cp.maybe_load(id)
@@ -460,13 +460,19 @@ impl YankAction {
                         )
                         .unwrap_or(None.into())
                         .unwrap_or(None.into())
-                        .apply(ch);
-                    });
+                        .apply(ch)
+                    })
+                    .collect::<Result<()>>();
 
-                    ch.get_provider_mut(yanked_to)
+                    let b = ch.get_provider_mut(yanked_to)
                     .as_provider_yank_dest_mut()
                     .map(|y| y.try_paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos, yanked_to))
-                    .map(|a| a.apply(ch))
+                    .map(|a| a.apply(ch));
+
+                    match e {
+                        Ok(_) => b,
+                        Err(e) => Some(Err(e)),
+                    }
                 })
                 .flatten();
 
