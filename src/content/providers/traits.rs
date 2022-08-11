@@ -26,7 +26,6 @@ use crate::{
             manager::ContentManager,
         },
         display::DisplayContext,
-        song::Song,
         providers::ContentProvider,
     },
     app::{
@@ -35,6 +34,7 @@ use crate::{
             Display,
         },
     },
+    service::editors::YankAction,
 };
 
 pub trait CPClone {
@@ -80,10 +80,8 @@ pub trait ContentProviderTrait
     fn as_song_provider(&self) -> Option<&dyn SongProvider> {None}
     fn as_song_provider_mut(&mut self) -> Option<&mut dyn SongProvider> {None}
 
-    fn as_song_yank_dest(&self) -> Option<&dyn SongYankDest> {None}
     fn as_song_yank_dest_mut(&mut self) -> Option<&mut dyn SongYankDest> {None}
 
-    fn as_provider_yank_dest(&self) -> Option<&dyn CPYankDest> {None}
     fn as_provider_yank_dest_mut(&mut self) -> Option<&mut dyn CPYankDest> {None}
 
     fn as_provider(&self) -> Option<&dyn CPProvider> {None}
@@ -244,12 +242,16 @@ impl<'a> YankContext<'a> {
 
 /// the items might be copied and modified when pasted (only in try_* methods). some other things might trigger on paste too
 /// the paste might even be rejected // TODO: how do i communicate the rejections back? is it even needed tho?
-pub trait YankDest<T> {
+pub trait YankDest<T: PartialEq + Copy + Debug>: ContentProviderTrait {
     fn dest_vec_mut(&mut self) -> Option<&mut Vec<T>> {None} // for default implimentations of paste and insert, else they panic
 
     /// all items are pasted one after the other starting at the mentioned index, else appended at the last
-    fn try_paste(&mut self, items: Vec<T>, start_index: Option<usize>, self_id: ContentProviderID) -> ContentManagerAction;
+    fn try_paste(&mut self, items: Vec<T>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction;
     fn paste(&mut self, items: Vec<T>, start_index: Option<usize>) {
+        start_index
+        .filter(|i| self.get_selected_index().selected_index() >= *i)
+        .map(|_| (0..items.len()).for_each(|_| {self.selection_increment();}));
+        
         let vecc = self.dest_vec_mut().unwrap();
         let len = vecc.len();
         items.into_iter()
@@ -260,18 +262,55 @@ pub trait YankDest<T> {
 
     /// each item will be at the associated index once the entire operation is done
     // fn try_insert(&mut self, items: Vec<(T, usize)>) -> ContentManagerAction;
-    fn insert(&mut self, items: Vec<(T, usize)>) {
+    fn insert(&mut self, mut items: Vec<(T, usize)>) {
+        let mut counter = 0;
+        let selected_index = self.get_selected_index().selected_index();
         let vecc = self.dest_vec_mut().unwrap();
+        items.sort_by(|a, b| a.1.cmp(&b.1));
         let mut items = items.into_iter().peekable();
         let mut old_items = std::mem::replace(vecc, vec![]).into_iter().peekable();
         while items.peek().is_some() || old_items.peek().is_some() {
             if let Some(&(_, index)) = items.peek() {
                 if vecc.len() == index || old_items.peek().is_none() {
                     vecc.push(items.next().unwrap().0);
+                    if index <= selected_index+counter {
+                        counter += 1;
+                    }
                     continue;
                 }
             }
             vecc.push(old_items.next().unwrap());
+        }
+        (0..counter).for_each(|_| {self.selection_increment();});
+    }
+
+    /// assuming T exists at the provided index (necessary for multiple of the same thing present in the list)
+    fn remove(&mut self, mut items: Vec<(T, usize)>) {
+        let mut counter = 0;
+        let selected_index = self.get_selected_index().selected_index();
+        let vecc = self.dest_vec_mut().unwrap();
+        items.sort_by(|a, b| a.1.cmp(&b.1));
+        let mut items = items.into_iter().peekable();
+        *vecc = vecc.into_iter()
+        .enumerate()
+        .filter_map(|(i, id)| {
+            if let Some((id2, j)) = items.peek() {
+                if *id2 == *id && *j == i {
+                    let _ = items.next();
+                    if i <= selected_index {
+                        counter += 1;
+                    }
+                    return None;
+                }
+            }
+            Some(*id)
+        })
+        .collect();
+
+        (0..counter).for_each(|_| {self.selection_decrement();});
+        if items.peek().is_some() {
+            dbg!(items.collect::<Vec<_>>());
+            panic!("everything was not removed");
         }
     }
 }
@@ -314,11 +353,9 @@ macro_rules! _impliment_content_provider {
         fn as_display(&self) -> &dyn Display<DisplayContext = DisplayContext> {self}
     };
     ($t:ident, SongYankDest) => {
-        fn as_song_yank_dest(&self) -> Option<&dyn SongYankDest> {Some(self)}
         fn as_song_yank_dest_mut(&mut self) -> Option<&mut dyn SongYankDest> {Some(self)}
     };
     ($t:ident, CPYankDest) => {
-        fn as_provider_yank_dest(&self) -> Option<&dyn CPYankDest> {Some(self)}
         fn as_provider_yank_dest_mut(&mut self) -> Option<&mut dyn CPYankDest> {Some(self)}
     };
     ($t:ident, $r:tt, $($e:tt), +) => {

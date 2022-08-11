@@ -51,6 +51,7 @@ use crate::{
         Yanker,
         Edit,
         YankedContentType,
+        YankAction,
     },
 };
 
@@ -134,10 +135,10 @@ impl CPProvider for QueueProvider {
 }
 
 impl YankDest<ContentProviderID> for QueueProvider {
-    fn try_paste(&mut self, items: Vec<ContentProviderID>, start_index: Option<usize>, self_id: ContentProviderID) -> ContentManagerAction {
+    fn try_paste(&mut self, items: Vec<ContentProviderID>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction {
         let num_items = self.providers.len();
         vec![
-            ContentManagerAction::YankCallback {
+            YankAction::Callback {
                 callback: Box::new(move |mut ctx: YankContext| {
                     let items = items.into_iter()
                     .filter_map(|id| {
@@ -166,9 +167,10 @@ impl YankDest<ContentProviderID> for QueueProvider {
                     .map(|(i, id)| (ID::ContentProvider(id), start_index.map(|j| j+i).unwrap_or(num_items + i)))
                     .collect();
                     vec![
-                        ContentManagerAction::PasteIntoProvider { yank: yank.clone(), yanked_to: self_id, paste_pos: start_index },
-                        ContentManagerAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: self_id, paste_pos: start_index } },
-                        ContentManagerAction::RefreshDisplayContent,
+                        YankAction::PasteIntoProvider { yank: yank.clone(), yanked_to: self_id, paste_pos: start_index },
+                        YankAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: self_id, paste_pos: start_index } },
+                        YankAction::False, // cuz of custom PushEdit, we handle this here
+                        ContentManagerAction::RefreshDisplayContent.into(),
                     ].into()
                 }),
             },

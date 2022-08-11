@@ -241,6 +241,13 @@ plan:
     . this id should not be dropped, instead it should be converted back into the non-wrapped version
     . a wrapped id can provide non wrapped ids for passing into other functions
 
+behaviour:
+  . make sure no dangling ids/leaked items
+plan:
+  . check before quitting (optionally)
+    . prepare 2 lists, 1 for every item, another for every strong id
+    . check if the item id counts match the number of ids and no extra ids left to check
+
 bug:
   . id saved in current_queue + content modified (yt_explorer new search) + next song  -> plays a incorrect song
 sol:
@@ -252,6 +259,18 @@ bug:
 sol:
   . when new search -> just increment the generation of the counter
     . make sure that doing this does not cause any errors tho.
+
+bug:
+  . queues should store what song they played in last session
+  . queues also play bad songs if the cursor is simply moved to another location within the queue
+sol:
+  . keep another index for playing song
+  . also display playing songs within queues in different color
+
+bug:
+  . yanking something whose multiple copies exist in some provider displays marker on all the copies (just a displaying bug)
+sol:
+  . maybe do not allow multiple copies in same provider? donno
 
 bug1:
   . pasting random providers into queue works, but then crashes when trying to play something from it

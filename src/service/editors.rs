@@ -15,9 +15,12 @@ use tui::{
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use derivative::Derivative;
+use anyhow::Result;
 
 use crate::{
     content::{
+        providers::traits::YankContext,
         register::{
             ID,
             SongID,
@@ -26,6 +29,7 @@ use crate::{
         },
         manager::{
             action::ContentManagerAction,
+            manager::ContentManager,
         },
     },
 };
@@ -142,7 +146,7 @@ impl EditManager {
         }
     }
 
-    pub fn clear(&mut self) -> ContentManagerAction {
+    pub fn clear(&mut self) -> YankAction {
         let action = self.edit_stack
         .iter()
         .chain(self.undo_stack.iter())
@@ -153,20 +157,23 @@ impl EditManager {
         action
     }
 
-    pub fn apply_yank(&mut self, yank_type: YankType) -> ContentManagerAction {
+    pub fn apply_yank(&mut self, yank_type: YankType) -> YankAction {
         if self.yanker.is_none() {return None.into()}
-        let edit = Edit::Yanked { yank: self.yanker.take().unwrap(), yank_type };
+        let edit = Edit::Yanked { yank: self.yanker.clone().unwrap(), yank_type };
         let action = edit.apply();
-        self.edit_stack.push(edit);
-        let stack = std::mem::replace(&mut self.undo_stack, vec![]);
-        let stack = stack.into_iter().map(|e| e.unregister()).collect::<Vec<_>>().into();
-        vec![
-            stack,
-            action,
-        ].into()
+        YankAction::Conditional {
+            if_this: vec![action],
+            then_this: vec![
+                YankAction::ClearUndoStack,
+                YankAction::PushEdit { edit },
+                YankAction::DropYanker,
+            ],
+            else_this: vec![],
+        }
     }
 
-    pub fn undo_last_edit(&mut self) -> ContentManagerAction {
+    /// assuming undo should not fail (unlike trying to apply some edit first time)
+    pub fn undo_last_edit(&mut self) -> YankAction {
         if self.edit_stack.is_empty() {return None.into()}
         let undo = self.edit_stack.pop().unwrap();
         match &undo {
@@ -181,7 +188,8 @@ impl EditManager {
         action
     }
 
-    pub fn redo_last_undo(&mut self) -> ContentManagerAction {
+    /// assuming redo should not fail (unlike trying to apply some edit first time)
+    pub fn redo_last_undo(&mut self) -> YankAction {
         if self.undo_stack.is_empty() {return None.into()}
         let redo = self.undo_stack.pop().unwrap();
         match &redo {
@@ -196,15 +204,16 @@ impl EditManager {
         action
     }
 
-    pub fn push_edit(&mut self, edit: Edit) {
-        self.edit_stack.push(edit);
-    }
-
-    pub fn try_paste(&mut self, id: GlobalProvider, pos: Option<usize>) -> ContentManagerAction {
+    pub fn try_paste(&mut self, id: GlobalProvider, pos: Option<usize>) -> YankAction {
         if let Some(Edit::Yanked { .. }) = self.edit_stack.last() {
             if let GlobalProvider::ContentProvider(id) = id {
                 if let Edit::Yanked { yank, .. } = self.edit_stack.last().cloned().unwrap() {
-                    return ContentManagerAction::TryPasteIntoProvider {yank, yanked_to: id, paste_pos: pos};
+                    return YankAction::Conditional { // ?: YankDest::try_paste should call PushEdit as the items of yank may be replaced
+                        if_this: vec![YankAction::TryPasteIntoProvider {yank: yank.clone(), yanked_to: id, paste_pos: pos}],
+                        then_this: vec![YankAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: id, paste_pos: pos } }],
+                        else_this: vec![],
+                    };
+                    // return YankAction::TryPasteIntoProvider {yank, yanked_to: id, paste_pos: pos};
                 }
             }
         }
@@ -231,7 +240,7 @@ pub enum Edit {
 }
 
 impl Edit {
-    fn apply_undo(&self) -> ContentManagerAction {
+    fn apply_undo(&self) -> YankAction {
         match self {
             Self::Yanked { yank, yank_type } => {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>(); // TODO: restore each at correct position
@@ -239,9 +248,9 @@ impl Edit {
                     YankType::Copy => None.into(),
                     YankType::Cut => {
                         vec![
-                            ContentManagerAction::Register {ids: items.clone()}, // for being stored in undo_stack
-                            ContentManagerAction::InsertIntoProvider {yank: yank.clone(), yanked_to: yank.yanked_from},
-                            ContentManagerAction::RefreshDisplayContent,
+                            ContentManagerAction::Register {ids: items.clone()}.into(), // for being stored in undo_stack
+                            YankAction::InsertIntoProvider {yank: yank.clone(), yanked_to: yank.yanked_from},
+                            ContentManagerAction::RefreshDisplayContent.into(),
                         ].into()
                     },
                 }
@@ -249,16 +258,16 @@ impl Edit {
             Self::Pasted { yank, yanked_to, .. } => {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>();
                 vec![
-                    ContentManagerAction::RemoveFromProvider { ids: items.clone(), from: *yanked_to},
-                    ContentManagerAction::Unregister {ids: items}, // for being removed from the provider
-                    ContentManagerAction::RefreshDisplayContent,
+                    YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: yank.yanked_from },
+                    ContentManagerAction::Unregister {ids: items}.into(), // for being removed from the provider
+                    ContentManagerAction::RefreshDisplayContent.into(),
                 ].into()
             },
             Self::TextEdit { content, from, to } => todo!(),
         }
     }
 
-    fn apply_redo(&self) -> ContentManagerAction {
+    fn apply_redo(&self) -> YankAction {
         match self {
             Self::Yanked { yank, yank_type } => {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>();
@@ -266,9 +275,9 @@ impl Edit {
                     YankType::Copy => None.into(),
                     YankType::Cut => {
                         vec![
-                            ContentManagerAction::Unregister {ids: items.clone()},
-                            ContentManagerAction::RemoveFromProvider { ids: items, from: yank.yanked_from },
-                            ContentManagerAction::RefreshDisplayContent,
+                            YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: yank.yanked_from },
+                            ContentManagerAction::Unregister {ids: items.clone()}.into(),
+                            ContentManagerAction::RefreshDisplayContent.into(),
                         ].into()
                     },
                 }
@@ -276,52 +285,276 @@ impl Edit {
             Self::Pasted { yank, yanked_to, paste_pos  } => {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>();
                 vec![
-                    ContentManagerAction::PasteIntoProvider {yank: yank.clone(), yanked_to: *yanked_to, paste_pos: *paste_pos},
-                    ContentManagerAction::Register {ids: items}, // for being saved in the provider
-                    ContentManagerAction::RefreshDisplayContent,
+                    YankAction::PasteIntoProvider {yank: yank.clone(), yanked_to: *yanked_to, paste_pos: *paste_pos},
+                    ContentManagerAction::Register {ids: items}.into(), // for being saved in the provider
+                    ContentManagerAction::RefreshDisplayContent.into(),
                 ].into()
             },
             Self::TextEdit { content, from, to } => todo!(),
         }
     }
 
-    fn unregister(&self) -> ContentManagerAction {
+    fn unregister(&self) -> YankAction {
         let yank = match self {
             Self::Pasted { yank, .. } => yank,
             Self::Yanked { yank, .. } => yank,
             Self::TextEdit { content, from, to } => todo!(),
         };
         let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>();
-        ContentManagerAction::Unregister { ids: items }
+        ContentManagerAction::Unregister { ids: items }.into()
     }
 
-    pub fn apply(&self) -> ContentManagerAction {
+    pub fn apply(&self) -> YankAction {
         match self {
             Self::Yanked { yank, yank_type } => {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect();
                 match yank_type {
                     YankType::Copy => {
-                        ContentManagerAction::Register { ids: items }
+                        vec![
+                            ContentManagerAction::Register { ids: items }.into(),
+                            ContentManagerAction::RefreshDisplayContent.into(),
+                        ].into()
                     }
                     YankType::Cut => { // now the yanker owns these ids, so no unregistering
                         vec![
-                            ContentManagerAction::RemoveFromProvider { ids: items, from: yank.yanked_from },
-                            ContentManagerAction::RefreshDisplayContent,
+                            YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: yank.yanked_from },
+                            ContentManagerAction::RefreshDisplayContent.into(),
                         ].into()
                     }
                 }
             }
-            Self::Pasted { yank, yanked_to, paste_pos } => {
-                let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>();
-                vec![
-                    ContentManagerAction::TryPasteIntoProvider {yank: yank.clone(), yanked_to: *yanked_to, paste_pos: *paste_pos},
-                    ContentManagerAction::Register {ids: items.clone()}, // for being stored in the provider
-                    ContentManagerAction::Register {ids: items}, // for being stored in Edit::Pasted
-                    ContentManagerAction::RefreshDisplayContent,
-                ].into()
+            Self::Pasted { .. } => {
+                unreachable!();
             }
+            // Self::Pasted { yank, yanked_to, paste_pos } => {
+            //     let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect::<Vec<_>>();
+            //     vec![
+            //         YankAction::TryPasteIntoProvider {yank: yank.clone(), yanked_to: *yanked_to, paste_pos: *paste_pos}, // ? might loop infinitely
+            //         ContentManagerAction::Register {ids: items.clone()}.into(), // for being stored in the provider
+            //         ContentManagerAction::Register {ids: items}.into(), // for being stored in Edit::Pasted
+            //         ContentManagerAction::RefreshDisplayContent.into(),
+            //     ].into()
+            // }
             Self::TextEdit { content, from, to } => todo!(),
         }
     }
 }
 
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub enum YankAction {
+    RemoveFromProvider {
+        #[derivative(Debug="ignore")]
+        yank: Yanker,
+        yanked_from: ContentProviderID,
+    },
+    TryPasteIntoProvider {
+        #[derivative(Debug="ignore")]
+        yank: Yanker,
+        yanked_to: ContentProviderID,
+        paste_pos: Option<usize>,
+    },
+    PasteIntoProvider {
+        #[derivative(Debug="ignore")]
+        yank: Yanker,
+        yanked_to: ContentProviderID,
+        paste_pos: Option<usize>,
+    },
+    InsertIntoProvider {
+        #[derivative(Debug="ignore")]
+        yank: Yanker,
+        yanked_to: ContentProviderID,
+    },
+    PushEdit {
+        #[derivative(Debug="ignore")]
+        edit: Edit,
+    },
+    ClearUndoStack,
+    Callback {
+        #[derivative(Debug="ignore")]
+        callback: Box<dyn FnOnce(YankContext) -> YankAction + 'static + Send + Sync>,
+    },
+    ContentManagerAction {
+        a: ContentManagerAction,
+    },
+    DropYanker,
+    False,
+    Conditional {
+        // using Vec<Self> instead of Box<Self>
+        if_this: Vec<Self>, // the bool output of this is not considered in the overall bool output
+        then_this: Vec<Self>,
+        else_this: Vec<Self>,
+    },
+    Actions {
+        v: Vec<Self>,
+    },
+    None,
+}
+impl From<ContentManagerAction> for YankAction {
+    fn from(a: ContentManagerAction) -> Self {
+        Self::ContentManagerAction { a }
+    }
+}
+impl From<Vec<YankAction>> for YankAction {
+    fn from(v: Vec<YankAction>) -> Self {
+        Self::Actions { v }
+    }
+}
+impl Into<YankAction> for Option<YankAction> {
+    fn into(self) -> YankAction {
+        match self {
+            Self::Some(a) => {
+                a
+            }
+            None => {
+                YankAction::None
+            }
+        }
+    }
+}
+
+impl YankAction {
+    /// returns true if // TODO: decide true/false behaviour
+    pub fn apply(self, ch: &mut ContentManager) -> Result<bool> {
+        dbg!(&self);
+        match self {
+            Self::RemoveFromProvider { yank, yanked_from } => { // (un)registering handled on caller's side
+                let a = yank.yanked_songs()
+                .map(|items| {
+                    ch.get_provider_mut(yanked_from)
+                    .as_song_yank_dest_mut()
+                    .map(|y| y.remove(items))
+                })
+                .flatten();
+
+                let b = yank.yanked_providers()
+                .map(|items| {
+                    ch.get_provider_mut(yanked_from)
+                    .as_provider_yank_dest_mut()
+                    .map(|y| y.remove(items))
+                })
+                .flatten();
+
+                dbg!(a, b);
+                return Ok(a.or(b).is_some());
+            }
+            Self::TryPasteIntoProvider { yank, yanked_to, paste_pos } => {
+                let a = yank.yanked_songs()
+                .map(|items| {
+                    ch.get_provider_mut(yanked_to)
+                    .as_song_yank_dest_mut()
+                    .map(|y| y.try_paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos, yanked_to))
+                    .map(|a| a.apply(ch))
+                })
+                .flatten();
+                
+                let b = yank.yanked_providers()
+                .map(|items| {
+                    items.iter().cloned()
+                    .for_each(|(id, _)| {
+                        let _ = ch.get_provider_mut(id) // BAD: ignored errors
+                        .as_loadable()
+                        .map(|cp| 
+                            cp.maybe_load(id)
+                            .ok()
+                        )
+                        .unwrap_or(None.into())
+                        .unwrap_or(None.into())
+                        .apply(ch);
+                    });
+
+                    ch.get_provider_mut(yanked_to)
+                    .as_provider_yank_dest_mut()
+                    .map(|y| y.try_paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos, yanked_to))
+                    .map(|a| a.apply(ch))
+                })
+                .flatten();
+
+                return a.or(b).unwrap_or(Ok(false));
+            }
+            Self::PushEdit { edit } => {
+                ch.edit_manager.edit_stack.push(edit);
+            }
+            Self::ClearUndoStack => {
+                if ch.edit_manager.undo_stack.len() > 0 {
+                    let stack = std::mem::replace(&mut ch.edit_manager.undo_stack, vec![]);
+                    let stack: YankAction = stack.into_iter().map(|e| e.unregister()).collect::<Vec<_>>().into();
+                    return stack.apply(ch);
+                }
+            }
+            Self::DropYanker => {
+                let _ = ch.edit_manager.yanker.take();
+            }
+            Self::PasteIntoProvider { yank, yanked_to, paste_pos } => { // TODO: maybe crash instead of map
+                let a = yank.yanked_songs()
+                .map(|items|
+                    ch.get_provider_mut(yanked_to)
+                    .as_song_yank_dest_mut()
+                    .map(|y| y.paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos))
+                )
+                .flatten();
+                
+                let b = yank.yanked_providers()
+                .map(|items|
+                    ch.get_provider_mut(yanked_to)
+                    .as_provider_yank_dest_mut()
+                    .map(|y| y.paste(items.into_iter().map(|(id, _)| id).collect(), paste_pos))
+                )
+                .flatten();
+
+                return Ok(a.or(b).is_some());
+            }
+            Self::InsertIntoProvider { yank, yanked_to } => { // TODO: maybe crash instead of map
+                let a = yank.yanked_songs()
+                .map(|items|
+                    ch.get_provider_mut(yanked_to)
+                    .as_song_yank_dest_mut()
+                    .map(|y| y.insert(items))
+                )
+                .flatten();
+                
+                let b = yank.yanked_providers()
+                .map(|items|
+                    ch.get_provider_mut(yanked_to)
+                    .as_provider_yank_dest_mut()
+                    .map(|y| y.insert(items))
+                )
+                .flatten();
+
+                return Ok(a.or(b).is_some());
+            }
+            Self::Callback { callback } => {
+                return callback(YankContext::new(ch)).apply(ch);
+            }
+            Self::Actions { v } => {
+                return v.into_iter()
+                .map(|a| a.apply(ch))
+                .collect::<Result<Vec<bool>>>()
+                .map(|r|
+                    r.into_iter()
+                    .all(|b| b)
+                );
+            }
+            Self::Conditional { if_this, then_this, else_this } => {
+                let if_this = Self::Actions { v: if_this };
+                let then_this = Self::Actions { v: then_this };
+                let else_this = Self::Actions { v: else_this };
+                if if_this.apply(ch)? {
+                    dbg!(true);
+                    return then_this.apply(ch);
+                } else {
+                    dbg!(false);
+                    return else_this.apply(ch);
+                }
+            }
+            Self::ContentManagerAction { a } => {
+                a.apply(ch)?;
+            }
+            Self::False => {
+                return Ok(false);
+            }
+            Self::None => {}
+        }
+        Ok(true)
+    }
+}

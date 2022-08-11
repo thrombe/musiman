@@ -48,6 +48,7 @@ use crate::{
         Yanker,
         YankedContentType,
         Edit,
+        YankAction,
     },
 };
 
@@ -145,10 +146,10 @@ impl<'b> Display<'b> for Queue {
 }
 
 impl YankDest<SongID> for Queue {
-    fn try_paste(&mut self, items: Vec<SongID>, start_index: Option<usize>, self_id: ContentProviderID) -> ContentManagerAction {
+    fn try_paste(&mut self, items: Vec<SongID>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction {
         let num_items = self.songs.len();
         vec![
-            ContentManagerAction::YankCallback {
+            YankAction::Callback {
                 callback: Box::new(move |mut ctx: YankContext| {
                     items.iter().cloned().for_each(|id| {
                         ctx.register(id); // for being stored in the Queue
@@ -161,9 +162,10 @@ impl YankDest<SongID> for Queue {
                     .map(|(i, id)| (ID::Song(id), start_index.map(|j| j+i).unwrap_or(num_items + i)))
                     .collect();
                     vec![
-                        ContentManagerAction::PasteIntoProvider { yank: yank.clone(), yanked_to: self_id, paste_pos: start_index },
-                        ContentManagerAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: self_id, paste_pos: start_index } },
-                        ContentManagerAction::RefreshDisplayContent,
+                        YankAction::PasteIntoProvider { yank: yank.clone(), yanked_to: self_id, paste_pos: start_index },
+                        YankAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: self_id, paste_pos: start_index } },
+                        YankAction::False,
+                        ContentManagerAction::RefreshDisplayContent.into(),
                     ].into()
                 }),
             },

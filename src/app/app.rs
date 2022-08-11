@@ -146,6 +146,10 @@ impl BrowserWidget {
                 let action = ch.edit_manager.apply_yank(YankType::Cut);
                 action.apply(ch)?;
             }
+            KeyCode::Char('C') => {
+                let action = ch.edit_manager.apply_yank(YankType::Copy);
+                action.apply(ch)?;
+            }
             KeyCode::Char('v') => {
                 if let None = ch.edit_manager.yanker { // ? is this check necessary?
                      if let ContentState::Normal = ch.content_stack.get_state() {
