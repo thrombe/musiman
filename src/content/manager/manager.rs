@@ -282,23 +282,58 @@ impl ContentManager {
         Ok(cm)
     }
 
+    pub fn save(mut self) -> Result<()> {
+        (0..self.content_stack.len()-1)
+        .filter_map(|_| self.content_stack.pop())
+        .collect::<Vec<_>>()
+        .into_iter()
+        .for_each(|id| self.unregister(id));
+
+        self.active_song.map(|id| self.unregister(id));
+        self.active_queue.map(|id| self.unregister(id));
+
+        self.get_main_provider()
+        .providers()
+        .cloned()
+        .collect::<Vec<_>>()
+        .into_iter()
+        .for_each(|id| self.unregister(id));
+        self.get_main_provider_mut().providers_mut().clear();
+        
+        let mp = self.content_stack.main_provider();
+        let songs = self.songs;
+        let cps = self.content_providers;
+        // self.edit_manager.yanker.take();
+        let edit_manager = self.edit_manager;
+        DBHandler {
+            main_provider: mp,
+            songs,
+            content_providers: cps,
+            edit_manager,
+        }.save()?;
+        Ok(())
+    }
+
+    pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
+        self.content_providers.get(id).unwrap()
+    }
+
+    pub fn get_provider_mut(&mut self, id: ContentProviderID) -> &mut ContentProvider {
+        self.content_providers.get_mut(id).unwrap()
+    }
+
+    pub fn get_song(&self, id: SongID) -> &Song {
+        self.songs.get(id).unwrap()
+    }
+    pub fn get_song_mut(&mut self, id: SongID) -> &mut Song {
+        self.songs.get_mut(id).unwrap()
+    }
+}
+
+impl ContentManager {
     pub fn check_for_register(&self) {
         let mut song_keys = vec![];
         let mut provider_keys = vec![];
-
-        // let mut songs = vec![];
-        // let mut providers = vec![];
-
-        // for s in &self.songs.items {
-        //     if s.is_some() {
-        //         songs.push((s.as_ref().unwrap().val.clone(), s.as_ref().unwrap().id_counter));
-        //     }
-        // }
-        // for s in &self.content_providers.items {
-        //     if s.is_some() {
-        //         providers.push((s.as_ref().unwrap().val.clone(), s.as_ref().unwrap().id_counter));
-        //     }
-        // }
 
         fn cp_ids(ch: &ContentManager, id: ContentProviderID, unique: &mut Vec<ContentProviderID>) -> Vec<ID> {
             let mut ids = vec![];
@@ -367,25 +402,6 @@ impl ContentManager {
         // self.active_song;
         // self.main_provider().queue_provider
 
-        // let song_key_frequencies = song_keys
-        // .iter()
-        // .copied()
-        // .fold(std::collections::HashMap::new(), |mut map, val|{
-        //     map.entry(val)
-        //        .and_modify(|frq|*frq+=1)
-        //        .or_insert(1);
-        //     map
-        // });
-        // let provider_key_frequencies = provider_keys
-        // .iter()
-        // .copied()
-        // .fold(std::collections::HashMap::new(), |mut map, val|{
-        //     map.entry(val)
-        //        .and_modify(|frq|*frq+=1)
-        //        .or_insert(1);
-        //     map
-        // });
-
         let key_frequencies = song_keys
         .into_iter()
         .map(ID::Song)
@@ -428,38 +444,6 @@ impl ContentManager {
         });
     }
 
-    pub fn save(mut self) -> Result<()> {
-        (0..self.content_stack.len()-1)
-        .filter_map(|_| self.content_stack.pop())
-        .collect::<Vec<_>>()
-        .into_iter()
-        .for_each(|id| self.unregister(id));
-
-        self.active_song.map(|id| self.unregister(id));
-        self.active_queue.map(|id| self.unregister(id));
-
-        self.get_main_provider()
-        .providers()
-        .cloned()
-        .collect::<Vec<_>>()
-        .into_iter()
-        .for_each(|id| self.unregister(id));
-        self.get_main_provider_mut().providers_mut().clear();
-        
-        let mp = self.content_stack.main_provider();
-        let songs = self.songs;
-        let cps = self.content_providers;
-        // self.edit_manager.yanker.take();
-        let edit_manager = self.edit_manager;
-        DBHandler {
-            main_provider: mp,
-            songs,
-            content_providers: cps,
-            edit_manager,
-        }.save()?;
-        Ok(())
-    }
-
     pub fn debug_current(&self, c: char) {
         match c {
             'c' => {
@@ -470,6 +454,8 @@ impl ContentManager {
                 dbg!(&self.edit_manager);
             }
             's' => {
+                dbg!(self.active_queue);
+                dbg!(self.active_song);
                 dbg!(&self.content_stack);
             }
             'p' => {
@@ -478,61 +464,25 @@ impl ContentManager {
             'S' => {
                 dbg!(&self.songs);
             }
+            'P' => {
+                dbg!(&self.player);
+                // dbg!(self.player.is_finished());
+                // dbg!(self.player.duration());
+                // dbg!(self.player.position());
+                // dbg!(self.player.progress());
+            }
+            'i' => {
+                dbg!(&self.image_handler);
+            }
+            'y' => {
+                debug!("{}", serde_yaml::to_string(&self.songs).unwrap());
+                let a = serde_yaml::to_string(&self.content_providers).unwrap();
+                debug!("{}", &a);
+                let b = serde_yaml::from_str::<ContentRegister<ContentProvider, ContentProviderID>>(&a);
+                dbg!(b);
+            }
             _ => {}
         }
-        // dbg!(&self.player);
-        // dbg!(self.player.is_finished());
-        // dbg!(self.player.duration());
-        // dbg!(self.player.position());
-        // dbg!(self.player.progress());
-        // dbg!(self.active_queue);
-        // dbg!(&self.image_handler);
-
-        // (0..self.content_stack.len())
-        // .map(|i| self.content_stack.get(i))
-        // .filter_map(|id| {
-        //     match id {
-        //         GlobalProvider::Notifier => None,
-        //         GlobalProvider::ContentProvider(id) => Some(id),
-        //     }
-        // })
-        // .map(|id| self.get_provider(id))
-        // .map(|cp| cp.get_selected_index())
-        // .for_each(|e| dbg!(e));
-
-        // if self.active_song.is_some() {
-        //     let s = self.get_song(self.active_song.unwrap()).as_display();
-        //     dbg!(s.title(), s.artist(), s.album());
-        // }
-        // let id = self.content_stack.last();
-        // match id {
-        //     GlobalProvider::ContentProvider(id) => {
-        //         let cp = self.get_provider(id);
-        //         dbg!(cp);
-        //     }
-        //     _ => (),
-        // }
-
-        // debug!("{}", serde_yaml::to_string(&self.songs).unwrap());
-        // let a = serde_yaml::to_string(&self.content_providers).unwrap();
-        // debug!("{}", &a);
-        // let b = serde_yaml::from_str::<ContentRegister<ContentProvider, ContentProviderID>>(&a);
-        // dbg!(b)
-    }
-
-    pub fn get_provider(&self, id: ContentProviderID) -> &ContentProvider {
-        self.content_providers.get(id).unwrap()
-    }
-
-    pub fn get_provider_mut(&mut self, id: ContentProviderID) -> &mut ContentProvider {
-        self.content_providers.get_mut(id).unwrap()
-    }
-
-    pub fn get_song(&self, id: SongID) -> &Song {
-        self.songs.get(id).unwrap()
-    }
-    pub fn get_song_mut(&mut self, id: SongID) -> &mut Song {
-        self.songs.get_mut(id).unwrap()
     }
 }
 
