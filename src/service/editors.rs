@@ -132,8 +132,8 @@ pub struct EditManager {
     // TODO: vectors do not seem the best fit for this job. some kinda circular stack with fixed length (it's called a ring buffer i think) might be better
     // all ids stored in here should be valid. (non weak). and should get unregistered once the edits are removed
     // but Yanker::{yank_from, yank_to} are still weak ig
-    edit_stack: Vec<Edit>,
-    undo_stack: Vec<Edit>, // edits get popped off and get stored here after getting converted into their undo edit
+    pub edit_stack: Vec<Edit>,
+    pub undo_stack: Vec<Edit>, // edits get popped off and get stored here after getting converted into their undo edit
 }
 
 impl EditManager {

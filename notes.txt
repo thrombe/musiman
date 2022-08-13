@@ -189,6 +189,13 @@
     . maybe these as associated functions and other CPs can borrow these functions
   /. implemented some functions in DisplayContext
 
+/. behaviour:
+  /. make sure no dangling ids/leaked items
+/. plan:
+  /. check before quitting (optionally)
+    /. prepare 2 lists, 1 for every item, another for every strong id
+    /. check if the item id counts match the number of ids and no extra ids left to check
+
 todo:
   . better error handling
 plan:
@@ -240,13 +247,6 @@ plan:
     . impliment a drop on this type so it logs error if dropped (idk if this will work as i assume)
     . this id should not be dropped, instead it should be converted back into the non-wrapped version
     . a wrapped id can provide non wrapped ids for passing into other functions
-
-behaviour:
-  . make sure no dangling ids/leaked items
-plan:
-  . check before quitting (optionally)
-    . prepare 2 lists, 1 for every item, another for every strong id
-    . check if the item id counts match the number of ids and no extra ids left to check
 
 behaviour:
   . searching system like in lf

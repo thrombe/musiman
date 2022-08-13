@@ -62,8 +62,8 @@ use crate::{
 };
 
 pub struct ContentManager {
-    songs: ContentRegister<Song, SongID>,
-    content_providers: ContentRegister<ContentProvider, ContentProviderID>,
+    pub songs: ContentRegister<Song, SongID>,
+    pub content_providers: ContentRegister<ContentProvider, ContentProviderID>,
 
     pub content_stack: ContentStack,
     pub edit_manager: EditManager,
@@ -282,6 +282,152 @@ impl ContentManager {
         Ok(cm)
     }
 
+    pub fn check_for_register(&self) {
+        let mut song_keys = vec![];
+        let mut provider_keys = vec![];
+
+        // let mut songs = vec![];
+        // let mut providers = vec![];
+
+        // for s in &self.songs.items {
+        //     if s.is_some() {
+        //         songs.push((s.as_ref().unwrap().val.clone(), s.as_ref().unwrap().id_counter));
+        //     }
+        // }
+        // for s in &self.content_providers.items {
+        //     if s.is_some() {
+        //         providers.push((s.as_ref().unwrap().val.clone(), s.as_ref().unwrap().id_counter));
+        //     }
+        // }
+
+        fn cp_ids(ch: &ContentManager, id: ContentProviderID, unique: &mut Vec<ContentProviderID>) -> Vec<ID> {
+            let mut ids = vec![];
+            ids.push(ID::ContentProvider(id));
+            if unique.contains(&id) {
+                return ids;
+            } else {
+                unique.push(id);
+            }
+            let cp = ch.get_provider(id);
+            ids.extend(cp.ids().map(|id| match id {
+                ID::Song(id) => vec![ID::Song(id)].into_iter(),
+                ID::ContentProvider(id) => cp_ids(ch, id, unique).into_iter(),
+            })
+            .flatten());
+            ids
+        }
+        
+        let mut unique_provider_ids = vec![];
+        let len = self.content_stack.len();
+        (0..len).map(|i| self.content_stack.get(i)) // content_stack.state ids do not count in register
+        .map(|id| match id {
+            GlobalProvider::Notifier => todo!(),
+            GlobalProvider::ContentProvider(id) => cp_ids(self, id, &mut unique_provider_ids).into_iter(),
+        })
+        .flatten()
+        .for_each(|id| match id {
+            ID::Song(id) => {
+                song_keys.push(id);
+            }
+            ID::ContentProvider(id) => {
+                provider_keys.push(id);
+            }
+        });
+
+        self.edit_manager
+        .edit_stack
+        .iter()
+        .cloned()
+        .chain(self.edit_manager.undo_stack.iter().cloned())
+        .map(|e| match e {
+            crate::service::editors::Edit::Pasted { yank, .. } => yank,
+            crate::service::editors::Edit::Yanked { yank, .. } => yank,
+            crate::service::editors::Edit::TextEdit { .. } => todo!(),
+        })
+        .map(|y| y.yanked_items.clone().into_iter())
+        .flatten()
+        .for_each(|(id, _)| match id {
+            ID::Song(id) => {
+                song_keys.push(id);
+            }
+            ID::ContentProvider(id) => {
+                provider_keys.push(id);
+            }
+        });
+
+        self.active_queue.map(|id| provider_keys.push(id));
+        self.active_song.map(|id| song_keys.push(id));
+        provider_keys.push(self.get_main_provider().queue_provider);
+
+        // self.songs;
+        // self.content_providers;
+        // self.content_stack;
+        // self.edit_manager;
+        // self.active_queue;
+        // self.active_song;
+        // self.main_provider().queue_provider
+
+        // let song_key_frequencies = song_keys
+        // .iter()
+        // .copied()
+        // .fold(std::collections::HashMap::new(), |mut map, val|{
+        //     map.entry(val)
+        //        .and_modify(|frq|*frq+=1)
+        //        .or_insert(1);
+        //     map
+        // });
+        // let provider_key_frequencies = provider_keys
+        // .iter()
+        // .copied()
+        // .fold(std::collections::HashMap::new(), |mut map, val|{
+        //     map.entry(val)
+        //        .and_modify(|frq|*frq+=1)
+        //        .or_insert(1);
+        //     map
+        // });
+
+        let key_frequencies = song_keys
+        .into_iter()
+        .map(ID::Song)
+        .chain(provider_keys.into_iter().map(ID::ContentProvider))
+        .fold(std::collections::HashMap::new(), |mut map, val|{
+            map.entry(val)
+               .and_modify(|frq|*frq+=1)
+               .or_insert(1);
+            map
+        });
+
+        let mut key_frequencies_2 = (0..self.songs.len())
+        .filter_map(|i| self.songs.get_id_count(i))
+        .map(|(id, i)| (ID::Song(id.into()), i))
+        .chain(
+            (0..self.content_providers.len())
+            .filter_map(|i| self.content_providers.get_id_count(i))
+            // .inspect(|i| dbg!(i)) // dbg:
+            .map(|(id, i)| (ID::ContentProvider(id.into()), i))
+        )
+        .fold(std::collections::HashMap::new(), |mut map, val|{
+            assert_eq!(map.insert(val.0, val.1), None);
+            map
+        });
+
+        key_frequencies
+        .into_iter()
+        .for_each(|(id, i)| {
+            if let Some(j) = key_frequencies_2.remove(&id) {
+                if j != i {
+                    error!("{} ids available in the wild than recorded. id: {id:#?}, ids found in wild: {i}, ids recorded in register: {j}", if j < i {"more"} else {"less"});
+                }
+            } else {
+                error!("no item available for id: {id:#?}");
+            }
+        });
+        key_frequencies_2.into_iter()
+        .for_each(|(id, i)| {
+            error!("leaked item. id: {id:#?}, id_count: {i}");
+        });
+    }
+
     pub fn save(mut self) -> Result<()> {
         (0..self.content_stack.len()-1)
         .filter_map(|_| self.content_stack.pop())
@@ -316,6 +462,10 @@ impl ContentManager {
 
     pub fn debug_current(&self, c: char) {
         match c {
+            'c' => {
+                self.check_for_register();
+                debug!("register checks complete");
+            }
             'e' => {
                 dbg!(&self.edit_manager);
             }

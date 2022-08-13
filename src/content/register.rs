@@ -248,10 +248,25 @@ impl<T, P> ContentRegister<T, P>
             _phantom: PhantomData,
         })
     }
+
+    pub fn get_id_count(&self, index: usize) -> Option<(ContentID<T>, u32)> {
+        self.items.get(index).map(|e| e.as_ref().map(|e| (
+            ContentID {
+                index,
+                generation: e.generation,
+                _phantom: PhantomData,
+            },
+            e.id_counter.into(),
+        ))).flatten()
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ContentEntry<T> {
+struct ContentEntry<T> {
     val: T,
     generation: u64,
     id_counter: u32,
