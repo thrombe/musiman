@@ -167,7 +167,7 @@ impl EditManager {
                 YankAction::PushEdit { edit },
                 YankAction::DropYanker,
             ],
-            else_this: vec![],
+            else_this: vec![YankAction::False],
         }
     }
 

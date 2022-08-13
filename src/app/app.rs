@@ -141,11 +141,11 @@ impl BrowserWidget {
             KeyCode::Char('X') => {
                 if ch.edit_manager.yanker.is_none() {
                     ch.toggle_yank_selected()?;
-                    ch.increment_selection();
                 }
                 let action = ch.edit_manager.apply_yank(YankType::Cut);
                 if !action.apply(ch)? {
                     let _ = ch.edit_manager.yanker.take();
+                    ContentManagerAction::RefreshDisplayContent.apply(ch)?;
                 }
             }
             KeyCode::Char('C') => {
