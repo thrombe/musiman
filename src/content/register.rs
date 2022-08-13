@@ -8,6 +8,7 @@ use crate::{
 
 use std::{marker::PhantomData, fmt::Debug};
 use serde::{Deserialize, Serialize};
+use derivative::Derivative;
 
 use crate::{
     content::{
@@ -29,7 +30,7 @@ macro_rules! to_from_content_id {
     };
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct SongID {
     id: ContentID<Song>,
 }
@@ -41,7 +42,7 @@ impl SongID {
 to_from_content_id!(SongID, Song);
 
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct ContentProviderID {
     id: ContentID<ContentProvider>,
 }
@@ -55,7 +56,7 @@ impl ContentProviderID {
 to_from_content_id!(ContentProviderID, ContentProvider);
 
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Hash)]
 pub enum ID {
     Song(SongID),
     ContentProvider(ContentProviderID),

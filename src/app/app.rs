@@ -144,7 +144,9 @@ impl BrowserWidget {
                     ch.increment_selection();
                 }
                 let action = ch.edit_manager.apply_yank(YankType::Cut);
-                action.apply(ch)?;
+                if !action.apply(ch)? {
+                    let _ = ch.edit_manager.yanker.take();
+                }
             }
             KeyCode::Char('C') => {
                 let action = ch.edit_manager.apply_yank(YankType::Copy);
