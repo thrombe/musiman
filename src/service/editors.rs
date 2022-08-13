@@ -309,16 +309,24 @@ impl Edit {
                 let items = yank.yanked_items.iter().cloned().map(|(id, _)| id).collect();
                 match yank_type {
                     YankType::Copy => {
-                        vec![
-                            ContentManagerAction::Register { ids: items }.into(),
-                            ContentManagerAction::RefreshDisplayContent.into(),
-                        ].into()
+                        YankAction::Conditional {
+                            if_this: vec![YankAction::ProviderExists { id: yank.yanked_from }],
+                            then_this: vec![
+                                    ContentManagerAction::Register { ids: items }.into(),
+                                    ContentManagerAction::RefreshDisplayContent.into(),
+                                ].into(),
+                            else_this: vec![YankAction::DropYanker],
+                        }
                     }
                     YankType::Cut => { // now the yanker owns these ids, so no unregistering
-                        vec![
-                            YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: yank.yanked_from },
-                            ContentManagerAction::RefreshDisplayContent.into(),
-                        ].into()
+                        YankAction::Conditional {
+                            if_this: vec![YankAction::ProviderExists { id: yank.yanked_from }],
+                            then_this: vec![
+                                    YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: yank.yanked_from },
+                                    ContentManagerAction::RefreshDisplayContent.into(),
+                                ].into(),
+                            else_this: vec![YankAction::DropYanker],
+                        }
                     }
                 }
             }
@@ -375,6 +383,9 @@ pub enum YankAction {
     },
     ContentManagerAction {
         a: ContentManagerAction,
+    },
+    ProviderExists {
+        id: ContentProviderID,
     },
     DropYanker,
     False,
@@ -476,6 +487,9 @@ impl YankAction {
                 .flatten();
 
                 return a.or(b).unwrap_or(Ok(false));
+            }
+            Self::ProviderExists { id } => {
+                return Ok(ch.content_providers.get(id).is_some());
             }
             Self::PushEdit { edit } => {
                 ch.edit_manager.edit_stack.push(edit);
