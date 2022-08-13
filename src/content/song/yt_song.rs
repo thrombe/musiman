@@ -38,7 +38,7 @@ use crate::{
     image::UnprocessedImage,
 };
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct YtSong {
     pub title: String,
     pub artist: String,

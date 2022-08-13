@@ -28,6 +28,23 @@ use crate::{
 };
 
 
+pub trait SongClone {
+    fn song_clone(&self) -> Box<dyn SongTrait>;
+}
+
+impl<T> SongClone for T
+    where T: 'static + Clone + Debug + SongTrait
+{
+    fn song_clone(&self) -> Box<dyn SongTrait> {
+        Box::new(self.clone())
+    }
+}
+impl Clone for Box<dyn SongTrait> {
+    fn clone(&self) -> Self {
+        self.song_clone()
+    }
+}
+
 
 pub type Func = Box<dyn FnOnce(String) -> Result<ContentManagerAction> + Send + Sync>;
 
@@ -40,7 +57,7 @@ where T: SongTrait + 'static
 }
 
 #[typetag::serde(tag = "type")]
-pub trait SongTrait: Send + Sync + Debug {
+pub trait SongTrait: Send + Sync + Debug + SongClone {
     fn play(&self) -> Result<ContentManagerAction>;
     // song might have to get the uri from the interwebs, so cant directly retrun a string
     fn get_uri(&self, callback: Func) -> Result<ContentManagerAction>;

@@ -34,7 +34,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct UntaggedFileSong {
     title: String,
     path: Cow<'static, str>,

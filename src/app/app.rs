@@ -122,9 +122,6 @@ impl BrowserWidget {
 
     fn handle_events(&mut self, key: KeyEvent, ch: &mut ContentManager) -> Result<bool> {
         match key.code {
-            KeyCode::Char('d') => {
-                ch.debug_current();
-            }
             KeyCode::Char('g') => {
                 todo!()
             }
@@ -137,6 +134,9 @@ impl BrowserWidget {
             KeyCode::Char('y') => {
                 ch.toggle_yank_selected()?;
                 ch.increment_selection();
+            }
+            KeyCode::Char('Y') => {
+                ch.edit_manager.clear().apply(ch)?;
             }
             KeyCode::Char('X') => {
                 if ch.edit_manager.yanker.is_none() {
@@ -389,6 +389,7 @@ pub enum AppState {
     Help,
     Quit,
     Typing,
+    DbgInput,
 }
 
 pub struct App {
@@ -523,7 +524,20 @@ impl App {
                             _ => event_handled = false,
                         }
                         event_handled
-                    },
+                    }
+                    AppState::DbgInput => {
+                        match key.code {
+                            KeyCode::Char(c) => {
+                                self.content_manager.debug_current(c);
+                                debug!("debug print end -- ---- -----");
+                                self.state = AppState::Browser;
+                                true
+                            }
+                            _ => {
+                                false
+                            },
+                        }
+                    }
                     _ => {
                         let mut event_handled = false;
                         if !event_handled {
@@ -542,6 +556,9 @@ impl App {
                     _ => match key.code {
                         KeyCode::Char('q') => {
                             self.state = AppState::Quit;
+                        }
+                        KeyCode::Char('d') => {
+                            self.state = AppState::DbgInput;
                         }
                         _ => ()
                     }

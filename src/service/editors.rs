@@ -43,7 +43,6 @@ pub enum YankedContentType {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Yanker { // all ids here are weak (but not enforced to be weak)
-    // FIX: there be problems if multiple copies of the same thing is present in the provider, and it is removed. the item might not be removed from the correct index
     pub yanked_items: Vec<(ID, usize)>,
     pub content_type: YankedContentType,
     yanked_from: ContentProviderID, // not allowed to yank stuff from multiple places

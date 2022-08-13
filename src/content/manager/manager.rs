@@ -258,9 +258,11 @@ impl ContentManager {
                 .downcast_mut::<MainProvider>()
                 .unwrap()
                 .clone();
-                let mut ids = vec![];
-                mp.load(|item| db.content_providers.alloc(item), |id| ids.push(id));
-                ids.into_iter().for_each(|id| db.content_providers.register(id));
+                {
+                    let mut ids = vec![];
+                    mp.load(|item| db.content_providers.alloc(item), |id| ids.push(id));
+                    ids.into_iter().for_each(|id| db.content_providers.register(id));
+                }
                 *db.content_providers
                 .get_mut(db.main_provider)
                 .unwrap() = mp.into();
@@ -296,6 +298,7 @@ impl ContentManager {
         .collect::<Vec<_>>()
         .into_iter()
         .for_each(|id| self.unregister(id));
+        self.get_main_provider_mut().providers_mut().clear();
         
         let mp = self.content_stack.main_provider();
         let songs = self.songs;
@@ -311,10 +314,22 @@ impl ContentManager {
         Ok(())
     }
 
-    pub fn debug_current(&self) {
-        // dbg!(&self.content_providers);
-        // dbg!(&self.content_stack);
-        dbg!(&self.edit_manager);
+    pub fn debug_current(&self, c: char) {
+        match c {
+            'e' => {
+                dbg!(&self.edit_manager);
+            }
+            's' => {
+                dbg!(&self.content_stack);
+            }
+            'p' => {
+                dbg!(&self.content_providers);
+            }
+            'S' => {
+                dbg!(&self.songs);
+            }
+            _ => {}
+        }
         // dbg!(&self.player);
         // dbg!(self.player.is_finished());
         // dbg!(self.player.duration());

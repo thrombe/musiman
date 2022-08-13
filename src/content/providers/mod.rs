@@ -11,7 +11,7 @@ pub mod queue;
 use serde::{Serialize, Deserialize};
 
 /// don't impliment clone on this. instead use ContentManager.clone_content_provider
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ContentProvider(Box<dyn traits::ContentProviderTrait>);
 impl std::ops::Deref for ContentProvider {
     type Target = Box<dyn traits::ContentProviderTrait>;

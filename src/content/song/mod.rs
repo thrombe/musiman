@@ -13,7 +13,7 @@ pub mod yt_song;
 
 use traits::SongTrait;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Song(Box<dyn SongTrait>);
 impl Song {
     pub fn new(s: Box<dyn SongTrait>) -> Self {

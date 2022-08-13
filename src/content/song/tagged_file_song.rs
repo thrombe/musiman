@@ -39,7 +39,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TaggedFileSong {
     title: String,
     album: Option<String>,

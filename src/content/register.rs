@@ -106,14 +106,15 @@ where T: Into<ContentProviderID>
 }
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 enum Operation {
     Insert,
     Remove,
     None,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Derivative, Serialize, Deserialize, Clone)]
+#[derivative(Debug)]
 pub struct ContentRegister<T, P> {
     items: Vec<Option<ContentEntry<T>>>,
     
@@ -123,6 +124,7 @@ pub struct ContentRegister<T, P> {
     last_operation: Operation,
 
     #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
+    #[derivative(Debug="ignore")]
     _phantom: PhantomData<P>,
 }
 
@@ -247,20 +249,23 @@ impl<T, P> ContentRegister<T, P>
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ContentEntry<T> {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContentEntry<T> {
     val: T,
     generation: u64,
     id_counter: u32,
 }
 
 // TODO: maybe impliment some RC to auto yeet unneeded content
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Derivative, Serialize, Deserialize)]
+#[derivative(Debug, Hash)]
 pub struct ContentID<T> {
     index: usize,
     generation: u64,
 
     #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
+    #[derivative(Debug="ignore")]
+    #[derivative(Hash="ignore")]
     _phantom: PhantomData<T>,
 }
 impl<T> Clone for ContentID<T> {

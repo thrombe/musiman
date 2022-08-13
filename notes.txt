@@ -248,6 +248,11 @@ plan:
     . prepare 2 lists, 1 for every item, another for every strong id
     . check if the item id counts match the number of ids and no extra ids left to check
 
+behaviour:
+  . searching system like in lf
+plan:
+  . pressing / starts capturing, Enter ends capturing
+
 bug:
   . id saved in current_queue + content modified (yt_explorer new search) + next song  -> plays a incorrect song
 sol:
@@ -271,6 +276,11 @@ bug:
   . yanking something whose multiple copies exist in some provider displays marker on all the copies (just a displaying bug)
 sol:
   . maybe do not allow multiple copies in same provider? donno
+
+bug:
+  . yanking stuff from one provider also highlights stuff in other providers (display bug)
+sol:
+  . check if parent id is same before adding yank markers
 
 bug1:
   . pasting random providers into queue works, but then crashes when trying to play something from it
@@ -324,7 +334,7 @@ plan:
   . sol bug1, bug2: pasting things in different providers should do special things
     . this needs to be a general, flexible and powerful system
     . examples
-      . pasting non-Queue providers in QueueProvider should convert them into Queue.
+      /. pasting non-Queue providers in QueueProvider should convert them into Queue.
       . pasting a bunch of songs in QueueProvider or anywhere which cannot contain songs can ask for a prompt to create a
         new Provider that can contain songs inside that Provider
       . pasting providers into something that can only store songs -> unravel the provider's songs into the destination provider

@@ -164,7 +164,6 @@ impl ContentStack {
     }
 
     pub fn get(&self, index: usize) -> GlobalProvider {
-        assert!(index < self.len());
-        *self.stack.get(index).unwrap()
+        self.stack[index]
     }
 }
