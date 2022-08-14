@@ -27,7 +27,6 @@ use tokio::{
 use crate::{
     content::{
         providers::{
-            traits::YankContext,
             ContentProvider,
         },
         manager::{
@@ -50,10 +49,6 @@ use crate::{
             action::PyAction,
             manager::PyManager,
         },
-        editors::{
-            Yanker,
-            Edit,
-        }
     },
     image::UnprocessedImage,
 };

@@ -269,7 +269,7 @@ impl EditManager {
             if let GlobalProvider::ContentProvider(id) = id {
                 if let Edit::Yanked { yank, .. } = self.edit_stack.last().cloned().unwrap() {
                     return YankAction::Conditional {
-                        if_this: vec![YankAction::TryPasteIntoProvider {yank: yank.clone(), yanked_to: id, paste_pos: pos}],
+                        if_this: vec![YankAction::TryPasteIntoProvider { yank: yank.clone(), yanked_to: id, paste_pos: pos }],
                         then_this: vec![YankAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: id, paste_pos: pos } }],
                         else_this: vec![],
                     };

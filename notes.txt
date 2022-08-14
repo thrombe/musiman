@@ -301,6 +301,21 @@ bug:
 sol:
   . check if parent id is same before adding yank markers
 
+bug:
+  . tring to paste unloaded stuff that (needs some time to load in a seperate thread) inside QueueProvider fails
+    . QueueProvider can't convert it into a Queue as it does not have any songs yet
+sol:
+  . chainable actions? a.chain(a2) executes a2 after a has completed. no matter when a completes
+    . how?
+    . non parallel actions -> just add it to list
+      . what if a parallel action is hidden inside non-parallel action tho?
+    . parallel actions -> add some kinda callback action if completed
+
+behaviour:
+  . better yt_explorer titles (when links are entered)
+sol:
+  . fetch playlist/video title and use it in the yt_explorer title
+
 behaviour:
   . more convinient QueueProvider
 plan:

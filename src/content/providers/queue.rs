@@ -29,7 +29,6 @@ use crate::{
         register::{
             SongID,
             ContentProviderID,
-            ID,
         },
         display::{
             DisplayContext,

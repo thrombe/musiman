@@ -15,7 +15,6 @@ use crate::{
             App,
             AppState,
         },
-        display::ListBuilder,
     },
     content::{
         providers::ContentProvider,
