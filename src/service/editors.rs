@@ -250,13 +250,6 @@ impl EditManager {
     pub fn undo_last_edit(&mut self) -> YankAction {
         if self.edit_stack.is_empty() {return None.into()}
         let undo = self.edit_stack.pop().unwrap();
-        match &undo {
-            Edit::Yanked { yank, yanked_from, .. } => {
-                self.yanker = Some(Yanker { items: yank.clone(), yanked_from: *yanked_from });
-            },
-            Edit::Pasted { .. } => (),
-            Edit::TextEdit { .. } => (),
-        }
         let action = undo.apply_undo();
         self.undo_stack.push(undo);
         action
@@ -266,13 +259,6 @@ impl EditManager {
     pub fn redo_last_undo(&mut self) -> YankAction {
         if self.undo_stack.is_empty() {return None.into()}
         let redo = self.undo_stack.pop().unwrap();
-        match &redo {
-            Edit::Yanked { .. } => {
-                self.yanker = None;
-            },
-            Edit::Pasted { .. } => (),
-            Edit::TextEdit { .. } => (),
-        }
         let action = redo.apply_redo();
         self.edit_stack.push(redo);
         action
@@ -323,6 +309,7 @@ impl Edit {
                         vec![
                             ContentManagerAction::Register { // for being stored in undo_stack
                                 ids: yank.iter()
+                                .chain([*yanked_from].into_iter().map(Into::into))
                                 .collect(),
                             }.into(),
                             YankAction::InsertIntoProvider { yank: yank.clone(), yanked_to: *yanked_from },
@@ -337,7 +324,11 @@ impl Edit {
             Self::Pasted { yank, yanked_to, .. } => {
                 vec![
                     YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: *yanked_to },
-                    ContentManagerAction::Unregister { ids: yank.iter().collect() }.into(), // for being removed from the provider
+                    ContentManagerAction::Unregister { // for being removed from the provider
+                        ids: yank.iter()
+                        .chain([*yanked_to].into_iter().map(Into::into))
+                        .collect(),
+                    }.into(),
                     ContentManagerAction::RefreshDisplayContent.into(),
                 ].into()
             },
@@ -355,6 +346,7 @@ impl Edit {
                             YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: *yanked_from },
                             ContentManagerAction::Unregister {
                                 ids: yank.iter()
+                                .chain([*yanked_from].into_iter().map(Into::into))
                                 .collect(),
                             }.into(),
                         ].into()
@@ -368,7 +360,11 @@ impl Edit {
             Self::Pasted { yank, yanked_to, paste_pos  } => {
                 vec![
                     YankAction::PasteIntoProvider { yank: yank.clone(), yanked_to: *yanked_to, paste_pos: *paste_pos },
-                    ContentManagerAction::Register { ids: yank.iter().collect() }.into(), // for being saved in the provider
+                    ContentManagerAction::Register { // for being saved in the provider
+                        ids: yank.iter()
+                        .chain([*yanked_to].into_iter().map(Into::into))
+                        .collect(),
+                    }.into(),
                     ContentManagerAction::RefreshDisplayContent.into(),
                 ].into()
             },
@@ -377,12 +373,20 @@ impl Edit {
     }
 
     fn unregister(&self) -> YankAction {
-        let yank = match self {
-            Self::Pasted { yank, yanked_to, .. } => yank,
-            Self::Yanked { yank, yanked_from, .. } => yank,
+        let ids = match self {
+            Self::Pasted { yank, yanked_to, .. } => {
+                yank.iter()
+                .chain([*yanked_to].into_iter().map(Into::into))
+                .collect()
+            }
+            Self::Yanked { yank, yanked_from, .. } => {
+                yank.iter()
+                .chain([*yanked_from].into_iter().map(Into::into))
+                .collect()
+            }
             Self::TextEdit { content, from, to } => todo!(),
         };
-        ContentManagerAction::Unregister { ids: yank.iter().collect() }.into()
+        ContentManagerAction::Unregister { ids }.into()
     }
 
     pub fn apply(&self) -> YankAction {
@@ -390,30 +394,30 @@ impl Edit {
             Self::Yanked { yank, yank_type, yanked_from } => {
                 match yank_type {
                     YankType::Copy => {
-                        YankAction::Conditional {
-                            if_this: vec![YankAction::ProviderExists { id: *yanked_from }],
-                            then_this: vec![
-                                    ContentManagerAction::Register { ids: yank.iter().collect() }.into(),
-                                    ContentManagerAction::RefreshDisplayContent.into(),
-                                ].into(),
-                            else_this: vec![YankAction::DropYanker],
-                        }
+                        vec![
+                            ContentManagerAction::Register {
+                                ids: yank.iter()
+                                .chain([*yanked_from].into_iter().map(Into::into)) // not needed, but makes other code simpler.
+                                .collect(),
+                            }.into(),
+                            ContentManagerAction::RefreshDisplayContent.into(),
+                        ].into()
                     }
                     YankType::Cut => { // now the yanker owns these ids, so no unregistering
                         YankAction::Conditional {
-                            if_this: vec![YankAction::ProviderExists { id: *yanked_from }],
+                            if_this: vec![YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: *yanked_from }],
                             then_this: vec![
-                                    YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: *yanked_from },
-                                    ContentManagerAction::RefreshDisplayContent.into(),
-                                ].into(),
-                            else_this: vec![YankAction::DropYanker],
+                                ContentManagerAction::Register { ids: vec![(*yanked_from).into()] }.into(),
+                                ContentManagerAction::RefreshDisplayContent.into(),
+                            ].into(),
+                            else_this: vec![YankAction::False],
                         }
                     }
                 }
             }
             Self::Pasted { .. } => { // should be in=mplimented in YankDest::try_paste
                 // paste
-                // register 2 * yank.items
+                // register 2 * yank.items, yanked_to
                 // refresh display
                 unreachable!();
             }

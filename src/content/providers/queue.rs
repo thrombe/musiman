@@ -57,6 +57,7 @@ pub struct Queue {
     pub name: Cow<'static, str>,
     #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     pub index: SelectedIndex,
+    pub currently_playing: Option<usize>,
     pub source_cp: ContentProviderID, // weak
 }
 impl Queue {
@@ -81,6 +82,7 @@ impl Queue {
             .get_name(),
 
             index: Default::default(),
+            currently_playing: None,
             source_cp: id, // this should not register. the cp might go down even if this persists
         }
     }
@@ -161,6 +163,7 @@ impl YankDest<SongID> for Queue {
                         y
                     })
                     .collect::<Vec<_>>();
+                    ctx.register(self_id); // for being stored in Edit
                     vec![
                         YankAction::PasteIntoProvider {
                             yank: yank.clone().into(),

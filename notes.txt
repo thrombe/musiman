@@ -326,12 +326,12 @@ plan:
     /. kinda tedious as current implimentations of providers do not allow for mixing the song/provider lists
   . unapplied cuts/copies should be filtered into a seperate clipboard thing for conviniently pasting it to other stuff
     . to figure out if some cut/copy is not applied, just compare the Yanker of Edit::Yanked and Edit::Pasted across all edits
-  . edits might contain ids from stuff that were from the temporary providers from the last session.
-    . just clear edits on restart
-    . instead of not saving all ids, save even the Yanker.yanked_from (non-weak) and let it sit there (even if its not actually usable in the app)
-      . when the edit deallocates, it will automatically be cleared.
-      . since EditManager.yank is weak, care should be taken to not make its yanked_from id non-weak
-    . do the edits that are possible and ignore the rest
+  /. edits might contain ids from stuff that were from the temporary providers from the last session.
+    \. just clear edits on restart
+    /. instead of not saving all ids, save even the Yanker.yanked_from (non-weak) and let it sit there (even if its not actually usable in the app)
+      /. when the edit deallocates, it will automatically be cleared.
+      /. since EditManager.yank is weak, care should be taken to not make its yanked_from id non-weak
+    \. do the edits that are possible and ignore the rest
       . really?
       . ids here are non-weak anyway
   . good yank-paste system

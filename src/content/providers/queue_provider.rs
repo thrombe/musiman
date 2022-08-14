@@ -158,7 +158,10 @@ impl YankDest<ContentProviderID> for QueueProvider {
                     })
                     .collect::<Vec<_>>();
 
-                    items.iter().cloned().for_each(|id| ctx.register(id)); // for being stored in Edit
+                    // for being stored in Edit
+                    items.iter().cloned().for_each(|id| ctx.register(id));
+                    ctx.register(self_id);
+
                     let yank = items.into_iter()
                     .enumerate()
                     .map(|(i, id)| Yank {

@@ -375,8 +375,12 @@ impl ContentManager {
         .iter()
         .chain(self.edit_manager.undo_stack.iter())
         .map(|e| match e {
-            Edit::Pasted { yank, yanked_to, .. } => yank.iter(),//.chain([yanked_to].into_iter().map(Into::into)),
-            Edit::Yanked { yank, yanked_from, .. } => yank.iter(),//.chain([yanked_from].into_iter().map(Into::into)),
+            Edit::Pasted { yank, yanked_to, .. } => {
+                yank.iter().chain([*yanked_to].into_iter().map(Into::into))
+            }
+            Edit::Yanked { yank, yanked_from, .. } => {
+                yank.iter().chain([*yanked_from].into_iter().map(Into::into))
+            }
             Edit::TextEdit { .. } => todo!(),
         })
         .flatten()
