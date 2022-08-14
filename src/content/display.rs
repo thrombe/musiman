@@ -78,7 +78,7 @@ impl<'a> DisplayContext<'a> {
         let id = id.into();
         if self.yanker
         .as_ref()
-        .map(|y| y.yanked_items.iter().cloned().map(|(i, _)| i).collect::<Vec<_>>().contains(&id))
+        .map(|y| y.items.iter().collect::<Vec<_>>().contains(&id))
         .unwrap_or(false)
         {
             let marker = Marker {symbol: Yanker::marker_symbol(), pos};

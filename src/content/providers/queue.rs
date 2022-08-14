@@ -45,8 +45,7 @@ use crate::{
         },
     },
     service::editors::{
-        Yanker,
-        YankedContentType,
+        Yank,
         Edit,
         YankAction,
     },
@@ -146,24 +145,35 @@ impl<'b> Display<'b> for Queue {
 }
 
 impl YankDest<SongID> for Queue {
-    fn try_paste(&mut self, items: Vec<SongID>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction {
+    fn try_paste(&mut self, items: Vec<Yank<SongID>>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction {
         let num_items = self.songs.len();
         vec![
             YankAction::Callback {
                 callback: Box::new(move |mut ctx: YankContext| {
-                    items.iter().cloned().for_each(|id| {
-                        ctx.register(id); // for being stored in the Queue
-                        ctx.register(id); // for being stored in Edit
+                    items.iter().for_each(|y| {
+                        ctx.register(y.item); // for being stored in the Queue
+                        ctx.register(y.item); // for being stored in Edit
                     });
-                    let mut yank = Yanker::new(self_id); // garbaage yanked_from
-                    yank.content_type = YankedContentType::Song;
-                    yank.yanked_items = items.into_iter()
+                    let yank = items.into_iter()
                     .enumerate()
-                    .map(|(i, id)| (ID::Song(id), start_index.map(|j| j+i).unwrap_or(num_items + i)))
-                    .collect();
+                    .map(|(i, mut y)| {
+                        y.index = start_index.map(|j| j+i).unwrap_or(num_items + i);
+                        y
+                    })
+                    .collect::<Vec<_>>();
                     vec![
-                        YankAction::PasteIntoProvider { yank: yank.clone(), yanked_to: self_id, paste_pos: start_index },
-                        YankAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: self_id, paste_pos: start_index } },
+                        YankAction::PasteIntoProvider {
+                            yank: yank.clone().into(),
+                            yanked_to: self_id,
+                            paste_pos: start_index,
+                        },
+                        YankAction::PushEdit {
+                            edit: Edit::Pasted {
+                                yank: yank.into(),
+                                yanked_to: self_id,
+                                paste_pos: start_index,
+                            },
+                        },
                         YankAction::False,
                         ContentManagerAction::RefreshDisplayContent.into(),
                     ].into()

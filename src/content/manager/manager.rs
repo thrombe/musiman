@@ -55,6 +55,7 @@ use crate::{
         editors::{
             Yanker,
             EditManager,
+            Edit,
         },
         notifier::Notifier,
     },
@@ -372,21 +373,30 @@ impl ContentManager {
         self.edit_manager
         .edit_stack
         .iter()
-        .cloned()
-        .chain(self.edit_manager.undo_stack.iter().cloned())
+        .chain(self.edit_manager.undo_stack.iter())
         .map(|e| match e {
-            crate::service::editors::Edit::Pasted { yank, .. } => yank,
-            crate::service::editors::Edit::Yanked { yank, .. } => yank,
-            crate::service::editors::Edit::TextEdit { .. } => todo!(),
+            Edit::Pasted { yank, yanked_to, .. } => yank.iter(),//.chain([yanked_to].into_iter().map(Into::into)),
+            Edit::Yanked { yank, yanked_from, .. } => yank.iter(),//.chain([yanked_from].into_iter().map(Into::into)),
+            Edit::TextEdit { .. } => todo!(),
         })
-        .map(|y| y.yanked_items.clone().into_iter())
         .flatten()
-        .for_each(|(id, _)| match id {
+        .for_each(|id| match id {
             ID::Song(id) => {
                 song_keys.push(id);
             }
-            ID::ContentProvider(id) => {
-                provider_keys.push(id);
+            ID::ContentProvider(id) => { // edit_manager can also contain ids that are not present anywhere else
+                cp_ids(self, id, &mut unique_provider_ids)
+                .into_iter()
+                .for_each(|id| {
+                    match id {
+                        ID::Song(id) => {
+                            song_keys.push(id);
+                        }
+                        ID::ContentProvider(id) => {
+                            provider_keys.push(id);
+                        }
+                    }
+                })
             }
         });
 
@@ -726,8 +736,7 @@ impl ContentManager {
                         match self.edit_manager.yanker.as_mut() {
                             Some(y) => y.toggle_yank(selected_id, id, index),
                             None => {
-                                let mut y = Yanker::new(id);
-                                y.toggle_yank(selected_id, id, index);
+                                let y = Yanker::new(id, selected_id, index);
                                 self.edit_manager.yanker = Some(y);
                             }
                         }
@@ -757,8 +766,7 @@ impl ContentManager {
 
         // if it already exists, do not make a new one
         if let Some(queue_index) = queue_index
-        .map(|i| Some(i))
-        .unwrap_or(converted_queue_index)
+        .or(converted_queue_index)
         {
             let q_id = self.get_queue_provider()
             .providers()

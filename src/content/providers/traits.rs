@@ -34,7 +34,10 @@ use crate::{
             Display,
         },
     },
-    service::editors::YankAction,
+    service::editors::{
+        YankAction,
+        Yank,
+    },
 };
 
 pub trait CPClone {
@@ -136,7 +139,7 @@ pub trait ContentProviderTrait
             false
         }
     }
-    fn ids<'a>(&'a self) -> Box<dyn Iterator<Item = ID> + 'a> {
+    fn ids<'a>(&'a self) -> Box<dyn Iterator<Item = ID> + 'a> { // ? maybe try Iter/IntoIter instead of return a boxed iterator? does it satisfy the requirements?
         Box::new(
             self.as_provider()
             .map(|p| p.providers())
@@ -246,8 +249,8 @@ pub trait YankDest<T: PartialEq + Copy + Debug>: ContentProviderTrait {
     fn dest_vec_mut(&mut self) -> Option<&mut Vec<T>> {None} // for default implimentations of paste and insert, else they panic
 
     /// all items are pasted one after the other starting at the mentioned index, else appended at the last
-    fn try_paste(&mut self, items: Vec<T>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction;
-    fn paste(&mut self, items: Vec<T>, start_index: Option<usize>) {
+    fn try_paste(&mut self, items: Vec<Yank<T>>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction;
+    fn paste(&mut self, items: Vec<Yank<T>>, start_index: Option<usize>) {
         start_index
         .filter(|i| self.get_selected_index().selected_index() >= *i)
         .map(|_| (0..items.len()).for_each(|_| {self.selection_increment();}));
@@ -256,24 +259,24 @@ pub trait YankDest<T: PartialEq + Copy + Debug>: ContentProviderTrait {
         let len = vecc.len();
         items.into_iter()
         .enumerate()
-        .map(|(i, id)| (start_index.map(|j| j+i).unwrap_or(len+i), id))
-        .for_each(|(i, id)| vecc.insert(i, id));
+        .map(|(i, y)| (start_index.map(|j| j+i).unwrap_or(len+i), y))
+        .for_each(|(i, y)| vecc.insert(i, y.item));
     }
 
     /// each item will be at the associated index once the entire operation is done
     // fn try_insert(&mut self, items: Vec<(T, usize)>) -> ContentManagerAction;
-    fn insert(&mut self, mut items: Vec<(T, usize)>) {
+    fn insert(&mut self, mut items: Vec<Yank<T>>) {
         let mut counter = 0;
         let selected_index = self.get_selected_index().selected_index();
         let vecc = self.dest_vec_mut().unwrap();
-        items.sort_by(|a, b| a.1.cmp(&b.1));
+        items.sort_by(|a, b| a.index.cmp(&b.index));
         let mut items = items.into_iter().peekable();
         let mut old_items = std::mem::replace(vecc, vec![]).into_iter().peekable();
         while items.peek().is_some() || old_items.peek().is_some() {
-            if let Some(&(_, index)) = items.peek() {
-                if vecc.len() == index || old_items.peek().is_none() {
-                    vecc.push(items.next().unwrap().0);
-                    if index <= selected_index+counter {
+            if let Some(&y) = items.peek() {
+                if vecc.len() == y.index || old_items.peek().is_none() {
+                    vecc.push(items.next().unwrap().item);
+                    if y.index <= selected_index+counter {
                         counter += 1;
                     }
                     continue;
@@ -285,17 +288,17 @@ pub trait YankDest<T: PartialEq + Copy + Debug>: ContentProviderTrait {
     }
 
     /// assuming T exists at the provided index (necessary for multiple of the same thing present in the list)
-    fn remove(&mut self, mut items: Vec<(T, usize)>) {
+    fn remove(&mut self, mut items: Vec<Yank<T>>) {
         let mut counter = 0;
         let selected_index = self.get_selected_index().selected_index();
         let vecc = self.dest_vec_mut().unwrap();
-        items.sort_by(|a, b| a.1.cmp(&b.1));
+        items.sort_by(|a, b| a.index.cmp(&b.index));
         let mut items = items.into_iter().peekable();
         *vecc = vecc.into_iter()
         .enumerate()
         .filter_map(|(i, id)| {
-            if let Some((id2, j)) = items.peek() {
-                if *id2 == *id && *j == i {
+            if let Some(y) = items.peek() {
+                if y.item == *id && y.index == i {
                     let _ = items.next();
                     if i <= selected_index {
                         counter += 1;

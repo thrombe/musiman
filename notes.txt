@@ -196,6 +196,25 @@
     /. prepare 2 lists, 1 for every item, another for every strong id
     /. check if the item id counts match the number of ids and no extra ids left to check
 
+/. bug1:
+  /. pasting random providers into queue works, but then crashes when trying to play something from it
+/. sol:
+  \. YankDestination trait, just as a marker trait to allow/disallow pasting stuff to QueueProvider
+    . but what about cut/copy pasting queues. this is required to move items within the provider
+  \. maybe some providers should check for what type the yanked stuff is.
+    . how tho?
+    . maybe using something like what is done in bevy's ecs. (idk how it works yet)
+      . QueueProvider::yankable_item::<Queue>()
+  /. sol in behaviour1
+
+/. bug2:
+  /. pasting songs/providers to providers that can not store them crashes app
+/. sol:
+  /. some kinda system in EditManager that can refuse to paste stuff while also notifying user
+    . use the status bar and the notification whatever area for such notifs
+    . this can also be used to refuse pasting things like non-Queues in QueueProvider
+  /. partial sol in behaviour1
+
 todo:
   . better error handling
 plan:
@@ -282,25 +301,6 @@ bug:
 sol:
   . check if parent id is same before adding yank markers
 
-bug1:
-  . pasting random providers into queue works, but then crashes when trying to play something from it
-sol:
-  . YankDestination trait, just as a marker trait to allow/disallow pasting stuff to QueueProvider
-    . but what about cut/copy pasting queues. this is required to move items within the provider
-  . maybe some providers should check for what type the yanked stuff is.
-    . how tho?
-    . maybe using something like what is done in bevy's ecs. (idk how it works yet)
-      . QueueProvider::yankable_item::<Queue>()
-  . sol in behaviour1
-
-bug2:
-  . pasting songs/providers to providers that can not store them crashes app
-sol:
-  . some kinda system in EditManager that can refuse to paste stuff while also notifying user
-    . use the status bar and the notification whatever area for such notifs
-    . this can also be used to refuse pasting things like non-Queues in QueueProvider
-  . partial sol in behaviour1
-
 behaviour:
   . more convinient QueueProvider
 plan:
@@ -321,18 +321,20 @@ behaviour1:
   . edit manager stuff
 plan:
   /. pressing shortcut keys after selecting stuff calls apply_yank(YankType::..). stuff gets cut/copied from source into editor::Edit stored in EditManager.
-  . pasting stuff should paste it before/after the cursor
-  . undo should remember the positions
-    . kinda tedious as current implimentations of providers do not allow for mixing the song/provider lists
+  /. pasting stuff should paste it before/after the cursor
+  /. undo should remember the positions
+    /. kinda tedious as current implimentations of providers do not allow for mixing the song/provider lists
   . unapplied cuts/copies should be filtered into a seperate clipboard thing for conviniently pasting it to other stuff
     . to figure out if some cut/copy is not applied, just compare the Yanker of Edit::Yanked and Edit::Pasted across all edits
   . edits might contain ids from stuff that were from the temporary providers from the last session.
     . just clear edits on restart
+    . instead of not saving all ids, save even the Yanker.yanked_from (non-weak) and let it sit there (even if its not actually usable in the app)
+      . when the edit deallocates, it will automatically be cleared.
+      . since EditManager.yank is weak, care should be taken to not make its yanked_from id non-weak
     . do the edits that are possible and ignore the rest
       . really?
       . ids here are non-weak anyway
-  . sol bug1, bug2: pasting things in different providers should do special things
-    . this needs to be a general, flexible and powerful system
+  . good yank-paste system
     . examples
       /. pasting non-Queue providers in QueueProvider should convert them into Queue.
       . pasting a bunch of songs in QueueProvider or anywhere which cannot contain songs can ask for a prompt to create a
@@ -341,7 +343,9 @@ plan:
       . pasting online songs in FileExplorer downloads and saves them
       . pasting songs in FileExplorer moves them in the FS (option to turn it off)
       . pasting songs from other providers and stuff into ArtistProvider should add it to the tracking system like in thrombe/musimanager
-    . doing this means that new ids will be created for new songs/providers. so will need more work with the undo system
+    /. sol bug1, bug2: pasting things in different providers should do special things
+    /. this needs to be a general, flexible and powerful system
+    \. doing this means that new ids will be created for new songs/providers. so will need more work with the undo system
   /. undoing and redoing should also handle the selections
     /. selections + undo yank -> should result in previous yank selections being restored. but what to do with current selections?
       /. just yeet current selections
@@ -389,8 +393,9 @@ plan:
     . relevant dust code -> https://github.com/bootandy/dust/blob/164bec71a3a8a857e964d3f975e3a833f40ba3ef/src/dir_walker.rs#L123
 
 image art improvements:
-  . konsole impliments kitty graphics protocol?
-    . https://sw.kovidgoyal.net/kitty/graphics-protocol/
+  \. konsole impliments kitty graphics protocol?
+    \. https://sw.kovidgoyal.net/kitty/graphics-protocol/
+    /. despite what the link says, konsole returns "kittyGi=0;ENOTSUPPORTED:" when trying to force print using kitty protocol using https://github.com/atanunq/viuer
   . better ansi art with arbitary unicode chars?
     . https://github.com/mafik/ansi-art
   . rusty sixel?

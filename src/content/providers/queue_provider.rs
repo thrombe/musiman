@@ -18,7 +18,6 @@ use crate::{
         register::{
             ContentProviderID,
             SongID,
-            ID,
         },
         providers::{
             traits::{
@@ -48,10 +47,9 @@ use crate::{
         },
     },
     service::editors::{
-        Yanker,
         Edit,
-        YankedContentType,
         YankAction,
+        Yank,
     },
 };
 
@@ -135,13 +133,14 @@ impl CPProvider for QueueProvider {
 }
 
 impl YankDest<ContentProviderID> for QueueProvider {
-    fn try_paste(&mut self, items: Vec<ContentProviderID>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction {
+    fn try_paste(&mut self, items: Vec<Yank<ContentProviderID>>, start_index: Option<usize>, self_id: ContentProviderID) -> YankAction {
         let num_items = self.providers.len();
         vec![
             YankAction::Callback {
                 callback: Box::new(move |mut ctx: YankContext| {
                     let items = items.into_iter()
-                    .filter_map(|id| {
+                    .filter_map(|y| {
+                        let id = y.item;
                         let e = ctx.get_provider(id);
                         if e.as_any().downcast_ref::<Queue>().is_some() {
                             ctx.register(id); // for being saved in QueueProvider
@@ -160,15 +159,26 @@ impl YankDest<ContentProviderID> for QueueProvider {
                     .collect::<Vec<_>>();
 
                     items.iter().cloned().for_each(|id| ctx.register(id)); // for being stored in Edit
-                    let mut yank = Yanker::new(self_id); // garbaage yanked_from
-                    yank.content_type = YankedContentType::ContentProvider;
-                    yank.yanked_items = items.into_iter()
+                    let yank = items.into_iter()
                     .enumerate()
-                    .map(|(i, id)| (ID::ContentProvider(id), start_index.map(|j| j+i).unwrap_or(num_items + i)))
-                    .collect();
+                    .map(|(i, id)| Yank {
+                        item: id,
+                        index: start_index.map(|j| j+i).unwrap_or(num_items + i),
+                    })
+                    .collect::<Vec<_>>();
                     vec![
-                        YankAction::PasteIntoProvider { yank: yank.clone(), yanked_to: self_id, paste_pos: start_index },
-                        YankAction::PushEdit { edit: Edit::Pasted { yank, yanked_to: self_id, paste_pos: start_index } },
+                        YankAction::PasteIntoProvider {
+                            yank: yank.clone().into(),
+                            yanked_to: self_id,
+                            paste_pos: start_index,
+                        },
+                        YankAction::PushEdit {
+                            edit: Edit::Pasted {
+                                yank: yank.into(),
+                                yanked_to: self_id,
+                                paste_pos: start_index,
+                            },
+                        },
                         YankAction::False, // cuz of custom PushEdit, we handle this here
                         ContentManagerAction::RefreshDisplayContent.into(),
                     ].into()
