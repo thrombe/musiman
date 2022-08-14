@@ -334,6 +334,7 @@ plan:
     \. do the edits that are possible and ignore the rest
       . really?
       . ids here are non-weak anyway
+  . trying to cut something but it fails, then Yanker should not reset as copying can still be done
   . good yank-paste system
     . examples
       /. pasting non-Queue providers in QueueProvider should convert them into Queue.

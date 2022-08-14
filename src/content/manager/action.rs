@@ -205,10 +205,9 @@ impl ContentManagerAction {
                 }
             }
             Self::MaybePushToContentStack { id } => {
-                if ch.content_stack.last() == id {
-                    ch.content_stack.pop();
+                if ch.content_stack.last() != id {
+                    Self::PushToContentStack { id }.apply(ch)?;
                 }
-                Self::PushToContentStack { id }.apply(ch)?;
             }
             Self::EnableTyping { content, callback, loader } => {
                 ch.app_action_sender.send(

@@ -57,7 +57,7 @@ pub struct Queue {
     pub name: Cow<'static, str>,
     #[serde(skip_serializing, skip_deserializing, default = "Default::default")]
     pub index: SelectedIndex,
-    pub currently_playing: Option<usize>,
+    pub currently_playing: Option<usize>, // TODO:
     pub source_cp: ContentProviderID, // weak
 }
 impl Queue {

@@ -309,7 +309,6 @@ impl Edit {
                         vec![
                             ContentManagerAction::Register { // for being stored in undo_stack
                                 ids: yank.iter()
-                                .chain([*yanked_from].into_iter().map(Into::into))
                                 .collect(),
                             }.into(),
                             YankAction::InsertIntoProvider { yank: yank.clone(), yanked_to: *yanked_from },
@@ -326,7 +325,6 @@ impl Edit {
                     YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: *yanked_to },
                     ContentManagerAction::Unregister { // for being removed from the provider
                         ids: yank.iter()
-                        .chain([*yanked_to].into_iter().map(Into::into))
                         .collect(),
                     }.into(),
                     ContentManagerAction::RefreshDisplayContent.into(),
@@ -346,7 +344,6 @@ impl Edit {
                             YankAction::RemoveFromProvider { yank: yank.clone(), yanked_from: *yanked_from },
                             ContentManagerAction::Unregister {
                                 ids: yank.iter()
-                                .chain([*yanked_from].into_iter().map(Into::into))
                                 .collect(),
                             }.into(),
                         ].into()
@@ -362,7 +359,6 @@ impl Edit {
                     YankAction::PasteIntoProvider { yank: yank.clone(), yanked_to: *yanked_to, paste_pos: *paste_pos },
                     ContentManagerAction::Register { // for being saved in the provider
                         ids: yank.iter()
-                        .chain([*yanked_to].into_iter().map(Into::into))
                         .collect(),
                     }.into(),
                     ContentManagerAction::RefreshDisplayContent.into(),

@@ -276,7 +276,7 @@ impl Editable for FileExplorer {
                                 },
                                 ContentManagerAction::PopContentStack, // typing
                                 ContentManagerAction::PopContentStack, // edit
-                                ContentManagerAction::MaybePushToContentStack {id: self_id.into()},
+                                ContentManagerAction::TryLoadContentProvider { loader_id: self_id },
                             ].into()
                         }),
                     },
