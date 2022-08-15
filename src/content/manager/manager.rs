@@ -51,7 +51,7 @@ use crate::{
         display::ListBuilder,
     },
     service::{
-        db::DBHandler,
+        db::handler::DBHandler,
         editors::{
             Yanker,
             EditManager,
@@ -493,6 +493,9 @@ impl ContentManager {
                 debug!("{}", &a);
                 let b = serde_yaml::from_str::<ContentRegister<ContentProvider, ContentProviderID>>(&a);
                 dbg!(b);
+            }
+            't' => {
+                crate::service::db::musimanager_db::test();
             }
             _ => {}
         }
