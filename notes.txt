@@ -319,6 +319,11 @@ bug:
 sol:
   . use TryInto instead of Into for conversions
 
+bug:
+  . removing a currently playing song from a queue sets queue.currently_playing to None. but undoing this yank does not reset it
+sol:
+  . ?
+
 behaviour:
   . better yt_explorer titles (when links are entered)
 sol:

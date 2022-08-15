@@ -296,7 +296,7 @@ impl YankDest<SongID> for Queue {
         let mut provider_index_counter = 0;
         let mut currently_playing_index_counter = 0;
         let selected_index = Provider::get_selected_index(self).selected_index();
-        let currently_playing = self.currently_playing;
+        let mut currently_playing = self.currently_playing;
         let vecc = self.dest_vec_mut().unwrap();
         items.sort_by(|a, b| a.index.cmp(&b.index));
         let mut items = items.into_iter().peekable();
@@ -309,6 +309,9 @@ impl YankDest<SongID> for Queue {
                     if i <= selected_index {
                         provider_index_counter += 1;
                     }
+                    if currently_playing.map(|j| i == j).unwrap_or(false) {
+                        currently_playing = None;
+                    }
                     if currently_playing.map(|j| i <= j).unwrap_or(false) {
                         currently_playing_index_counter += 1;
                     }
@@ -320,7 +323,7 @@ impl YankDest<SongID> for Queue {
         .collect();
 
         (0..provider_index_counter).for_each(|_| {self.selection_decrement();});
-        self.currently_playing = self.currently_playing.map(|i| {
+        self.currently_playing = currently_playing.map(|i| {
             if i < currently_playing_index_counter {
                 0
             } else {
