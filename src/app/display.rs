@@ -201,6 +201,21 @@ impl<'a> Item<'a> {
             .into()
         }
     }
+
+    pub fn text_style(&mut self, s: Style) {
+        self.text.iter_mut()
+        .for_each(|l| l.text_style(s));
+    }
+
+    pub fn selected_text_style(&mut self, new_style: Style) {
+        match &mut self.selected_text {
+            SelectedText::Style(s) => *s = new_style,
+            SelectedText::Lines(lines) => {
+                lines.iter_mut()
+                .for_each(|l| l.text_style(new_style))
+            }
+        };
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -220,9 +235,13 @@ impl<'a> Line<'a> {
         }
     }
 
-    pub fn overwrite_style(&mut self, s: Style) {
+    pub fn text_style(&mut self, s: Style) {
         self.main_text.0.iter_mut().for_each(|span| span.style = s.clone());
         self.secondary_text.as_mut().map(|spans| spans.0.iter_mut().for_each(|span| span.style = s.clone()));
+    }
+
+    pub fn overwrite_style(&mut self, s: Style) {
+        self.text_style(s);
         self.markers.iter_mut().for_each(|m| m.symbol.style = s.clone());
     }
 

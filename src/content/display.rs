@@ -51,7 +51,7 @@ impl<'a> DisplayContext<'a> {
                 let title = song.as_display().title();
                 let line = Line::new(Span::from(title.to_owned()));
                 let mut selected_line = line.clone();
-                selected_line.overwrite_style(style);
+                selected_line.text_style(style);
                 Item {
                     text: vec![self.apply_markers(line, id, MarkerPos::Left)],
                     selected_text: SelectedText::Lines(vec![self.apply_markers(selected_line, id, MarkerPos::Left)]),
@@ -65,7 +65,7 @@ impl<'a> DisplayContext<'a> {
                 .get_name();
                 let line = Line::new(Span {content: name, style: Default::default()});
                 let mut selected_line = line.clone();
-                selected_line.overwrite_style(style);
+                selected_line.text_style(style);
                 Item {
                     text: vec![self.apply_markers(line, id, MarkerPos::Left)],
                     selected_text: SelectedText::Lines(vec![self.apply_markers(selected_line, id, MarkerPos::Left)]),

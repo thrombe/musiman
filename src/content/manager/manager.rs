@@ -779,8 +779,8 @@ impl ContentManager {
             .unwrap();
 
             let q = self.get_raw_provider_mut::<Queue>(q_id);
-            if let Some(song_index) = q.contains_song(song_id) {
-                q.index.select(song_index);
+            if let Some(_) = q.contains_song(song_id) {
+                q.select_song(song_id);
                 
                 self.get_queue_provider_mut()
                 .move_to_top(queue_index);
@@ -833,18 +833,18 @@ impl ContentManager {
     pub fn toggle_song_pause(&mut self) {
         self.player.toggle_pause().unwrap();
     }
-    pub fn next_song(&mut self) -> Result<()> { // FIX: browsing around changes the next song instead of choosing the song next to the current song
+    pub fn next_song(&mut self) -> Result<()> {
         let id = match self.active_queue {
             Some(id) => id,
             None => return Ok(()),
         };
-        if !self.increment_selection_on(id) {
-            return Ok(())
-        }        
-        let q = self.get_provider_mut(id);
-        let song_id = q.get_selected();
-        if let ID::Song(id) = song_id {
+        let q = self.get_provider_mut(id)
+        .as_any_mut()
+        .downcast_mut::<Queue>()
+        .unwrap();
+        if let Some(id) = q.next_song() {
             self.play_song(id)?;
+            ContentManagerAction::RefreshDisplayContent.apply(self)?;
         }
         Ok(())
     }
@@ -853,13 +853,13 @@ impl ContentManager {
             Some(id) => id,
             None => return Ok(()),
         };
-        if !self.decrement_selection_on(id) {
-            return Ok(())
-        }        
-        let q = self.get_provider_mut(id);
-        let song_id = q.get_selected();
-        if let ID::Song(id) = song_id {
+        let q = self.get_provider_mut(id)
+        .as_any_mut()
+        .downcast_mut::<Queue>()
+        .unwrap();
+        if let Some(id) = q.prev_song() {
             self.play_song(id)?;
+            ContentManagerAction::RefreshDisplayContent.apply(self)?;
         }
         Ok(())
     }

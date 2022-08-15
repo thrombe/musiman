@@ -215,6 +215,19 @@
     . this can also be used to refuse pasting things like non-Queues in QueueProvider
   /. partial sol in behaviour1
 
+/. bug:
+  /. id saved in current_queue + content modified (yt_explorer new search) + next song  -> plays a incorrect song
+/. sol:
+  /. current_queue only points to some provider in a QueueProvider
+    /. QueueProvider clones the original ContentProvider
+
+/. bug:
+  /. queues should store what song they played in last session
+  /. queues also play bad songs if the cursor is simply moved to another location within the queue
+/. sol:
+  /. keep another index for playing song
+  /. also display playing songs within queues in different color
+
 todo:
   . better error handling
 plan:
@@ -273,23 +286,11 @@ plan:
   . pressing / starts capturing, Enter ends capturing
 
 bug:
-  . id saved in current_queue + content modified (yt_explorer new search) + next song  -> plays a incorrect song
-sol:
-  . current_queue only points to some provider in a QueueProvider
-    . QueueProvider clones the original ContentProvider
-
-bug:
   . yank + cut stuff from yt_explorer -> do a new search on same provider -> undo -> pastes the stuff here, which is wrong
+    . (pasting is not really allowed in this example, but changing the position of items need this featue)
 sol:
   . when new search -> just increment the generation of the counter
     . make sure that doing this does not cause any errors tho.
-
-bug:
-  . queues should store what song they played in last session
-  . queues also play bad songs if the cursor is simply moved to another location within the queue
-sol:
-  . keep another index for playing song
-  . also display playing songs within queues in different color
 
 bug:
   . yanking something whose multiple copies exist in some provider displays marker on all the copies (just a displaying bug)
@@ -310,6 +311,13 @@ sol:
     . non parallel actions -> just add it to list
       . what if a parallel action is hidden inside non-parallel action tho?
     . parallel actions -> add some kinda callback action if completed
+
+bug:
+  . crashes while converting from deserialised yt stuff to non yt stuff
+  . example, converting a YTDLPlaylistSong to Song
+    . YTDLPlaylistSong does not always have everything required to convert (the field is None). or sometimes the song is simply unavailable with bs data
+sol:
+  . use TryInto instead of Into for conversions
 
 behaviour:
   . better yt_explorer titles (when links are entered)
