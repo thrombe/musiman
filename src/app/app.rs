@@ -153,7 +153,7 @@ impl BrowserWidget {
                 action.apply(ch)?;
             }
             KeyCode::Char('v') => {
-                if let None = ch.edit_manager.yanker { // ? is this check necessary?
+                if let None = ch.edit_manager.yanker { // necessary as pasting things where something is yanked from, desyncs the inidex in Yanker
                      if let ContentState::Normal = ch.content_stack.get_state() {
                          let index = ch.get_selected_index().selected_index();
                          let action = ch.edit_manager.try_paste(ch.content_stack.last(), Some(index));
@@ -162,7 +162,7 @@ impl BrowserWidget {
                 }
              }
              KeyCode::Char('V') => {
-                if let None = ch.edit_manager.yanker { // ? is this check necessary?
+                if let None = ch.edit_manager.yanker { // necessary as pasting things where something is yanked from, desyncs the inidex in Yanker
                      if let ContentState::Normal = ch.content_stack.get_state() {
                          let index = ch.get_selected_index().selected_index();
                          let action = ch.edit_manager.try_paste(ch.content_stack.last(), Some(index+1));

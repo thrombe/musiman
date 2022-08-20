@@ -46,21 +46,22 @@ pub struct MusiAlbum {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MusiSong { // in python, everything here is marked optional
     title: String,
-    key: String,
+    #[serde(rename(deserialize = "key"))]
+    id: String,
     artist_name: Option<String>,
-    info: SongInfo,
+    info: MusiSongInfo,
     last_known_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SongInfo {
-    titles: Vec<String>,
+pub struct MusiSongInfo {
+    titles: Vec<String>, // track > alt_title > title
     video_id: String,
     duration: Option<f64>,
     tags: Vec<String>,
-    thumbnail_url: String,
+    thumbnail_url: String, // thumbnail
     album: Option<String>,
-    artist_names: Vec<String>,
+    artist_names: Vec<String>, // artist > uploader > creator > channel
     channel_id: String,
     uploader_id: String,
 }
@@ -74,7 +75,7 @@ pub struct MusiSongProvider {
     current_index: i64,
 }
 
-pub fn test() {
+pub fn test() -> anyhow::Result<()> {
     use std::io::Read;
     
     let musitracker_path = "/home/issac/0Git/musimanager/db/musitracker.json";
@@ -83,4 +84,6 @@ pub fn test() {
     musitracker.read_to_string(&mut buf).unwrap();
     let musidb = serde_json::from_str::<MusimanagerDB>(&buf);
     dbg!(&musidb);
+    // debug!("{}", serde_yaml::to_string(&musidb?)?);
+    Ok(())
 }

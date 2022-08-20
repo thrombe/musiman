@@ -375,6 +375,19 @@ plan:
     /. sol bug1, bug2: pasting things in different providers should do special things
     /. this needs to be a general, flexible and powerful system
     \. doing this means that new ids will be created for new songs/providers. so will need more work with the undo system
+  . allow multiple yanks at the same time.
+    . maybe pressing 1, 2, 3, 4 ... switches the Yanker and then pressing y puts the thing in that Yanker
+    . all yankers (a fixed number of them max) allotted a color
+    . problems:
+      . same thing cannot be included in multiple Yankers 
+        . would be kinda hard to decide what behaviour should be best
+        . for example, if something in multiple yankers, and then a YankType::Cut is performed. and then YankType::Copy, should it copy the thing
+          that was just now removed? if yes, Yankers might remember things that users may not.
+      . Yanker stores position and ID. performing a Edit might cause the indices to desync
+  . maybe don't allow Edit::Yanked (YankType::Cut, YankType::Copy) if the Yanker.yanked_from dosen't match the last id in content_stack
+    . cuz its not very obvious as to what is happening
+    . example, pressing X cuts the yanked things or the highlighted thing if nothing is yanked yet. so previously yanked things might
+      get yanked when trying to yank the highlighted thing
   /. undoing and redoing should also handle the selections
     /. selections + undo yank -> should result in previous yank selections being restored. but what to do with current selections?
       /. just yeet current selections

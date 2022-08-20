@@ -73,8 +73,7 @@ impl From<ConfigBuilder> for Config {
             
             ytmusic_cookies_path: cb.ytmusic_cookies_path
             .map(expand_path)
-            .map(|e| Some(e))
-            .unwrap_or(def.ytmusic_cookies_path),
+            .or(def.ytmusic_cookies_path),
 
             prefered_song_ext: cb.prefered_song_ext
             .unwrap_or(def.prefered_song_ext),

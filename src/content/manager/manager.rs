@@ -495,7 +495,7 @@ impl ContentManager {
                 dbg!(b);
             }
             't' => {
-                crate::service::db::musimanager_db::test();
+                dbg!(crate::service::db::musimanager_db::test());
             }
             _ => {}
         }
